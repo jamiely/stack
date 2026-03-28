@@ -17,7 +17,8 @@ This document tracks implemented gameplay features and notable behavior decision
   - applies capped slab growth toward base dimensions
   - enables temporary movement slowdown for a configurable number of floors
 - Audio + haptics feedback manager emits distinct cues for `perfect`, `landed`, and `miss` outcomes with browser-safe capability gating
-- Restart and return-to-title flows are supported via a single contextual primary menu button (no separate rebuild action)
+- Runs start immediately on load; a brief `Tower stacker` title card appears at boot and eases out left
+- Restart-after-failure is available from the contextual primary menu button (no separate rebuild action)
 - V3 distraction framework runs as a deterministic side-channel (seeded + level-gated) without mutating trim/placement math
 - V3.2 actor layer now renders a gorilla that climbs around the tower perimeter with rhythmic slam pulses, a UFO that can complete a full tower orbit and then flies off-screen toward the player in Z instead of popping out when deactivating (with contrast-wash flashes), and persistent front-layer cloud cover (including mid-screen occluders) with distraction-driven intensity boosts
 - Structural integrity telemetry computes a deterministic tower center-of-mass approximation and classifies `stable`/`precarious`/`unstable` tiers against tunable thresholds
@@ -26,9 +27,9 @@ This document tracks implemented gameplay features and notable behavior decision
 
 ## Visual and Camera Behavior
 
-- Camera follows tower height with configurable distance/lerp
+- Camera follows landed tower height (instead of the just-spawned active slab) with configurable distance/lerp, smoothing post-placement climb and reducing jumpiness
 - Successful placements trigger a brief impact flash pulse
-- Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer), contrast wash intensity, and camera tremor pulse effects
+- Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer), contrast wash intensity, and camera tremor pulse effects; cloud motion now continuously sways left↔right (no hard reset) with stronger opacity and guaranteed mid-screen stack occlusion
 - Precarious integrity tier introduces deterministic camera wobble scaled by configurable instability strength
 - Active collapse sequence applies deterministic tower tilt/drop presentation and camera pullback progression
 - Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
@@ -91,7 +92,7 @@ Runtime tuning panel includes:
 
 - Unit tests cover pure logic modules (trim, spawn, oscillation, config clamping)
 - Playwright end-to-end tests cover:
-  - Title boot and start flow
+  - Title boot autostart flow with intro title-card exit animation
   - Debug-panel and status-surface query gating
   - Test-mode API exposure and deterministic single-step advancement
   - Test-mode paused boot defaults and `paused=0` auto-run override

@@ -1,16 +1,17 @@
 import { expect, test } from "@playwright/test";
 
-test("title overlay renders without debug controls, then the run starts", async ({ page }) => {
+test("run autostarts and title card briefly animates out", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByText("Tower Stacker")).toBeVisible();
+  await expect(page.getByTestId("intro-title")).toHaveText("Tower stacker");
   await expect(page.getByTestId("debug-panel")).toHaveCount(0);
   await expect(page.getByTestId("status-card")).toHaveCount(0);
 
-  await page.getByTestId("start-button").click();
-
   await expect(page.getByTestId("score-value")).toHaveText("0");
   await expect(page.getByTestId("menu-overlay")).toHaveClass(/overlay--hidden/);
+
+  await expect(page.getByTestId("intro-title")).toHaveClass(/intro-title--exit/);
+  await expect(page.getByTestId("intro-title")).toHaveClass(/intro-title--hidden/);
 });
 
 test("debug controls and status surfaces render only with the debug query param", async ({ page }) => {

@@ -153,6 +153,8 @@ const UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND = 6.8;
 const GORILLA_CLIMB_SPEED = 0.7;
 const GORILLA_SLAM_CYCLE_SPEED = 0.62;
 const GORILLA_SLAM_DURATION_SECONDS = 0.2;
+const CLOUD_SWAY_DISTANCE_PX = 120;
+const STACK_LOOK_AHEAD_Y = 1.05;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -215,6 +217,7 @@ export class Game {
   private readonly overlayTitle: HTMLHeadingElement;
   private readonly overlayBody: HTMLParagraphElement;
   private readonly primaryButton: HTMLButtonElement;
+  private readonly introTitle: HTMLDivElement;
   private readonly debugPanel: HTMLDivElement;
   private readonly rendererStatus: HTMLParagraphElement;
   private readonly distractionLayer: HTMLDivElement;
@@ -285,6 +288,8 @@ export class Game {
     tremor: "high",
   };
   private statusMessage = "Line up the moving slab and keep the tower alive.";
+  private introExitTimeoutId: number | null = null;
+  private introHideTimeoutId: number | null = null;
 
   public constructor(container: HTMLDivElement) {
     this.container = container;
@@ -330,6 +335,7 @@ export class Game {
     this.overlayBody = document.createElement("p");
     this.overlayBody.dataset.testid = "overlay-body";
     this.primaryButton = document.createElement("button");
+    this.introTitle = document.createElement("div");
     this.debugPanel = document.createElement("div");
     this.rendererStatus = document.createElement("p");
     this.distractionLayer = document.createElement("div");
@@ -349,10 +355,11 @@ export class Game {
 
   public mount(): void {
     this.container.replaceChildren(this.shell);
-    this.shell.append(this.canvas, this.distractionLayer, this.hud);
+    this.shell.append(this.canvas, this.distractionLayer, this.hud, this.introTitle);
     this.updateMetrics();
     this.applyDebugConfig(this.debugConfig);
-    this.renderHud();
+    this.startGame();
+    this.showIntroTitle();
     window.requestAnimationFrame(this.tick);
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("keyup", this.handleKeyUp);
@@ -420,7 +427,6 @@ export class Game {
     overlay.dataset.testid = "menu-overlay";
 
     this.primaryButton.className = "button button--primary";
-    this.primaryButton.dataset.testid = "start-button";
     this.primaryButton.type = "button";
     this.primaryButton.addEventListener("click", this.handlePrimaryAction);
 
@@ -435,6 +441,10 @@ export class Game {
       overlay.append(this.overlayBody, this.rendererStatus);
     }
     overlay.append(actions);
+
+    this.introTitle.className = "intro-title";
+    this.introTitle.dataset.testid = "intro-title";
+    this.introTitle.textContent = "Tower stacker";
 
     this.debugPanel.className = "debug-panel";
     this.debugPanel.dataset.testid = "debug-panel";
@@ -728,6 +738,29 @@ export class Game {
     this.spawnNextActive();
     this.statusMessage = "Press space, enter, click, or tap to drop the slab.";
     this.renderHud();
+  }
+
+  private showIntroTitle(): void {
+    this.introTitle.classList.remove("intro-title--exit", "intro-title--hidden");
+
+    if (this.introExitTimeoutId !== null) {
+      window.clearTimeout(this.introExitTimeoutId);
+      this.introExitTimeoutId = null;
+    }
+
+    if (this.introHideTimeoutId !== null) {
+      window.clearTimeout(this.introHideTimeoutId);
+      this.introHideTimeoutId = null;
+    }
+
+    this.introExitTimeoutId = window.setTimeout(() => {
+      this.introTitle.classList.add("intro-title--exit");
+      this.introHideTimeoutId = window.setTimeout(() => {
+        this.introTitle.classList.add("intro-title--hidden");
+        this.introHideTimeoutId = null;
+      }, 420);
+      this.introExitTimeoutId = null;
+    }, 750);
   }
 
   private returnToTitle(): void {
@@ -1177,10 +1210,11 @@ export class Game {
     }
 
     if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {
-      const cloudOpacity = 0.2 + (snapshot.active.clouds ? snapshot.signals.clouds * 0.38 : 0);
-      const cloudDrift = this.distractionState.elapsedSeconds * 14 * this.debugConfig.distractionMotionSpeed;
-      this.cloudLayer.style.opacity = cloudOpacity.toFixed(3);
-      this.cloudLayer.style.transform = `translateX(${(cloudDrift % 80).toFixed(2)}px)`;
+      const cloudOpacity = 0.34 + (snapshot.active.clouds ? snapshot.signals.clouds * 0.46 : 0.12);
+      const swayPhase = this.distractionState.elapsedSeconds * 0.85 * this.debugConfig.distractionMotionSpeed;
+      const cloudOffsetX = Math.sin(swayPhase) * CLOUD_SWAY_DISTANCE_PX;
+      this.cloudLayer.style.opacity = Math.min(0.92, cloudOpacity).toFixed(3);
+      this.cloudLayer.style.transform = `translateX(${cloudOffsetX.toFixed(2)}px)`;
     }
 
     const contrastOpacity = snapshot.active.contrastWash ? snapshot.signals.contrastWash * 0.35 : 0;
@@ -1284,9 +1318,9 @@ export class Game {
   }
 
   private updateCamera(): void {
-    const targetSlab = this.activeSlab ?? this.landedSlabs[this.landedSlabs.length - 1];
+    const topLandedSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
     const collapseFrame = this.collapseSequence ? sampleCollapseFrame(this.collapseSequence) : null;
-    const targetY = (targetSlab?.position.y ?? 0) + this.debugConfig.cameraHeight - (collapseFrame?.cameraDrop ?? 0);
+    const targetY = (topLandedSlab?.position.y ?? 0) + this.debugConfig.cameraHeight - (collapseFrame?.cameraDrop ?? 0);
     const targetZ = this.debugConfig.cameraDistance + (collapseFrame?.cameraPullback ?? 0);
 
     this.camera.position.lerp(
@@ -1315,7 +1349,7 @@ export class Game {
       this.camera.position.z += Math.cos(wobblePhase * 0.85) * this.integrityTelemetry.wobbleStrength * 0.4;
     }
 
-    this.camera.lookAt(0, Math.max(1.2, targetY - this.debugConfig.cameraHeight + 0.5), 0);
+    this.camera.lookAt(0, Math.max(1.2, targetY - this.debugConfig.cameraHeight + STACK_LOOK_AHEAD_Y), 0);
   }
 
   private updateMetrics(): void {
@@ -1513,18 +1547,21 @@ export class Game {
       this.overlayBody.textContent =
         "Stop each moving slab before it misses. Perfect placements preserve the footprint; partial overlaps trim it permanently.";
       this.primaryButton.textContent = "Return To Title";
+      this.primaryButton.style.display = "none";
       overlay?.classList.add("overlay--hidden");
     } else if (this.gameState === "game_over") {
       this.overlayTitle.textContent = "Tower Fell";
       this.overlayBody.textContent =
         "Failure now triggers the collapse sequence (hard miss or unstable integrity drift). Restart the run or tune collapse/debug thresholds.";
       this.primaryButton.textContent = "Restart Run";
+      this.primaryButton.style.display = "inline-flex";
       overlay?.classList.remove("overlay--hidden");
     } else {
       this.overlayTitle.textContent = "Tower Stacker";
       this.overlayBody.textContent =
         "Playable milestone: alternating X/Z movement, permanent trimming, collapse fail sequence, and runtime performance archival/LOD tuning are active.";
       this.primaryButton.textContent = "Start Run";
+      this.primaryButton.style.display = "none";
       overlay?.classList.remove("overlay--hidden");
     }
 

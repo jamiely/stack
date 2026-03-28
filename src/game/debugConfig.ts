@@ -1,7 +1,7 @@
 import type { DebugConfig } from "./types";
 
 export const defaultDebugConfig: DebugConfig = {
-  cameraHeight: 8,
+  cameraHeight: 8.6,
   cameraDistance: 12,
   cameraLerp: 0.08,
   baseWidth: 4,

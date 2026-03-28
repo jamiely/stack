@@ -20,7 +20,7 @@ The repo now includes a playable early milestone:
 - Upward camera follow, score/player-built-height HUD (excluding prebuilt starter slabs), impact flash feedback, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
-- Playwright coverage for boot/start, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
+- Playwright coverage for autostart boot flow, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
 - Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, recovery telemetry, feedback telemetry, distraction-state/actor-visual assertions, integrity telemetry assertions, collapse-state assertions, and performance diagnostics assertions
 - Git hooks for unit tests on commit and Playwright on commit/push
 
@@ -45,10 +45,9 @@ The dev server runs on `http://127.0.0.1:4173`.
 
 ## Controls
 
-- `Start Run`: begins a stacking run
+- Runs start automatically on load; the `Tower stacker` title briefly appears, then eases out to the left
 - `Space`/`Enter` on key release, mouse click, or tap while playing: stop the moving slab
 - During `game_over`, gameplay input (`Space`/`Enter` release, click, or touch in the play area) immediately restarts the run
-- `Return To Title`: exit the active run
 - `Restart Run`: restart after a miss
 - Visit `/?debug` to expose the runtime tuning panel
 - In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
