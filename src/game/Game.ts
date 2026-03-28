@@ -81,7 +81,6 @@ export class Game {
   private readonly overlayTitle: HTMLHeadingElement;
   private readonly overlayBody: HTMLParagraphElement;
   private readonly primaryButton: HTMLButtonElement;
-  private readonly secondaryButton: HTMLButtonElement;
   private readonly debugPanel: HTMLDivElement;
   private readonly rendererStatus: HTMLParagraphElement;
 
@@ -138,7 +137,6 @@ export class Game {
     this.overlayBody = document.createElement("p");
     this.overlayBody.dataset.testid = "overlay-body";
     this.primaryButton = document.createElement("button");
-    this.secondaryButton = document.createElement("button");
     this.debugPanel = document.createElement("div");
     this.rendererStatus = document.createElement("p");
 
@@ -178,22 +176,33 @@ export class Game {
   private buildHud(): void {
     const topbar = document.createElement("div");
     topbar.className = "hud__topbar";
-    topbar.innerHTML = `
+    topbar.innerHTML = this.debugEnabled
+      ? `
       <div class="hud__card">
         <span class="hud__label">Score</span>
       </div>
       <div class="hud__card">
         <span class="hud__label">Height</span>
       </div>
-      <div class="hud__card hud__card--wide">
+      <div class="hud__card hud__card--wide" data-testid="status-card">
         <span class="hud__label">Status</span>
+      </div>
+    `
+      : `
+      <div class="hud__card">
+        <span class="hud__label">Score</span>
+      </div>
+      <div class="hud__card">
+        <span class="hud__label">Height</span>
       </div>
     `;
 
     const cards = topbar.querySelectorAll(".hud__card");
     cards[0]?.append(this.scoreValue);
     cards[1]?.append(this.heightValue);
-    cards[2]?.append(this.messageValue);
+    if (this.debugEnabled) {
+      cards[2]?.append(this.messageValue);
+    }
 
     const overlay = document.createElement("section");
     overlay.className = "overlay";
@@ -204,18 +213,17 @@ export class Game {
     this.primaryButton.type = "button";
     this.primaryButton.addEventListener("click", this.handlePrimaryAction);
 
-    this.secondaryButton.className = "button button--secondary";
-    this.secondaryButton.dataset.testid = "secondary-button";
-    this.secondaryButton.type = "button";
-    this.secondaryButton.addEventListener("click", this.handleSecondaryAction);
-
     const actions = document.createElement("div");
     actions.className = "overlay__actions";
-    actions.append(this.primaryButton, this.secondaryButton);
+    actions.append(this.primaryButton);
 
     this.rendererStatus.className = "overlay__status";
 
-    overlay.append(this.overlayTitle, this.overlayBody, this.rendererStatus, actions);
+    overlay.append(this.overlayTitle);
+    if (this.debugEnabled) {
+      overlay.append(this.overlayBody, this.rendererStatus);
+    }
+    overlay.append(actions);
 
     this.debugPanel.className = "debug-panel";
     this.debugPanel.dataset.testid = "debug-panel";
@@ -294,16 +302,6 @@ export class Game {
     }
 
     this.startGame();
-  };
-
-  private readonly handleSecondaryAction = (): void => {
-    if (this.gameState === "game_over") {
-      this.startGame();
-      return;
-    }
-
-    this.resetWorld();
-    this.renderHud();
   };
 
   private readonly handleResize = (): void => {
@@ -572,21 +570,18 @@ export class Game {
       this.overlayBody.textContent =
         "Stop each moving slab before it misses. Perfect placements preserve the footprint; partial overlaps trim it permanently.";
       this.primaryButton.textContent = "Return To Title";
-      this.secondaryButton.textContent = "Reset Stack";
       overlay?.classList.add("overlay--hidden");
     } else if (this.gameState === "game_over") {
       this.overlayTitle.textContent = "Tower Fell";
       this.overlayBody.textContent =
         "The moving slab missed the target. Restart the run or adjust the debug tuning for a different difficulty curve.";
       this.primaryButton.textContent = "Restart Run";
-      this.secondaryButton.textContent = "Rebuild Stack";
       overlay?.classList.remove("overlay--hidden");
     } else {
       this.overlayTitle.textContent = "Tower Stacker";
       this.overlayBody.textContent =
         "Playable milestone: alternating X/Z movement, permanent trimming, camera follow, falling debris, and live gameplay tuning are active.";
       this.primaryButton.textContent = "Start Run";
-      this.secondaryButton.textContent = "Rebuild Stack";
       overlay?.classList.remove("overlay--hidden");
     }
 

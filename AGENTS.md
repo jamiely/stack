@@ -21,6 +21,7 @@ Your primary goal is to COMPLETE the task end-to-end with minimal user interacti
 - Use small, focused commits after each completed change.
 - Push after major milestones, CI/workflow changes, or any change set large enough that losing it would be expensive.
 - Before committing, update `README.md` when the repo behavior, setup, controls, debug surface, or testing workflow has changed, and update docs in `docs/` when the implementation meaningfully diverges from or fulfills them.
+- Before every commit, review and update `docs/features.md` so it accurately reflects the current implemented feature set and behavior decisions.
 - Before committing, run both unit tests and the Playwright end-to-end suite and do not commit if either is failing.
 - Before pushing, run the Playwright end-to-end suite and do not push if it is failing.
 - Prefer non-interactive git commands.

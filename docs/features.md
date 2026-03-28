@@ -11,7 +11,7 @@ This document tracks implemented gameplay features and notable behavior decision
   - `miss` (no overlap, game over)
 - Score increments on each successful placement
 - Height display tracks current tower floors
-- Restart and return-to-title flows are supported
+- Restart and return-to-title flows are supported via a single contextual primary menu button (no separate rebuild action)
 
 ## Visual and Camera Behavior
 
@@ -28,6 +28,11 @@ This document tracks implemented gameplay features and notable behavior decision
 - Touch input is supported through pointer events
 
 ## Debug Controls (`?debug`)
+
+Debug mode also enables developer-facing HUD/overlay diagnostics that are hidden in normal gameplay:
+
+- Top HUD `Status` card (`status-message`)
+- Menu overlay descriptive body copy and renderer status line
 
 Runtime tuning panel includes:
 
@@ -63,5 +68,5 @@ Runtime tuning panel includes:
 - Unit tests cover pure logic modules (trim, spawn, oscillation, config clamping)
 - Playwright smoke tests cover:
   - Title boot and start flow
-  - Debug-panel query gating
+  - Debug-panel and status-surface query gating
 - Unit coverage threshold is enforced at 90% for the logic layer

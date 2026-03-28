@@ -43,6 +43,7 @@ The dev server runs on `http://127.0.0.1:4173`.
 - `Return To Title`: exit the active run
 - `Restart Run`: restart after a miss
 - Visit `/?debug` to expose the runtime tuning panel
+- In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
 - Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused
 - Debug panel controls: tune camera, slab dimensions, movement speed/ramp, perfect tolerance, starting stack size, debris lifetime, and grid visibility
 
