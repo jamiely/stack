@@ -4,16 +4,17 @@ Desktop-first browser prototype for the `Tower Stacker` stacking game described 
 
 ## Current Status
 
-The repo now includes the milestone-one scaffold:
+The repo now includes a playable early milestone:
 
 - Vite + TypeScript + Three.js application shell
-- Title overlay and HUD
-- Runtime debug panel for camera and slab preview motion
+- Alternating X/Z stack placement with trim-or-miss gameplay
+- Upward camera follow, score/height HUD, and falling debris
+- Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
-- Playwright smoke coverage for boot and start flow
+- Playwright smoke coverage for boot, start flow, and debug gating
 - Git hooks for unit tests on commit and Playwright on commit/push
 
-Core stop-and-trim gameplay, deterministic test mode, and richer debug/test controls are still pending.
+Deterministic test mode and deeper Playwright coverage are still pending.
 
 ## Development
 
@@ -36,11 +37,12 @@ The dev server runs on `http://127.0.0.1:4173`.
 
 ## Controls
 
-- `Start Prototype`: enters the live shell preview
-- `Return To Title`: returns to the idle overlay
-- `Swap Axis Preview` / `Reset Axis`: flips the active preview motion axis
-- Debug panel sliders: tune camera height, camera distance, camera lerp, motion range, and motion speed
-- Debug panel checkbox: toggle grid visibility
+- `Start Run`: begins a stacking run
+- `Space`, `Enter`, mouse click, or tap while playing: stop the moving slab
+- `Return To Title`: exit the active run
+- `Restart Run`: restart after a miss
+- Visit `/?debug` to expose the runtime tuning panel
+- Debug panel controls: tune camera, slab dimensions, movement speed/ramp, perfect tolerance, starting stack size, debris lifetime, and grid visibility
 
 ## Notes
 

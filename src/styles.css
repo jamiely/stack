@@ -44,10 +44,12 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
+  align-items: stretch;
   padding: 1.25rem 1.5rem;
   font-size: 0.95rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  flex-wrap: wrap;
 }
 
 .hud__card {
@@ -57,6 +59,10 @@ body {
   border-radius: 18px;
   background: rgba(7, 11, 18, 0.42);
   backdrop-filter: blur(18px);
+}
+
+.hud__card--wide {
+  flex: 1 1 18rem;
 }
 
 .hud__label {
@@ -70,6 +76,15 @@ body {
   display: block;
   font-size: 1.4rem;
   font-weight: 700;
+}
+
+.hud__message {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  line-height: 1.35;
 }
 
 .overlay {
@@ -86,6 +101,12 @@ body {
   border: 1px solid rgba(247, 239, 224, 0.14);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.3);
   pointer-events: auto;
+}
+
+.overlay--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(1rem);
 }
 
 .overlay h1,
@@ -187,6 +208,12 @@ body {
 @media (max-width: 720px) {
   .hud__topbar {
     padding: 1rem;
+  }
+
+  .hud__card,
+  .hud__card--wide {
+    min-width: calc(50% - 0.5rem);
+    flex: 1 1 calc(50% - 0.5rem);
   }
 
   .overlay,

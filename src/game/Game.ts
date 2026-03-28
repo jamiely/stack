@@ -9,30 +9,50 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   Scene,
+  Vector3,
   WebGLRenderer,
 } from "three";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
-import { advanceOscillation, getAxisPosition } from "./logic/oscillation";
-import type { DebugConfig, GameState } from "./types";
+import { advanceOscillation } from "./logic/oscillation";
+import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { OscillationState } from "./logic/oscillation";
+import type { DebugConfig, GameState, SlabData } from "./types";
 
 type DebugNumberKey = Exclude<keyof DebugConfig, "gridVisible">;
+
+interface DebrisPiece {
+  mesh: Mesh;
+  velocity: { x: number; y: number; z: number };
+  angularVelocity: { x: number; y: number; z: number };
+  remainingLifetime: number;
+}
 
 const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: number; label: string }> = {
   cameraHeight: { min: 4, max: 20, step: 0.25, label: "Camera Height" },
   cameraDistance: { min: 7, max: 24, step: 0.25, label: "Camera Distance" },
   cameraLerp: { min: 0.02, max: 0.25, step: 0.01, label: "Camera Lerp" },
+  baseWidth: { min: 2, max: 8, step: 0.25, label: "Base Width" },
+  baseDepth: { min: 2, max: 8, step: 0.25, label: "Base Depth" },
+  slabHeight: { min: 0.5, max: 2, step: 0.1, label: "Slab Height" },
   motionRange: { min: 1, max: 10, step: 0.25, label: "Motion Range" },
-  motionSpeed: { min: 0.2, max: 3, step: 0.05, label: "Motion Speed" },
+  motionSpeed: { min: 0.4, max: 5, step: 0.05, label: "Move Speed" },
+  speedRamp: { min: 0, max: 0.8, step: 0.02, label: "Speed Ramp" },
+  perfectTolerance: { min: 0, max: 0.5, step: 0.01, label: "Perfect Window" },
+  prebuiltLevels: { min: 1, max: 8, step: 1, label: "Starting Stack" },
+  debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
 };
 
+const CAMERA_X = 8;
+
 export class Game {
+  private readonly debugEnabled: boolean;
   private readonly container: HTMLDivElement;
   private readonly shell: HTMLDivElement;
   private readonly canvas: HTMLCanvasElement;
   private readonly hud: HTMLDivElement;
   private readonly scoreValue: HTMLSpanElement;
   private readonly heightValue: HTMLSpanElement;
+  private readonly messageValue: HTMLSpanElement;
   private readonly overlayTitle: HTMLHeadingElement;
   private readonly overlayBody: HTMLParagraphElement;
   private readonly primaryButton: HTMLButtonElement;
@@ -44,24 +64,26 @@ export class Game {
   private readonly camera = new PerspectiveCamera(50, 1, 0.1, 100);
   private readonly renderer: WebGLRenderer | null;
   private readonly stackGroup = new Group();
-  private readonly activeSlab: Mesh;
+  private readonly debrisGroup = new Group();
   private readonly gridHelper = new GridHelper(28, 28, 0xd8b162, 0x28425f);
 
   private debugConfig: DebugConfig = defaultDebugConfig;
+  private landedSlabs: SlabData[] = [];
+  private activeSlab: SlabData | null = null;
+  private activeMesh: Mesh | null = null;
+  private debrisPieces: DebrisPiece[] = [];
+  private oscillation: OscillationState | null = null;
   private lastFrameTime = 0;
   private gameState: GameState = "idle";
   private score = 0;
-  private height = 3;
-  private oscillation: OscillationState = {
-    axis: "x" as const,
-    offset: 0,
-    direction: 1 as const,
-  };
+  private statusMessage = "Line up the moving slab and keep the tower alive.";
 
   public constructor(container: HTMLDivElement) {
     this.container = container;
+    this.debugEnabled = new URLSearchParams(window.location.search).has("debug");
     this.shell = document.createElement("div");
     this.shell.className = "game-shell";
+    this.shell.addEventListener("pointerdown", this.handlePointerStop);
 
     this.canvas = document.createElement("canvas");
     this.canvas.className = "game-canvas";
@@ -77,6 +99,10 @@ export class Game {
     this.heightValue.className = "hud__value";
     this.heightValue.dataset.testid = "height-value";
 
+    this.messageValue = document.createElement("span");
+    this.messageValue.className = "hud__message";
+    this.messageValue.dataset.testid = "status-message";
+
     this.overlayTitle = document.createElement("h1");
     this.overlayBody = document.createElement("p");
     this.primaryButton = document.createElement("button");
@@ -86,13 +112,10 @@ export class Game {
 
     this.renderer = this.createRenderer();
 
-    const slabGeometry = new BoxGeometry(4, 1, 4);
-    const slabMaterial = new MeshStandardMaterial({ color: "#f7d27e", metalness: 0.15, roughness: 0.85 });
-    this.activeSlab = new Mesh(slabGeometry, slabMaterial);
-
     this.scene.background = new Color("#07101c");
     this.buildScene();
     this.buildHud();
+    this.resetWorld();
   }
 
   public mount(): void {
@@ -103,40 +126,17 @@ export class Game {
     this.renderHud();
     window.requestAnimationFrame(this.tick);
     window.addEventListener("resize", this.handleResize);
+    window.addEventListener("keydown", this.handleKeyDown);
   }
 
   private buildScene(): void {
-    this.camera.position.set(8, this.debugConfig.cameraHeight, this.debugConfig.cameraDistance);
-
-    this.scene.add(this.stackGroup);
-    this.scene.add(this.gridHelper);
+    this.camera.position.set(CAMERA_X, this.debugConfig.cameraHeight, this.debugConfig.cameraDistance);
+    this.scene.add(this.stackGroup, this.debrisGroup, this.gridHelper);
 
     const ambientLight = new AmbientLight(0xffffff, 1.8);
     const directionalLight = new DirectionalLight(0xfff0c8, 2.2);
     directionalLight.position.set(10, 18, 12);
-
     this.scene.add(ambientLight, directionalLight);
-
-    for (let index = 0; index < 3; index += 1) {
-      const slab = this.activeSlab.clone();
-      slab.position.y = index;
-      slab.position.x = index % 2 === 0 ? 0 : 0.12;
-      slab.material = new MeshStandardMaterial({
-        color: index === 2 ? "#87d5ff" : "#f7d27e",
-        metalness: 0.15,
-        roughness: 0.85,
-      });
-      this.stackGroup.add(slab);
-    }
-
-    this.activeSlab.position.set(0, 3, 0);
-    this.activeSlab.material = new MeshStandardMaterial({
-      color: "#ff9360",
-      emissive: "#25110a",
-      metalness: 0.1,
-      roughness: 0.78,
-    });
-    this.scene.add(this.activeSlab);
   }
 
   private buildHud(): void {
@@ -149,11 +149,15 @@ export class Game {
       <div class="hud__card">
         <span class="hud__label">Height</span>
       </div>
+      <div class="hud__card hud__card--wide">
+        <span class="hud__label">Status</span>
+      </div>
     `;
 
     const cards = topbar.querySelectorAll(".hud__card");
     cards[0]?.append(this.scoreValue);
     cards[1]?.append(this.heightValue);
+    cards[2]?.append(this.messageValue);
 
     const overlay = document.createElement("section");
     overlay.className = "overlay";
@@ -166,7 +170,6 @@ export class Game {
 
     this.secondaryButton.className = "button button--secondary";
     this.secondaryButton.type = "button";
-    this.secondaryButton.textContent = "Pause Motion";
     this.secondaryButton.addEventListener("click", this.handleSecondaryAction);
 
     const actions = document.createElement("div");
@@ -181,7 +184,10 @@ export class Game {
     this.debugPanel.dataset.testid = "debug-panel";
     this.debugPanel.append(this.createDebugControls());
 
-    this.hud.append(topbar, this.debugPanel, overlay);
+    this.hud.append(topbar, overlay);
+    if (this.debugEnabled) {
+      this.hud.append(this.debugPanel);
+    }
   }
 
   private createDebugControls(): DocumentFragment {
@@ -211,10 +217,11 @@ export class Game {
         input.value = String(this.debugConfig[key]);
         input.dataset.debugKey = key;
         input.addEventListener("input", () => {
-          this.applyDebugConfig({
+          const nextConfig = {
             ...this.debugConfig,
-            [key]: Number(input.value),
-          });
+            [key]: key === "prebuiltLevels" ? Math.round(Number(input.value)) : Number(input.value),
+          };
+          this.applyDebugConfig(nextConfig);
           this.renderHud();
         });
 
@@ -244,22 +251,21 @@ export class Game {
   }
 
   private readonly handlePrimaryAction = (): void => {
-    this.gameState = this.gameState === "idle" ? "playing" : "idle";
-    this.score = this.gameState === "playing" ? 1 : 0;
-    this.renderHud();
+    if (this.gameState === "playing") {
+      this.returnToTitle();
+      return;
+    }
+
+    this.startGame();
   };
 
   private readonly handleSecondaryAction = (): void => {
-    if (this.gameState === "playing") {
-      this.gameState = "idle";
-      this.score = 0;
-    } else {
-      this.oscillation = {
-        axis: this.oscillation.axis === "x" ? "z" : "x",
-        offset: 0,
-        direction: 1,
-      };
+    if (this.gameState === "game_over") {
+      this.startGame();
+      return;
     }
+
+    this.resetWorld();
     this.renderHud();
   };
 
@@ -267,34 +273,212 @@ export class Game {
     this.updateMetrics();
   };
 
+  private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (event.code !== "Space" && event.code !== "Enter") {
+      return;
+    }
+
+    if (event.target instanceof HTMLElement) {
+      const tagName = event.target.tagName;
+      if (tagName === "INPUT" || tagName === "BUTTON") {
+        return;
+      }
+    }
+
+    event.preventDefault();
+
+    if (this.gameState === "playing") {
+      this.stopActiveSlab();
+      return;
+    }
+
+    if (this.gameState === "idle") {
+      this.startGame();
+    }
+  };
+
+  private readonly handlePointerStop = (event: PointerEvent): void => {
+    if (this.gameState !== "playing") {
+      return;
+    }
+
+    const target = event.target;
+    if (target instanceof Element && target.closest(".overlay, .debug-panel")) {
+      return;
+    }
+
+    this.stopActiveSlab();
+  };
+
   private readonly tick = (timestamp: number): void => {
     const deltaSeconds = this.lastFrameTime === 0 ? 0 : (timestamp - this.lastFrameTime) / 1000;
     this.lastFrameTime = timestamp;
 
-    if (this.gameState === "playing") {
-      this.oscillation = advanceOscillation(
-        this.oscillation,
-        deltaSeconds,
-        this.debugConfig.motionSpeed,
-        this.debugConfig.motionRange,
-      );
-      const position = getAxisPosition(this.oscillation.axis, this.oscillation.offset);
-      this.activeSlab.position.x = position.x;
-      this.activeSlab.position.z = position.z;
-    }
+    this.updateActiveSlab(deltaSeconds);
+    this.updateDebris(deltaSeconds);
+    this.updateCamera();
 
-    this.camera.position.lerp(
-      {
-        x: 8,
-        y: this.debugConfig.cameraHeight,
-        z: this.debugConfig.cameraDistance,
-      } as typeof this.camera.position,
-      this.debugConfig.cameraLerp,
-    );
-    this.camera.lookAt(0, 1.4, 0);
     this.renderer?.render(this.scene, this.camera);
     window.requestAnimationFrame(this.tick);
   };
+
+  private startGame(): void {
+    this.resetWorld();
+    this.gameState = "playing";
+    this.statusMessage = "Press space, enter, click, or tap to drop the slab.";
+    this.renderHud();
+  }
+
+  private returnToTitle(): void {
+    this.gameState = "idle";
+    this.statusMessage = "Adjust the starting stack or timing window, then start a new run.";
+    this.resetWorld();
+    this.renderHud();
+  }
+
+  private resetWorld(): void {
+    this.lastFrameTime = 0;
+    this.score = 0;
+    this.clearGroup(this.stackGroup);
+    this.clearGroup(this.debrisGroup);
+    this.debrisPieces = [];
+    this.activeMesh = null;
+    this.activeSlab = null;
+    this.oscillation = null;
+    this.landedSlabs = createInitialStack(this.debugConfig);
+
+    this.landedSlabs.forEach((slab, index) => {
+      this.stackGroup.add(this.createSlabMesh(slab, index === this.landedSlabs.length - 1));
+    });
+
+    this.spawnNextActive();
+  }
+
+  private spawnNextActive(): void {
+    const target = this.landedSlabs[this.landedSlabs.length - 1];
+    if (!target) {
+      return;
+    }
+
+    const activeSlab = spawnActiveSlab(target, this.debugConfig);
+    this.activeSlab = activeSlab;
+    this.oscillation = {
+      axis: activeSlab.axis,
+      offset: -this.debugConfig.motionRange,
+      direction: 1,
+    };
+
+    if (this.activeMesh) {
+      this.scene.remove(this.activeMesh);
+    }
+
+    this.activeMesh = this.createSlabMesh(activeSlab, true);
+    this.scene.add(this.activeMesh);
+  }
+
+  private stopActiveSlab(): void {
+    if (this.gameState !== "playing" || !this.activeSlab || !this.activeMesh) {
+      return;
+    }
+
+    const target = this.landedSlabs[this.landedSlabs.length - 1];
+    if (!target) {
+      return;
+    }
+
+    const result = resolvePlacement(this.activeSlab, target, this.debugConfig.perfectTolerance);
+    this.scene.remove(this.activeMesh);
+
+    if (result.outcome === "miss") {
+      this.spawnDebris(this.activeSlab, this.activeSlab.axis, true);
+      this.activeSlab = null;
+      this.activeMesh = null;
+      this.oscillation = null;
+      this.gameState = "game_over";
+      this.statusMessage = "Missed the tower. Restart and try to recover your rhythm.";
+      this.renderHud();
+      return;
+    }
+
+    if (!result.landedSlab) {
+      return;
+    }
+
+    if (result.debrisSlab) {
+      this.spawnDebris(result.debrisSlab, result.landedSlab.axis, false);
+    }
+
+    this.landedSlabs.push(result.landedSlab);
+    this.stackGroup.add(this.createSlabMesh(result.landedSlab, true));
+    this.score += 1;
+    this.statusMessage =
+      result.outcome === "perfect"
+        ? "Perfect alignment. Width preserved."
+        : `Trimmed ${result.trimmedSize.toFixed(2)} units off the ${result.landedSlab.axis.toUpperCase()} axis.`;
+
+    this.activeSlab = null;
+    this.activeMesh = null;
+    this.oscillation = null;
+    this.spawnNextActive();
+    this.renderHud();
+  }
+
+  private updateActiveSlab(deltaSeconds: number): void {
+    if (this.gameState !== "playing" || !this.activeSlab || !this.activeMesh || !this.oscillation) {
+      return;
+    }
+
+    this.oscillation = advanceOscillation(
+      this.oscillation,
+      deltaSeconds,
+      getTravelSpeed(this.activeSlab.level, this.debugConfig),
+      this.debugConfig.motionRange,
+    );
+
+    if (this.oscillation.axis === "x") {
+      this.activeSlab.position.x = this.oscillation.offset;
+      this.activeMesh.position.x = this.oscillation.offset;
+    } else {
+      this.activeSlab.position.z = this.oscillation.offset;
+      this.activeMesh.position.z = this.oscillation.offset;
+    }
+  }
+
+  private updateDebris(deltaSeconds: number): void {
+    if (this.debrisPieces.length === 0) {
+      return;
+    }
+
+    const gravity = 12;
+    this.debrisPieces = this.debrisPieces.filter((piece) => {
+      piece.remainingLifetime -= deltaSeconds;
+      piece.velocity.y -= gravity * deltaSeconds;
+      piece.mesh.position.x += piece.velocity.x * deltaSeconds;
+      piece.mesh.position.y += piece.velocity.y * deltaSeconds;
+      piece.mesh.position.z += piece.velocity.z * deltaSeconds;
+      piece.mesh.rotation.x += piece.angularVelocity.x * deltaSeconds;
+      piece.mesh.rotation.y += piece.angularVelocity.y * deltaSeconds;
+      piece.mesh.rotation.z += piece.angularVelocity.z * deltaSeconds;
+
+      const stillVisible = piece.remainingLifetime > 0 && piece.mesh.position.y > -12;
+      if (!stillVisible) {
+        this.debrisGroup.remove(piece.mesh);
+      }
+      return stillVisible;
+    });
+  }
+
+  private updateCamera(): void {
+    const targetSlab = this.activeSlab ?? this.landedSlabs[this.landedSlabs.length - 1];
+    const targetY = (targetSlab?.position.y ?? 0) + this.debugConfig.cameraHeight;
+    const targetZ = this.debugConfig.cameraDistance;
+
+    this.camera.position.lerp(
+      new Vector3(CAMERA_X, targetY, targetZ),
+      this.debugConfig.cameraLerp,
+    );
+    this.camera.lookAt(0, Math.max(1.4, targetY - this.debugConfig.cameraHeight + 0.5), 0);
+  }
 
   private updateMetrics(): void {
     const width = this.container.clientWidth || window.innerWidth;
@@ -305,6 +489,7 @@ export class Game {
   }
 
   private applyDebugConfig(config: DebugConfig): void {
+    const previousConfig = this.debugConfig;
     this.debugConfig = clampDebugConfig(config);
     this.gridHelper.visible = this.debugConfig.gridVisible;
 
@@ -320,39 +505,96 @@ export class Game {
         input.value = String(this.debugConfig[key] as number);
       }
     });
+
+    const requiresReset =
+      previousConfig.baseWidth !== this.debugConfig.baseWidth ||
+      previousConfig.baseDepth !== this.debugConfig.baseDepth ||
+      previousConfig.slabHeight !== this.debugConfig.slabHeight ||
+      previousConfig.prebuiltLevels !== this.debugConfig.prebuiltLevels;
+
+    if (requiresReset && this.gameState !== "playing") {
+      this.resetWorld();
+    }
   }
 
   private renderHud(): void {
+    const overlay = this.hud.querySelector<HTMLElement>(".overlay");
     this.scoreValue.textContent = String(this.score);
-    this.heightValue.textContent = `${this.height} floors`;
+    this.heightValue.textContent = `${this.landedSlabs.length} floors`;
+    this.messageValue.textContent = this.statusMessage;
 
     if (this.gameState === "playing") {
-      this.overlayTitle.textContent = "Prototype In Motion";
+      this.overlayTitle.textContent = "Tower Live";
       this.overlayBody.textContent =
-        "Milestone one is live: the shell, camera, renderer, input surface, and runtime debug panel are wired. Core stop-and-trim gameplay lands next.";
-      this.rendererStatus.textContent = this.renderer
-        ? "Renderer: WebGL active."
-        : "Renderer: fallback mode active because WebGL is unavailable in this browser.";
+        "Stop each moving slab before it misses. Perfect placements preserve the footprint; partial overlaps trim it permanently.";
       this.primaryButton.textContent = "Return To Title";
-      this.secondaryButton.textContent = "Reset Axis";
+      this.secondaryButton.textContent = "Reset Stack";
+      overlay?.classList.add("overlay--hidden");
+    } else if (this.gameState === "game_over") {
+      this.overlayTitle.textContent = "Tower Fell";
+      this.overlayBody.textContent =
+        "The moving slab missed the target. Restart the run or adjust the debug tuning for a different difficulty curve.";
+      this.primaryButton.textContent = "Restart Run";
+      this.secondaryButton.textContent = "Rebuild Stack";
+      overlay?.classList.remove("overlay--hidden");
     } else {
       this.overlayTitle.textContent = "Tower Stacker";
       this.overlayBody.textContent =
-        "Desktop-first prototype scaffold with touch-ready controls, a live Three.js scene, and the first debug controls for camera and slab motion.";
-      this.rendererStatus.textContent = this.renderer
-        ? "Renderer: WebGL active."
-        : "Renderer: fallback mode active because WebGL is unavailable in this browser.";
-      this.primaryButton.textContent = "Start Prototype";
-      this.secondaryButton.textContent = "Swap Axis Preview";
+        "Playable milestone: alternating X/Z movement, permanent trimming, camera follow, falling debris, and live gameplay tuning are active.";
+      this.primaryButton.textContent = "Start Run";
+      this.secondaryButton.textContent = "Rebuild Stack";
+      overlay?.classList.remove("overlay--hidden");
     }
+
+    this.rendererStatus.textContent = this.renderer
+      ? "Renderer: WebGL active."
+      : "Renderer: fallback mode active because WebGL is unavailable in this browser.";
 
     this.debugPanel.querySelectorAll<HTMLElement>("[data-debug-value]").forEach((node) => {
       const key = node.dataset.debugValue as DebugNumberKey | undefined;
       if (!key) {
         return;
       }
-      node.textContent = `${this.debugConfig[key].toFixed(2)}`;
+
+      node.textContent =
+        key === "prebuiltLevels" ? String(this.debugConfig[key]) : `${this.debugConfig[key].toFixed(2)}`;
     });
+  }
+
+  private createSlabMesh(slab: SlabData, isTop: boolean): Mesh {
+    const geometry = new BoxGeometry(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
+    const material = new MeshStandardMaterial({
+      color: isTop ? "#ff9360" : "#f7d27e",
+      emissive: isTop ? "#25110a" : "#120d04",
+      metalness: 0.12,
+      roughness: 0.82,
+    });
+
+    const mesh = new Mesh(geometry, material);
+    mesh.position.set(slab.position.x, slab.position.y, slab.position.z);
+    return mesh;
+  }
+
+  private spawnDebris(slab: SlabData, axis: SlabData["axis"], fullMiss: boolean): void {
+    const mesh = this.createSlabMesh(slab, false);
+    this.debrisGroup.add(mesh);
+
+    const lateral = fullMiss ? 4.4 : 2.7;
+    const xVelocity = axis === "x" ? Math.sign(slab.position.x || 1) * lateral : 0.4;
+    const zVelocity = axis === "z" ? Math.sign(slab.position.z || 1) * lateral : 0.4;
+
+    this.debrisPieces.push({
+      mesh,
+      velocity: { x: xVelocity, y: 1.8, z: zVelocity },
+      angularVelocity: { x: 1.4, y: 2.2, z: 1.1 },
+      remainingLifetime: this.debugConfig.debrisLifetime,
+    });
+  }
+
+  private clearGroup(group: Group): void {
+    while (group.children.length > 0) {
+      group.remove(group.children[0]!);
+    }
   }
 
   private createRenderer(): WebGLRenderer | null {
