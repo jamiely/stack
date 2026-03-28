@@ -669,8 +669,8 @@ export class Game {
   private createSlabMesh(slab: SlabData, _isTop: boolean): Mesh {
     const geometry = new BoxGeometry(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
     const material = new MeshStandardMaterial({
-      color: "#ff9360",
-      emissive: "#25110a",
+      color: this.getSlabColor(slab.level),
+      emissive: this.getSlabEmissive(slab.level),
       metalness: 0.12,
       roughness: 0.82,
     });
@@ -678,6 +678,16 @@ export class Game {
     const mesh = new Mesh(geometry, material);
     mesh.position.set(slab.position.x, slab.position.y, slab.position.z);
     return mesh;
+  }
+
+  private getSlabColor(level: number): string {
+    const hue = (42 + level * 31) % 360;
+    return new Color().setHSL(hue / 360, 0.72, 0.67).getStyle();
+  }
+
+  private getSlabEmissive(level: number): string {
+    const hue = (42 + level * 31) % 360;
+    return new Color().setHSL(hue / 360, 0.58, 0.16).getStyle();
   }
 
   private spawnDebris(slab: SlabData, axis: SlabData["axis"], fullMiss: boolean): void {
