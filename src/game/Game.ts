@@ -458,7 +458,7 @@ export class Game {
     const fragment = document.createDocumentFragment();
     const title = document.createElement("h2");
     title.textContent = "Runtime Debug";
-    fragment.append(title);
+    fragment.append(title, this.createDistractionLaunchControls());
 
     (Object.entries(DEBUG_RANGES) as [DebugNumberKey, (typeof DEBUG_RANGES)[DebugNumberKey]][]).forEach(
       ([key, meta]) => {
@@ -527,6 +527,10 @@ export class Game {
       fragment.append(toggleLabel);
     });
 
+    return fragment;
+  }
+
+  private createDistractionLaunchControls(): HTMLElement {
     const distractionLaunch = document.createElement("section");
     distractionLaunch.className = "debug-panel__actions";
 
@@ -551,9 +555,7 @@ export class Game {
     });
 
     distractionLaunch.append(launchGrid);
-    fragment.append(distractionLaunch);
-
-    return fragment;
+    return distractionLaunch;
   }
 
   private readonly handlePrimaryAction = (): void => {
