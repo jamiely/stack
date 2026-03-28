@@ -15,7 +15,9 @@ import {
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { advanceOscillation } from "./logic/oscillation";
 import { createSeededRandom } from "./logic/random";
+import { createComboState, updateComboState } from "./logic/streak";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
+import type { ComboState } from "./logic/streak";
 import type { OscillationState } from "./logic/oscillation";
 import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
 
@@ -46,6 +48,7 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
 
 const CAMERA_X = 8;
 const FIXED_STEP_DEFAULT_SECONDS = 1 / 60;
+const COMBO_TARGET_DEFAULT = 8;
 
 declare global {
   interface Window {
@@ -83,6 +86,7 @@ export class Game {
   private readonly hud: HTMLDivElement;
   private readonly scoreValue: HTMLSpanElement;
   private readonly heightValue: HTMLSpanElement;
+  private readonly comboValue: HTMLSpanElement;
   private readonly messageValue: HTMLSpanElement;
   private readonly overlayTitle: HTMLHeadingElement;
   private readonly overlayBody: HTMLParagraphElement;
@@ -106,6 +110,7 @@ export class Game {
   private lastFrameTime = 0;
   private gameState: GameState = "idle";
   private score = 0;
+  private combo: ComboState = createComboState(COMBO_TARGET_DEFAULT);
   private lastPlacementOutcome: TrimResult["outcome"] | null = null;
   private impactPulseRemaining = 0;
   private seededRandom: (() => number) | null = null;
@@ -136,6 +141,10 @@ export class Game {
     this.heightValue = document.createElement("span");
     this.heightValue.className = "hud__value";
     this.heightValue.dataset.testid = "height-value";
+
+    this.comboValue = document.createElement("span");
+    this.comboValue.className = "hud__value";
+    this.comboValue.dataset.testid = "combo-value";
 
     this.messageValue = document.createElement("span");
     this.messageValue.className = "hud__message";
@@ -193,6 +202,9 @@ export class Game {
       <div class="hud__card">
         <span class="hud__label">Height</span>
       </div>
+      <div class="hud__card">
+        <span class="hud__label">Combo</span>
+      </div>
       <div class="hud__card hud__card--wide" data-testid="status-card">
         <span class="hud__label">Status</span>
       </div>
@@ -204,13 +216,17 @@ export class Game {
       <div class="hud__card">
         <span class="hud__label">Height</span>
       </div>
+      <div class="hud__card">
+        <span class="hud__label">Combo</span>
+      </div>
     `;
 
     const cards = topbar.querySelectorAll(".hud__card");
     cards[0]?.append(this.scoreValue);
     cards[1]?.append(this.heightValue);
+    cards[2]?.append(this.comboValue);
     if (this.debugEnabled) {
-      cards[2]?.append(this.messageValue);
+      cards[3]?.append(this.messageValue);
     }
 
     const overlay = document.createElement("section");
@@ -394,6 +410,7 @@ export class Game {
   private resetWorld(): void {
     this.lastFrameTime = 0;
     this.score = 0;
+    this.combo = createComboState(this.combo.target);
     this.lastPlacementOutcome = null;
     this.impactPulseRemaining = 0;
     this.seededRandom = this.testMode.seed === null ? null : createSeededRandom(this.testMode.seed);
@@ -468,6 +485,7 @@ export class Game {
       this.activeMesh = null;
       this.oscillation = null;
       this.lastPlacementOutcome = result.outcome;
+      this.combo = updateComboState(this.combo, result.outcome);
       this.gameState = "game_over";
       this.statusMessage = "Missed the tower. Restart and try to recover your rhythm.";
       this.renderHud();
@@ -483,14 +501,18 @@ export class Game {
     }
 
     this.lastPlacementOutcome = result.outcome;
+    this.combo = updateComboState(this.combo, result.outcome);
     this.triggerImpactPulse(result.outcome === "perfect" ? 0.25 : 0.18);
     this.landedSlabs.push(result.landedSlab);
     this.stackGroup.add(this.createSlabMesh(result.landedSlab, false));
     this.score += 1;
-    this.statusMessage =
-      result.outcome === "perfect"
-        ? "Perfect alignment. Width preserved."
-        : `Trimmed ${result.trimmedSize.toFixed(2)} units off the ${result.landedSlab.axis.toUpperCase()} axis.`;
+    if (result.outcome === "perfect") {
+      this.statusMessage = this.combo.rewardReady
+        ? `Combo ready at ${this.combo.current}/${this.combo.target}. Reward system unlocks in V2.2.`
+        : `Perfect alignment. Combo ${this.combo.current}/${this.combo.target}.`;
+    } else {
+      this.statusMessage = `Trimmed ${result.trimmedSize.toFixed(2)} units off the ${result.landedSlab.axis.toUpperCase()} axis.`;
+    }
 
     this.activeSlab = null;
     this.activeMesh = null;
@@ -612,6 +634,7 @@ export class Game {
     const overlay = this.hud.querySelector<HTMLElement>(".overlay");
     this.scoreValue.textContent = String(this.score);
     this.heightValue.textContent = `${this.landedSlabs.length} floors`;
+    this.comboValue.textContent = `${this.combo.current}/${this.combo.target}`;
     this.messageValue.textContent = this.statusMessage;
 
     if (this.gameState === "playing") {
@@ -718,6 +741,12 @@ export class Game {
           }
         : null,
       lastPlacementOutcome: this.lastPlacementOutcome,
+      combo: {
+        current: this.combo.current,
+        best: this.combo.best,
+        target: this.combo.target,
+        rewardReady: this.combo.rewardReady,
+      },
       debugConfig: { ...this.debugConfig },
       testMode: {
         enabled: this.testMode.enabled,

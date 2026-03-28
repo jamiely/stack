@@ -11,6 +11,8 @@ This document tracks implemented gameplay features and notable behavior decision
   - `miss` (no overlap, game over)
 - Score increments on each successful placement
 - Height display tracks current tower floors
+- Combo HUD tracks perfect streak progress (`current/target`, default target `8`)
+- Perfect hits increment combo, partial trims/misses reset it, and reaching target marks a reward-ready state for the upcoming V2.2 reward system
 - Restart and return-to-title flows are supported via a single contextual primary menu button (no separate rebuild action)
 
 ## Visual and Camera Behavior
@@ -64,7 +66,7 @@ Runtime tuning panel includes:
 - `setPaused(paused)`
 - `setActiveOffset(offset)`
 - `placeAtOffset(offset)`
-- `getState()` (includes level, last placement outcome, and test-mode metadata including paused state/seed)
+- `getState()` (includes level, last placement outcome, combo state `{ current, best, target, rewardReady }`, and test-mode metadata including paused state/seed)
 
 ## Automated Verification
 
@@ -78,5 +80,6 @@ Runtime tuning panel includes:
   - Miss transition to game over and restart reset behavior
   - Runtime debug-speed tuning affecting active slab movement
   - Scripted deterministic placement sequences via test API
+  - Perfect streak sequence reaching combo target with HUD + test-state verification
   - Mobile-sized touch/tap stop input path
 - Unit coverage threshold is enforced at 90% for the logic layer

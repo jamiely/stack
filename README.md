@@ -10,11 +10,12 @@ The repo now includes a playable early milestone:
 
 - Vite + TypeScript + Three.js application shell
 - Alternating X/Z stack placement with trim-or-miss gameplay
+- Combo streak tracking (8 perfect hits target) with live HUD progress and reward-ready state exposure for upcoming V2.2 recovery rewards
 - Upward camera follow, score/height HUD, impact flash feedback, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
 - Playwright coverage for boot/start, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
-- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping and scripted placement setup
+- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, and combo-state inspection
 - Git hooks for unit tests on commit and Playwright on commit/push
 
 ## Development
@@ -46,6 +47,7 @@ The dev server runs on `http://127.0.0.1:4173`.
 - In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
 - Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused; optional `&seed=<int>` drives deterministic seeded active-slab spawn states and is surfaced through test-state snapshots
 - Debug panel controls: tune camera, slab dimensions, movement speed/ramp, perfect tolerance, starting stack size, debris lifetime/tumble, and grid visibility
+- HUD includes a combo card (`current/8`) so perfect streak progress is visible even outside debug mode
 
 ## Notes
 

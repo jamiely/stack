@@ -9,6 +9,12 @@ interface E2EState {
   activeAxis: "x" | "z" | null;
   activePosition: { x: number; y: number; z: number } | null;
   lastPlacementOutcome: "landed" | "perfect" | "miss" | null;
+  combo: {
+    current: number;
+    best: number;
+    target: number;
+    rewardReady: boolean;
+  };
   debugConfig: {
     motionSpeed: number;
     motionRange: number;
@@ -198,6 +204,36 @@ test("scripted placement sequence is deterministic across runs", async ({ page }
   expect(first).not.toBeNull();
   expect(second).not.toBeNull();
   expect(first).toEqual(second);
+});
+
+test("perfect streak reaches combo target and updates HUD/test API", async ({ page }) => {
+  await page.goto("/?test&paused=0&seed=42");
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+        getState: () => E2EState;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.startGame();
+    api.setPaused(true);
+
+    for (let index = 0; index < 8; index += 1) {
+      api.placeAtOffset(0);
+    }
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.combo.current).toBe(8);
+  await expect.poll(async () => (await getTestState(page))?.combo.rewardReady).toBe(true);
+  await expect(page.getByTestId("combo-value")).toHaveText("8/8");
 });
 
 test("keyboard and pointer input both stop slabs", async ({ page }) => {

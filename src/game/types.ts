@@ -61,6 +61,12 @@ export interface PublicGameState {
   activeAxis: Axis | null;
   activePosition: { x: number; y: number; z: number } | null;
   lastPlacementOutcome: TrimResult["outcome"] | null;
+  combo: {
+    current: number;
+    best: number;
+    target: number;
+    rewardReady: boolean;
+  };
   debugConfig: DebugConfig;
   testMode: {
     enabled: boolean;
