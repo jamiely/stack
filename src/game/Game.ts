@@ -16,16 +16,28 @@ import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getPlacementFeedbackPlan } from "./logic/feedback";
 import { advanceOscillation } from "./logic/oscillation";
+import { createDistractionState, updateDistractionState } from "./logic/distractions";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { RecoveryState } from "./logic/recovery";
 import type { ComboState } from "./logic/streak";
+import type { DistractionState } from "./logic/distractions";
 import type { OscillationState } from "./logic/oscillation";
 import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
 
-type DebugToggleKey = "gridVisible" | "feedbackAudioEnabled" | "feedbackHapticsEnabled";
+type DebugToggleKey =
+  | "gridVisible"
+  | "feedbackAudioEnabled"
+  | "feedbackHapticsEnabled"
+  | "distractionsEnabled"
+  | "distractionTentacleEnabled"
+  | "distractionGorillaEnabled"
+  | "distractionTremorEnabled"
+  | "distractionUfoEnabled"
+  | "distractionContrastEnabled"
+  | "distractionCloudEnabled";
 type DebugNumberKey = Exclude<keyof DebugConfig, DebugToggleKey>;
 
 interface DebrisPiece {
@@ -50,6 +62,11 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   recoveryGrowthMultiplier: { min: 1, max: 1.5, step: 0.01, label: "Recovery Growth" },
   recoverySlowdownFactor: { min: 0.25, max: 1, step: 0.01, label: "Recovery Slowdown" },
   recoverySlowdownPlacements: { min: 0, max: 8, step: 1, label: "Slowdown Floors" },
+  distractionMotionSpeed: { min: 0.2, max: 3, step: 0.05, label: "Distraction Speed" },
+  distractionTentacleStartLevel: { min: 0, max: 80, step: 1, label: "Tentacle Start" },
+  distractionGorillaStartLevel: { min: 0, max: 80, step: 1, label: "Gorilla Start" },
+  distractionUfoStartLevel: { min: 0, max: 100, step: 1, label: "UFO Start" },
+  distractionCloudStartLevel: { min: 0, max: 120, step: 1, label: "Cloud Start" },
   prebuiltLevels: { min: 1, max: 8, step: 1, label: "Starting Stack" },
   debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
   debrisTumbleSpeed: { min: 0.2, max: 3, step: 0.05, label: "Debris Tumble" },
@@ -61,6 +78,13 @@ const DEBUG_TOGGLE_META: Record<DebugToggleKey, { label: string }> = {
   gridVisible: { label: "Grid Visible" },
   feedbackAudioEnabled: { label: "Audio Feedback" },
   feedbackHapticsEnabled: { label: "Haptics Feedback" },
+  distractionsEnabled: { label: "Distractions Enabled" },
+  distractionTentacleEnabled: { label: "Tentacle Layer" },
+  distractionGorillaEnabled: { label: "Gorilla Layer" },
+  distractionTremorEnabled: { label: "Tremor Pulse" },
+  distractionUfoEnabled: { label: "UFO Layer" },
+  distractionContrastEnabled: { label: "Contrast Wash" },
+  distractionCloudEnabled: { label: "Cloud Occlusion" },
 };
 
 declare global {
@@ -132,6 +156,7 @@ export class Game {
   private lastPlacementOutcome: TrimResult["outcome"] | null = null;
   private impactPulseRemaining = 0;
   private seededRandom: (() => number) | null = null;
+  private distractionState: DistractionState = createDistractionState(0x53a9c321);
   private statusMessage = "Line up the moving slab and keep the tower alive.";
 
   public constructor(container: HTMLDivElement) {
@@ -411,6 +436,7 @@ export class Game {
   };
 
   private runSimulationStep(deltaSeconds: number): void {
+    this.updateDistractions(deltaSeconds);
     this.updateActiveSlab(deltaSeconds);
     this.updateDebris(deltaSeconds);
     this.updateImpactPulse(deltaSeconds);
@@ -440,6 +466,8 @@ export class Game {
     this.lastPlacementOutcome = null;
     this.impactPulseRemaining = 0;
     this.seededRandom = this.testMode.seed === null ? null : createSeededRandom(this.testMode.seed);
+    const distractionSeed = this.testMode.seed ?? 0x53a9c321;
+    this.distractionState = createDistractionState(distractionSeed);
     this.shell.style.setProperty("--impact-alpha", "0");
     this.clearGroup(this.stackGroup);
     this.clearGroup(this.debrisGroup);
@@ -566,6 +594,15 @@ export class Game {
     this.oscillation = null;
     this.spawnNextActive();
     this.renderHud();
+  }
+
+  private updateDistractions(deltaSeconds: number): void {
+    this.distractionState = updateDistractionState(
+      this.distractionState,
+      deltaSeconds,
+      this.landedSlabs.length - 1,
+      this.debugConfig,
+    );
   }
 
   private updateActiveSlab(deltaSeconds: number): void {
@@ -819,6 +856,12 @@ export class Game {
         speedMultiplier: getRecoverySpeedMultiplier(this.recovery, this.debugConfig.recoverySlowdownFactor),
       },
       feedback,
+      distractions: {
+        enabled: this.distractionState.snapshot.enabled,
+        level: this.distractionState.snapshot.level,
+        active: { ...this.distractionState.snapshot.active },
+        signals: { ...this.distractionState.snapshot.signals },
+      },
       debugConfig: { ...this.debugConfig },
       testMode: {
         enabled: this.testMode.enabled,

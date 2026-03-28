@@ -46,6 +46,18 @@ export interface DebugConfig {
   recoverySlowdownPlacements: number;
   feedbackAudioEnabled: boolean;
   feedbackHapticsEnabled: boolean;
+  distractionsEnabled: boolean;
+  distractionMotionSpeed: number;
+  distractionTentacleEnabled: boolean;
+  distractionTentacleStartLevel: number;
+  distractionGorillaEnabled: boolean;
+  distractionGorillaStartLevel: number;
+  distractionTremorEnabled: boolean;
+  distractionUfoEnabled: boolean;
+  distractionUfoStartLevel: number;
+  distractionContrastEnabled: boolean;
+  distractionCloudEnabled: boolean;
+  distractionCloudStartLevel: number;
   prebuiltLevels: number;
   debrisLifetime: number;
   debrisTumbleSpeed: number;
@@ -89,6 +101,26 @@ export interface PublicGameState {
     audioEventsPlayed: number;
     hapticEventsPlayed: number;
     lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | null;
+  };
+  distractions: {
+    enabled: boolean;
+    level: number;
+    active: {
+      tentacle: boolean;
+      gorilla: boolean;
+      tremor: boolean;
+      ufo: boolean;
+      contrastWash: boolean;
+      clouds: boolean;
+    };
+    signals: {
+      tentacle: number;
+      gorilla: number;
+      tremor: number;
+      ufo: number;
+      contrastWash: number;
+      clouds: number;
+    };
   };
   debugConfig: DebugConfig;
   testMode: {

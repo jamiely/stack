@@ -32,6 +32,26 @@ interface E2EState {
     hapticEventsPlayed: number;
     lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | null;
   };
+  distractions: {
+    enabled: boolean;
+    level: number;
+    active: {
+      tentacle: boolean;
+      gorilla: boolean;
+      tremor: boolean;
+      ufo: boolean;
+      contrastWash: boolean;
+      clouds: boolean;
+    };
+    signals: {
+      tentacle: number;
+      gorilla: number;
+      tremor: number;
+      ufo: number;
+      contrastWash: number;
+      clouds: number;
+    };
+  };
   debugConfig: {
     motionSpeed: number;
     motionRange: number;
@@ -41,6 +61,11 @@ interface E2EState {
     recoverySlowdownPlacements: number;
     feedbackAudioEnabled: boolean;
     feedbackHapticsEnabled: boolean;
+    distractionsEnabled: boolean;
+    distractionTentacleStartLevel: number;
+    distractionGorillaStartLevel: number;
+    distractionUfoStartLevel: number;
+    distractionCloudStartLevel: number;
   };
   testMode: {
     enabled: boolean;
@@ -433,6 +458,81 @@ test("debug combo target + growth tuning changes recovery behavior", async ({ pa
   await expect.poll(async () => (await getTestState(page))?.recovery.rewardsEarned).toBe(1);
   await expect.poll(async () => (await getTestState(page))?.combo.target).toBe(2);
   await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(4);
+});
+
+test("distraction framework is level-gated and runtime-toggleable", async ({ page }) => {
+  await page.goto("/?debug&test&paused=0&seed=42");
+  await expect(page.getByTestId("debug-panel")).toBeVisible();
+
+  await page.locator('input[data-debug-key="distractionTentacleStartLevel"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "2";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="distractionGorillaStartLevel"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "4";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="distractionUfoStartLevel"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "6";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="distractionCloudStartLevel"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "8";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+        stepSimulation: (steps?: number) => void;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.startGame();
+    api.setPaused(true);
+    for (let index = 0; index < 8; index += 1) {
+      api.placeAtOffset(0);
+    }
+    api.stepSimulation(1);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.tentacle).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(true);
+
+  await page.locator('input[data-debug-key="distractionsEnabled"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.checked = false;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: { stepSimulation: (steps?: number) => void };
+    }).__towerStackerTestApi;
+
+    api?.stepSimulation(1);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.debugConfig.distractionsEnabled).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.tentacle).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
 });
 
 test("audio/haptics toggles gate runtime feedback emission", async ({ page }) => {

@@ -18,6 +18,7 @@ This document tracks implemented gameplay features and notable behavior decision
   - enables temporary movement slowdown for a configurable number of floors
 - Audio + haptics feedback manager emits distinct cues for `perfect`, `landed`, and `miss` outcomes with browser-safe capability gating
 - Restart and return-to-title flows are supported via a single contextual primary menu button (no separate rebuild action)
+- V3 distraction framework runs as a deterministic side-channel (seeded + level-gated) without mutating trim/placement math
 
 ## Visual and Camera Behavior
 
@@ -49,6 +50,7 @@ Runtime tuning panel includes:
 - Placement: perfect tolerance, combo target length
 - Recovery rewards: growth multiplier, slowdown factor, slowdown floors
 - Feedback: audio enable toggle, haptics enable toggle
+- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud), deterministic motion speed, and level-start thresholds for tentacle/gorilla/ufo/cloud gating
 - Setup: prebuilt starting levels
 - Effects: debris lifetime, debris tumble strength
 - Scene: grid visibility
@@ -72,7 +74,7 @@ Runtime tuning panel includes:
 - `setPaused(paused)`
 - `setActiveOffset(offset)`
 - `placeAtOffset(offset)`
-- `getState()` (includes level, last placement outcome, top slab dimensions, combo state `{ current, best, target, rewardReady }`, recovery state `{ rewardsEarned, slowdownPlacementsRemaining, speedMultiplier }`, feedback state `{ audioEnabled, hapticsEnabled, audioSupported, hapticsSupported, audioUnlocked, eventsTriggered, audioEventsPlayed, hapticEventsPlayed, lastEvent }`, and test-mode metadata including paused state/seed)
+- `getState()` (includes level, last placement outcome, top slab dimensions, combo state `{ current, best, target, rewardReady }`, recovery state `{ rewardsEarned, slowdownPlacementsRemaining, speedMultiplier }`, feedback state `{ audioEnabled, hapticsEnabled, audioSupported, hapticsSupported, audioUnlocked, eventsTriggered, audioEventsPlayed, hapticEventsPlayed, lastEvent }`, distraction state `{ enabled, level, active, signals }`, and test-mode metadata including paused state/seed)
 
 ## Automated Verification
 
@@ -89,5 +91,6 @@ Runtime tuning panel includes:
   - Combo milestone sequence triggering recovery growth + slowdown with HUD + test-state verification
   - Debug streak/recovery tuning changing runtime reward behavior
   - Audio/haptics toggle gating for runtime feedback emission
+  - Distraction framework level-gating + runtime global toggle behavior
   - Mobile-sized touch/tap stop input path
 - Unit coverage threshold is enforced at 90% for the logic layer
