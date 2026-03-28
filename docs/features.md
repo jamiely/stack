@@ -41,7 +41,7 @@ Runtime tuning panel includes:
 - Motion: range, base speed, speed ramp
 - Placement: perfect tolerance
 - Setup: prebuilt starting levels
-- Effects: debris lifetime
+- Effects: debris lifetime, debris tumble strength
 - Scene: grid visibility
 
 ## Deterministic Test Mode (`?test` or `?testMode`)
@@ -61,7 +61,8 @@ Runtime tuning panel includes:
 - `stepSimulation(steps?)`
 - `setPaused(paused)`
 - `setActiveOffset(offset)`
-- `getState()`
+- `placeAtOffset(offset)`
+- `getState()` (includes level, last placement outcome, and test-mode metadata including paused state/seed)
 
 ## Automated Verification
 
@@ -74,4 +75,5 @@ Runtime tuning panel includes:
   - Keyboard and pointer stop input paths
   - Miss transition to game over and restart reset behavior
   - Runtime debug-speed tuning affecting active slab movement
+  - Scripted deterministic placement sequences via test API
 - Unit coverage threshold is enforced at 90% for the logic layer

@@ -13,6 +13,7 @@ export const defaultDebugConfig: DebugConfig = {
   perfectTolerance: 0.18,
   prebuiltLevels: 3,
   debrisLifetime: 1.35,
+  debrisTumbleSpeed: 1,
   gridVisible: true,
 };
 
@@ -30,6 +31,7 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     perfectTolerance: clamp(config.perfectTolerance, 0, 0.5),
     prebuiltLevels: Math.round(clamp(config.prebuiltLevels, 1, 8)),
     debrisLifetime: clamp(config.debrisLifetime, 0.4, 4),
+    debrisTumbleSpeed: clamp(config.debrisTumbleSpeed, 0.2, 3),
     gridVisible: config.gridVisible,
   };
 }

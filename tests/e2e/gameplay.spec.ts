@@ -5,11 +5,19 @@ interface E2EState {
   gameState: "idle" | "playing" | "game_over";
   score: number;
   height: number;
+  level: number;
   activeAxis: "x" | "z" | null;
   activePosition: { x: number; y: number; z: number } | null;
+  lastPlacementOutcome: "landed" | "perfect" | "miss" | null;
   debugConfig: {
     motionSpeed: number;
     motionRange: number;
+  };
+  testMode: {
+    enabled: boolean;
+    paused: boolean;
+    fixedStepSeconds: number;
+    seed: number | null;
   };
 }
 
@@ -101,6 +109,51 @@ test("test mode paused boot can be toggled with query params", async ({ page }) 
   const runningAfterWait = await getTestState(page);
 
   expect(runningAfterWait?.activePosition?.x).toBeGreaterThan(runningStart?.activePosition?.x ?? -Infinity);
+});
+
+test("scripted placement sequence is deterministic across runs", async ({ page }) => {
+  const runScriptedSequence = async () => {
+    await page.goto("/?test&paused=0&seed=42");
+
+    return page.evaluate(() => {
+      const api = (window as Window & {
+        __towerStackerTestApi?: {
+          startGame: () => void;
+          setPaused: (paused: boolean) => void;
+          placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+          getState: () => E2EState;
+        };
+      }).__towerStackerTestApi;
+
+      if (!api) {
+        return null;
+      }
+
+      api.startGame();
+      api.setPaused(true);
+
+      const outcomes = [api.placeAtOffset(0), api.placeAtOffset(0.35), api.placeAtOffset(-0.2), api.placeAtOffset(0)];
+      const state = api.getState();
+
+      return {
+        outcomes,
+        score: state.score,
+        height: state.height,
+        level: state.level,
+        activeAxis: state.activeAxis,
+        activePosition: state.activePosition,
+        lastPlacementOutcome: state.lastPlacementOutcome,
+        seed: state.testMode.seed,
+      };
+    });
+  };
+
+  const first = await runScriptedSequence();
+  const second = await runScriptedSequence();
+
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  expect(first).toEqual(second);
 });
 
 test("keyboard and pointer input both stop slabs", async ({ page }) => {

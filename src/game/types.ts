@@ -42,6 +42,7 @@ export interface DebugConfig {
   perfectTolerance: number;
   prebuiltLevels: number;
   debrisLifetime: number;
+  debrisTumbleSpeed: number;
   gridVisible: boolean;
 }
 
@@ -49,15 +50,24 @@ export interface TestModeOptions {
   enabled: boolean;
   startPaused: boolean;
   fixedStepSeconds: number;
+  seed: number | null;
 }
 
 export interface PublicGameState {
   gameState: GameState;
   score: number;
   height: number;
+  level: number;
   activeAxis: Axis | null;
   activePosition: { x: number; y: number; z: number } | null;
+  lastPlacementOutcome: TrimResult["outcome"] | null;
   debugConfig: DebugConfig;
+  testMode: {
+    enabled: boolean;
+    paused: boolean;
+    fixedStepSeconds: number;
+    seed: number | null;
+  };
 }
 
 export interface TestApi {
@@ -69,5 +79,6 @@ export interface TestApi {
   stepSimulation(steps?: number): void;
   setPaused(paused: boolean): void;
   setActiveOffset(offset: number): boolean;
+  placeAtOffset(offset: number): TrimResult["outcome"] | null;
   getState(): PublicGameState;
 }

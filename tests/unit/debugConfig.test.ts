@@ -21,6 +21,7 @@ describe("clampDebugConfig", () => {
         perfectTolerance: 1,
         prebuiltLevels: 99,
         debrisLifetime: 0.1,
+        debrisTumbleSpeed: -1,
         gridVisible: true,
       }),
     ).toEqual({
@@ -36,6 +37,7 @@ describe("clampDebugConfig", () => {
       perfectTolerance: 0.5,
       prebuiltLevels: 8,
       debrisLifetime: 0.4,
+      debrisTumbleSpeed: 0.2,
       gridVisible: true,
     });
   });

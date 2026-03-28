@@ -16,7 +16,7 @@ import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { advanceOscillation } from "./logic/oscillation";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { OscillationState } from "./logic/oscillation";
-import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions } from "./types";
+import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
 
 type DebugNumberKey = Exclude<keyof DebugConfig, "gridVisible">;
 
@@ -40,6 +40,7 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   perfectTolerance: { min: 0, max: 0.5, step: 0.01, label: "Perfect Window" },
   prebuiltLevels: { min: 1, max: 8, step: 1, label: "Starting Stack" },
   debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
+  debrisTumbleSpeed: { min: 0.2, max: 3, step: 0.05, label: "Debris Tumble" },
 };
 
 const CAMERA_X = 8;
@@ -59,10 +60,14 @@ function readTestModeOptions(search: string): TestModeOptions {
   const fixedStepSeconds =
     Number.isFinite(stepParam) && stepParam > 0 && stepParam <= 0.25 ? stepParam : FIXED_STEP_DEFAULT_SECONDS;
 
+  const seedParam = Number(params.get("seed"));
+  const seed = Number.isFinite(seedParam) ? Math.trunc(seedParam) : null;
+
   return {
     enabled,
     startPaused,
     fixedStepSeconds,
+    seed,
   };
 }
 
@@ -100,6 +105,7 @@ export class Game {
   private lastFrameTime = 0;
   private gameState: GameState = "idle";
   private score = 0;
+  private lastPlacementOutcome: TrimResult["outcome"] | null = null;
   private statusMessage = "Line up the moving slab and keep the tower alive.";
 
   public constructor(container: HTMLDivElement) {
@@ -383,6 +389,7 @@ export class Game {
   private resetWorld(): void {
     this.lastFrameTime = 0;
     this.score = 0;
+    this.lastPlacementOutcome = null;
     this.clearGroup(this.stackGroup);
     this.clearGroup(this.debrisGroup);
     this.debrisPieces = [];
@@ -436,6 +443,7 @@ export class Game {
       this.activeSlab = null;
       this.activeMesh = null;
       this.oscillation = null;
+      this.lastPlacementOutcome = result.outcome;
       this.gameState = "game_over";
       this.statusMessage = "Missed the tower. Restart and try to recover your rhythm.";
       this.renderHud();
@@ -450,6 +458,7 @@ export class Game {
       this.spawnDebris(result.debrisSlab, result.landedSlab.axis, false);
     }
 
+    this.lastPlacementOutcome = result.outcome;
     this.landedSlabs.push(result.landedSlab);
     this.stackGroup.add(this.createSlabMesh(result.landedSlab, false));
     this.score += 1;
@@ -600,6 +609,26 @@ export class Game {
     });
   }
 
+  private setActiveOffset(offset: number): boolean {
+    if (!this.activeSlab || !this.activeMesh) {
+      return false;
+    }
+
+    if (this.activeSlab.axis === "x") {
+      this.activeSlab.position.x = offset;
+      this.activeMesh.position.x = offset;
+    } else {
+      this.activeSlab.position.z = offset;
+      this.activeMesh.position.z = offset;
+    }
+
+    if (this.oscillation) {
+      this.oscillation.offset = offset;
+    }
+
+    return true;
+  }
+
   private createTestApi(): TestApi {
     return {
       startGame: () => this.startGame(),
@@ -621,24 +650,14 @@ export class Game {
         this.simulationPaused = paused;
         this.renderHud();
       },
-      setActiveOffset: (offset) => {
-        if (!this.activeSlab || !this.activeMesh) {
-          return false;
+      setActiveOffset: (offset) => this.setActiveOffset(offset),
+      placeAtOffset: (offset) => {
+        if (!this.setActiveOffset(offset)) {
+          return null;
         }
 
-        if (this.activeSlab.axis === "x") {
-          this.activeSlab.position.x = offset;
-          this.activeMesh.position.x = offset;
-        } else {
-          this.activeSlab.position.z = offset;
-          this.activeMesh.position.z = offset;
-        }
-
-        if (this.oscillation) {
-          this.oscillation.offset = offset;
-        }
-
-        return true;
+        this.stopActiveSlab();
+        return this.lastPlacementOutcome;
       },
       getState: () => this.getPublicState(),
     };
@@ -649,6 +668,7 @@ export class Game {
       gameState: this.gameState,
       score: this.score,
       height: this.landedSlabs.length,
+      level: this.landedSlabs.length - 1,
       activeAxis: this.activeSlab?.axis ?? null,
       activePosition: this.activeSlab
         ? {
@@ -657,7 +677,14 @@ export class Game {
             z: this.activeSlab.position.z,
           }
         : null,
+      lastPlacementOutcome: this.lastPlacementOutcome,
       debugConfig: { ...this.debugConfig },
+      testMode: {
+        enabled: this.testMode.enabled,
+        paused: this.simulationPaused,
+        fixedStepSeconds: this.testMode.fixedStepSeconds,
+        seed: this.testMode.seed,
+      },
     };
   }
 
@@ -696,7 +723,11 @@ export class Game {
     this.debrisPieces.push({
       mesh,
       velocity: { x: xVelocity, y: 1.8, z: zVelocity },
-      angularVelocity: { x: 1.4, y: 2.2, z: 1.1 },
+      angularVelocity: {
+        x: 1.4 * this.debugConfig.debrisTumbleSpeed,
+        y: 2.2 * this.debugConfig.debrisTumbleSpeed,
+        z: 1.1 * this.debugConfig.debrisTumbleSpeed,
+      },
       remainingLifetime: this.debugConfig.debrisLifetime,
     });
   }
