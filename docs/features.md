@@ -54,7 +54,7 @@ Debug mode also enables developer-facing HUD/overlay diagnostics that are hidden
 Runtime tuning panel includes:
 
 - Camera: height, distance, lerp
-- Slab dimensions: base width, base depth, slab height (default 2.0; runtime range 1.0–3.0)
+- Slab dimensions: block width, block length, slab height (default 2.0; runtime range 1.0–3.0)
 - Motion: range, base speed, speed ramp
 - Placement: perfect tolerance, combo target length
 - Recovery rewards: growth multiplier, slowdown factor, slowdown floors
@@ -65,7 +65,7 @@ Runtime tuning panel includes:
 - Performance: quality preset (`0` low / `1` medium / `2` high), auto-quality toggle, frame-budget target, archival keep-level/chunk sizing, distraction LOD near/far distances, active debris cap, and debris pool limit
 - Setup: prebuilt starting levels (default raised so the base extends below the bottom screen edge)
 - Effects: debris lifetime, debris tumble strength
-- Scene: grid visibility
+- Scene: grid visibility (off by default)
 
 ## Deterministic Test Mode (`?test` or `?testMode`)
 

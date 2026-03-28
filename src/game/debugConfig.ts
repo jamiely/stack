@@ -1,7 +1,7 @@
 import type { DebugConfig } from "./types";
 
 export const defaultDebugConfig: DebugConfig = {
-  cameraHeight: 8.6,
+  cameraHeight: 6.75,
   cameraDistance: 12,
   cameraLerp: 0.08,
   baseWidth: 4,
@@ -48,7 +48,7 @@ export const defaultDebugConfig: DebugConfig = {
   prebuiltLevels: 5,
   debrisLifetime: 1.35,
   debrisTumbleSpeed: 1,
-  gridVisible: true,
+  gridVisible: false,
 };
 
 export function clampDebugConfig(config: DebugConfig): DebugConfig {
