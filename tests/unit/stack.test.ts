@@ -66,10 +66,10 @@ describe("stack logic", () => {
     expect(next.axis).toBe("z");
     expect(next.position).toEqual({
       x: 0,
-      y: 2,
+      y: 3,
       z: -defaultDebugConfig.motionRange,
     });
-    expect(next.dimensions).toEqual({ width: 4, depth: 4, height: 1 });
+    expect(next.dimensions).toEqual({ width: 4, depth: 4, height: 2 });
   });
 
   it("spawns x-axis movement from negative motion range on odd levels", () => {
@@ -85,7 +85,7 @@ describe("stack logic", () => {
     expect(next.axis).toBe("x");
     expect(next.position).toEqual({
       x: -defaultDebugConfig.motionRange,
-      y: 3,
+      y: 4,
       z: -0.5,
     });
   });

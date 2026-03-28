@@ -88,7 +88,7 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   cameraLerp: { min: 0.02, max: 0.25, step: 0.01, label: "Camera Lerp" },
   baseWidth: { min: 2, max: 8, step: 0.25, label: "Base Width" },
   baseDepth: { min: 2, max: 8, step: 0.25, label: "Base Depth" },
-  slabHeight: { min: 0.5, max: 2, step: 0.1, label: "Slab Height" },
+  slabHeight: { min: 1, max: 3, step: 0.1, label: "Slab Height" },
   motionRange: { min: 1, max: 10, step: 0.25, label: "Motion Range" },
   motionSpeed: { min: 0.4, max: 5, step: 0.05, label: "Move Speed" },
   speedRamp: { min: 0, max: 0.8, step: 0.02, label: "Speed Ramp" },

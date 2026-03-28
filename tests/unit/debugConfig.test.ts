@@ -64,7 +64,7 @@ describe("clampDebugConfig", () => {
       cameraLerp: 0.25,
       baseWidth: 8,
       baseDepth: 2,
-      slabHeight: 2,
+      slabHeight: 3,
       motionRange: 1,
       motionSpeed: 5,
       speedRamp: 0.8,
