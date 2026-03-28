@@ -992,11 +992,28 @@ export class Game {
     }
 
     if (shouldUpdateForLod(this.distractionLod.ufo, this.frameCounter, scalars.distractionUpdateStride)) {
-      const ufoOpacity = snapshot.active.ufo ? 0.26 + snapshot.signals.ufo * 0.74 : 0;
-      const ufoX = 66 + Math.sin(this.distractionState.elapsedSeconds * 0.8) * 11;
-      const ufoY = 14 + Math.cos(this.distractionState.elapsedSeconds * 1.1 + snapshot.signals.ufo) * 6;
+      const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+      const orbitPhase = this.distractionState.elapsedSeconds * 0.95 * this.debugConfig.distractionMotionSpeed;
+      const orbitRadius = Math.max(3.2, this.debugConfig.baseWidth * 1.15 + snapshot.signals.ufo * 1.8);
+      const orbitCenterX = topSlab?.position.x ?? 0;
+      const orbitCenterY = (topSlab?.position.y ?? 0) + 2.35 + Math.sin(orbitPhase * 1.9) * 0.5;
+      const orbitCenterZ = topSlab?.position.z ?? 0;
+
+      const worldPoint = new Vector3(
+        orbitCenterX + Math.cos(orbitPhase) * orbitRadius,
+        orbitCenterY,
+        orbitCenterZ + Math.sin(orbitPhase) * orbitRadius,
+      );
+      const projected = worldPoint.clone().project(this.camera);
+      const width = this.container.clientWidth || window.innerWidth;
+      const height = this.container.clientHeight || window.innerHeight;
+      const screenX = (projected.x * 0.5 + 0.5) * width;
+      const screenY = (-projected.y * 0.5 + 0.5) * height;
+      const inView = projected.z > -1 && projected.z < 1;
+
+      const ufoOpacity = snapshot.active.ufo && inView ? 0.26 + snapshot.signals.ufo * 0.74 : 0;
       this.ufoActor.style.opacity = ufoOpacity.toFixed(3);
-      this.ufoActor.style.transform = `translate(${ufoX.toFixed(2)}vw, ${ufoY.toFixed(2)}vh)`;
+      this.ufoActor.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%)`;
     }
 
     if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {
