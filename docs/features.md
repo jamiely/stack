@@ -70,6 +70,7 @@ Runtime tuning panel includes:
   - Title boot and start flow
   - Debug-panel and status-surface query gating
   - Test-mode API exposure and deterministic single-step advancement
+  - Test-mode paused boot defaults and `paused=0` auto-run override
   - Keyboard and pointer stop input paths
   - Miss transition to game over and restart reset behavior
   - Runtime debug-speed tuning affecting active slab movement

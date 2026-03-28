@@ -1,8 +1,21 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
-async function getTestState(page: Parameters<typeof test>[0]["page"]) {
+interface E2EState {
+  gameState: "idle" | "playing" | "game_over";
+  score: number;
+  height: number;
+  activeAxis: "x" | "z" | null;
+  activePosition: { x: number; y: number; z: number } | null;
+  debugConfig: {
+    motionSpeed: number;
+    motionRange: number;
+  };
+}
+
+async function getTestState(page: Page): Promise<E2EState | null> {
   return page.evaluate(() => {
-    const api = (window as Window & { __towerStackerTestApi?: { getState: () => unknown } }).__towerStackerTestApi;
+    const api = (window as Window & { __towerStackerTestApi?: { getState: () => E2EState } }).__towerStackerTestApi;
     return api?.getState() ?? null;
   });
 }
@@ -54,6 +67,40 @@ test("test API is only exposed in test mode and supports deterministic stepping"
   expect(afterStep).not.toBeNull();
   expect(afterStep?.activeAxis).toBe(beforeStep?.activeAxis);
   expect(afterStep?.activePosition?.x).toBeGreaterThan(beforeStep?.activePosition?.x ?? -Infinity);
+});
+
+test("test mode paused boot can be toggled with query params", async ({ page }) => {
+  await page.goto("/?test");
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: { startGame: () => void };
+    }).__towerStackerTestApi;
+
+    api?.startGame();
+  });
+
+  const pausedStart = await getTestState(page);
+  await page.waitForTimeout(150);
+  const pausedAfterWait = await getTestState(page);
+
+  expect(pausedStart?.activePosition?.x).toBe(pausedAfterWait?.activePosition?.x);
+
+  await page.goto("/?test&paused=0");
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: { startGame: () => void };
+    }).__towerStackerTestApi;
+
+    api?.startGame();
+  });
+
+  const runningStart = await getTestState(page);
+  await page.waitForTimeout(150);
+  const runningAfterWait = await getTestState(page);
+
+  expect(runningAfterWait?.activePosition?.x).toBeGreaterThan(runningStart?.activePosition?.x ?? -Infinity);
 });
 
 test("keyboard and pointer input both stop slabs", async ({ page }) => {
@@ -166,11 +213,11 @@ test("debug controls can tune movement speed at runtime", async ({ page }) => {
       };
     }).__towerStackerTestApi;
 
-    const state = api?.getState();
-    if (!state) {
+    if (!api) {
       return;
     }
 
+    const state = api.getState();
     api.setActiveOffset(-state.debugConfig.motionRange);
     api.stepSimulation(1);
   });
