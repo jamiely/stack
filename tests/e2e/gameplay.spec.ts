@@ -694,6 +694,16 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 1).toBe(0);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0);
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: { stepSimulation: (steps?: number) => void };
+    }).__towerStackerTestApi;
+
+    api?.stepSimulation(90);
+  });
+
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 1).toBe(0);
 });
 

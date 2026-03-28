@@ -147,6 +147,8 @@ const DEBUG_DISTRACTION_CHANNELS: DistractionChannel[] = [
   "clouds",
 ];
 const DEBUG_DISTRACTION_LAUNCH_DURATION_SECONDS = 2.5;
+const UFO_EXIT_DURATION_SECONDS = 0.9;
+const UFO_MIN_EXIT_SPEED_PX_PER_SECOND = 620;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -247,6 +249,10 @@ export class Game {
   private seededRandom: (() => number) | null = null;
   private distractionState: DistractionState = createDistractionState(0x53a9c321);
   private forcedDistractionTimers: Record<DistractionChannel, number> = createDistractionTimerRecord(0);
+  private ufoWasActive = false;
+  private ufoExitSecondsRemaining = 0;
+  private ufoScreenPosition = { x: 0, y: 0 };
+  private ufoScreenVelocity = { x: UFO_MIN_EXIT_SPEED_PX_PER_SECOND, y: -160 };
   private integrityTelemetry: IntegrityTelemetry = resolveIntegrityTelemetry(
     [],
     {
@@ -705,6 +711,10 @@ export class Game {
     const distractionSeed = this.testMode.seed ?? 0x53a9c321;
     this.distractionState = createDistractionState(distractionSeed);
     this.forcedDistractionTimers = createDistractionTimerRecord(0);
+    this.ufoWasActive = false;
+    this.ufoExitSecondsRemaining = 0;
+    this.ufoScreenPosition = { x: 0, y: 0 };
+    this.ufoScreenVelocity = { x: UFO_MIN_EXIT_SPEED_PX_PER_SECOND, y: -160 };
     this.shell.style.setProperty("--impact-alpha", "0");
     this.shell.style.setProperty("--contrast-alpha", "0");
     this.shell.style.setProperty("--collapse-alpha", "0");
@@ -992,28 +1002,80 @@ export class Game {
     }
 
     if (shouldUpdateForLod(this.distractionLod.ufo, this.frameCounter, scalars.distractionUpdateStride)) {
-      const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
-      const orbitPhase = this.distractionState.elapsedSeconds * 0.95 * this.debugConfig.distractionMotionSpeed;
-      const orbitRadius = Math.max(3.2, this.debugConfig.baseWidth * 1.15 + snapshot.signals.ufo * 1.8);
-      const orbitCenterX = topSlab?.position.x ?? 0;
-      const orbitCenterY = (topSlab?.position.y ?? 0) + 2.35 + Math.sin(orbitPhase * 1.9) * 0.5;
-      const orbitCenterZ = topSlab?.position.z ?? 0;
-
-      const worldPoint = new Vector3(
-        orbitCenterX + Math.cos(orbitPhase) * orbitRadius,
-        orbitCenterY,
-        orbitCenterZ + Math.sin(orbitPhase) * orbitRadius,
-      );
-      const projected = worldPoint.clone().project(this.camera);
       const width = this.container.clientWidth || window.innerWidth;
       const height = this.container.clientHeight || window.innerHeight;
-      const screenX = (projected.x * 0.5 + 0.5) * width;
-      const screenY = (-projected.y * 0.5 + 0.5) * height;
-      const inView = projected.z > -1 && projected.z < 1;
+      const frameDeltaSeconds = Math.max(1 / 120, this.frameTimeMs > 0 ? this.frameTimeMs / 1000 : 1 / 60);
 
-      const ufoOpacity = snapshot.active.ufo && inView ? 0.26 + snapshot.signals.ufo * 0.74 : 0;
-      this.ufoActor.style.opacity = ufoOpacity.toFixed(3);
-      this.ufoActor.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%)`;
+      if (snapshot.active.ufo) {
+        const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+        const orbitPhase = this.distractionState.elapsedSeconds * 0.95 * this.debugConfig.distractionMotionSpeed;
+        const orbitRadius = Math.max(3.2, this.debugConfig.baseWidth * 1.15 + snapshot.signals.ufo * 1.8);
+        const orbitCenterX = topSlab?.position.x ?? 0;
+        const orbitCenterY = (topSlab?.position.y ?? 0) + 2.35 + Math.sin(orbitPhase * 1.9) * 0.5;
+        const orbitCenterZ = topSlab?.position.z ?? 0;
+
+        const worldPoint = new Vector3(
+          orbitCenterX + Math.cos(orbitPhase) * orbitRadius,
+          orbitCenterY,
+          orbitCenterZ + Math.sin(orbitPhase) * orbitRadius,
+        );
+        const projected = worldPoint.clone().project(this.camera);
+        const screenX = (projected.x * 0.5 + 0.5) * width;
+        const screenY = (-projected.y * 0.5 + 0.5) * height;
+
+        if (this.ufoWasActive) {
+          this.ufoScreenVelocity = {
+            x: (screenX - this.ufoScreenPosition.x) / frameDeltaSeconds,
+            y: (screenY - this.ufoScreenPosition.y) / frameDeltaSeconds,
+          };
+        }
+
+        this.ufoScreenPosition = { x: screenX, y: screenY };
+        this.ufoExitSecondsRemaining = 0;
+        this.ufoWasActive = true;
+
+        const clampedX = Math.min(width + 160, Math.max(-160, screenX));
+        const clampedY = Math.min(height + 160, Math.max(-160, screenY));
+        const inView = projected.z > -1 && projected.z < 1 && screenX >= 0 && screenX <= width && screenY >= 0 && screenY <= height;
+        const ufoOpacity = inView
+          ? 0.26 + snapshot.signals.ufo * 0.74
+          : 0.14 + snapshot.signals.ufo * 0.22;
+        this.ufoActor.style.opacity = ufoOpacity.toFixed(3);
+        this.ufoActor.style.transform = `translate(${clampedX.toFixed(2)}px, ${clampedY.toFixed(2)}px) translate(-50%, -50%)`;
+      } else {
+        if (this.ufoWasActive) {
+          const centerX = width * 0.5;
+          const centerY = height * 0.5;
+          const fromCenterX = this.ufoScreenPosition.x - centerX;
+          const fromCenterY = this.ufoScreenPosition.y - centerY;
+          const fromCenterMagnitude = Math.hypot(fromCenterX, fromCenterY) || 1;
+          const outwardX = fromCenterX / fromCenterMagnitude;
+          const outwardY = fromCenterY / fromCenterMagnitude;
+          const tangentSpeed = Math.hypot(this.ufoScreenVelocity.x, this.ufoScreenVelocity.y);
+          const exitSpeed = Math.max(UFO_MIN_EXIT_SPEED_PX_PER_SECOND, tangentSpeed);
+
+          this.ufoScreenVelocity = {
+            x: outwardX * exitSpeed,
+            y: outwardY * exitSpeed,
+          };
+          this.ufoExitSecondsRemaining = UFO_EXIT_DURATION_SECONDS;
+          this.ufoWasActive = false;
+        }
+
+        if (this.ufoExitSecondsRemaining > 0) {
+          this.ufoExitSecondsRemaining = Math.max(0, this.ufoExitSecondsRemaining - frameDeltaSeconds);
+          const fadeProgress = this.ufoExitSecondsRemaining / UFO_EXIT_DURATION_SECONDS;
+          this.ufoScreenPosition = {
+            x: this.ufoScreenPosition.x + this.ufoScreenVelocity.x * frameDeltaSeconds,
+            y: this.ufoScreenPosition.y + this.ufoScreenVelocity.y * frameDeltaSeconds,
+          };
+
+          this.ufoActor.style.opacity = (0.58 * fadeProgress).toFixed(3);
+          this.ufoActor.style.transform = `translate(${this.ufoScreenPosition.x.toFixed(2)}px, ${this.ufoScreenPosition.y.toFixed(2)}px) translate(-50%, -50%)`;
+        } else {
+          this.ufoActor.style.opacity = "0";
+        }
+      }
     }
 
     if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {
