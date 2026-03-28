@@ -325,6 +325,7 @@ export class Game {
   private startGame(): void {
     this.resetWorld();
     this.gameState = "playing";
+    this.spawnNextActive();
     this.statusMessage = "Press space, enter, click, or tap to drop the slab.";
     this.renderHud();
   }
@@ -350,8 +351,6 @@ export class Game {
     this.landedSlabs.forEach((slab, index) => {
       this.stackGroup.add(this.createSlabMesh(slab, index === this.landedSlabs.length - 1));
     });
-
-    this.spawnNextActive();
   }
 
   private spawnNextActive(): void {
