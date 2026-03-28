@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: ${{ hashFiles('package.json') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm ci
+
+      - name: Verify build script exists
+        if: ${{ hashFiles('package.json') != '' }}
+        run: |
+          node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const scripts=pkg.scripts||{}; if (!scripts.build) { console.error('Missing required script: build'); process.exit(1); }"
+
+      - name: Run build
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: npm run build
+
+      - name: Upload build artifact
+        if: ${{ success() && hashFiles('dist/**') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: dist
+
+      - name: No app scaffold yet
+        if: ${{ hashFiles('package.json') == '' }}
+        run: echo "Skipping build job because package.json has not been added yet."

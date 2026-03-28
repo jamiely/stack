@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+if [ ! -f package.json ]; then
+  echo "pre-push: skipping Playwright tests because package.json is not present yet."
+  exit 0
+fi
+
+node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const scripts=pkg.scripts||{}; if (!scripts['test:e2e']) { console.error('pre-push: missing npm script test:e2e'); process.exit(1); }"
+
+echo "pre-push: running Playwright end-to-end tests"
+npm run test:e2e

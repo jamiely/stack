@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+if [ ! -f package.json ]; then
+  echo "pre-commit: skipping unit tests because package.json is not present yet."
+  exit 0
+fi
+
+node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const scripts=pkg.scripts||{}; const required=['test:unit','test:e2e']; const missing=required.filter(name=>!scripts[name]); if (missing.length) { console.error('pre-commit: missing npm scripts: ' + missing.join(', ')); process.exit(1); }"
+
+echo "pre-commit: running unit tests"
+npm run test:unit
+
+echo "pre-commit: running Playwright end-to-end tests"
+npm run test:e2e
