@@ -54,7 +54,7 @@ Debug mode also enables developer-facing HUD/overlay diagnostics that are hidden
 Runtime tuning panel includes:
 
 - Camera: height, distance, lerp
-- Slab dimensions: block width, block length, slab height (default 2.0; runtime range 1.0–3.0)
+- Slab dimensions: block width, block length, slab height (default 3.0; runtime range 1.0–5.0 so the default is centered) with immediate visual world rebuild while sliders change
 - Motion: range, base speed, speed ramp
 - Placement: perfect tolerance, combo target length
 - Recovery rewards: growth multiplier, slowdown factor, slowdown floors

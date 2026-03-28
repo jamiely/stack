@@ -341,7 +341,7 @@ test("combo milestone triggers recovery reward growth + slowdown", async ({ page
   await expect.poll(async () => (await getTestState(page))?.recovery.rewardsEarned).toBe(1);
   await expect.poll(async () => (await getTestState(page))?.recovery.slowdownPlacementsRemaining).toBe(3);
   await expect.poll(async () => (await getTestState(page))?.recovery.speedMultiplier).toBeLessThan(1);
-  await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(4);
+  await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(7);
   await expect(page.getByTestId("combo-value")).toHaveText("8/8");
 });
 
@@ -561,7 +561,7 @@ test("debug combo target + growth tuning changes recovery behavior", async ({ pa
 
   await expect.poll(async () => (await getTestState(page))?.recovery.rewardsEarned).toBe(1);
   await expect.poll(async () => (await getTestState(page))?.combo.target).toBe(2);
-  await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(4);
+  await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(7);
 });
 
 test("debug distraction launch buttons can trigger channels on demand", async ({ page }) => {
@@ -812,7 +812,7 @@ test("integrity telemetry reports deterministic stable/precarious/unstable trans
 
     api.startGame();
     api.setPaused(true);
-    api.placeAtOffset(1.6);
+    api.placeAtOffset(3.0);
   });
 
   await expect.poll(async () => (await getTestState(page))?.integrity.tier).toBe("precarious");
@@ -826,7 +826,7 @@ test("integrity telemetry reports deterministic stable/precarious/unstable trans
       };
     }).__towerStackerTestApi;
 
-    api?.placeAtOffset(1.9);
+    api?.placeAtOffset(3.8);
   });
 
   await expect.poll(async () => (await getTestState(page))?.integrity.tier).toBe("unstable");
@@ -880,7 +880,7 @@ test("unstable integrity triggers collapse fail sequence without requiring a har
       return null;
     }
 
-    const outcomes = [api.placeAtOffset(1.6), api.placeAtOffset(1.9)];
+    const outcomes = [api.placeAtOffset(3.0), api.placeAtOffset(3.8)];
     api.stepSimulation(180);
     return {
       outcomes,

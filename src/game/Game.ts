@@ -88,7 +88,7 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   cameraLerp: { min: 0.02, max: 0.25, step: 0.01, label: "Camera Lerp" },
   baseWidth: { min: 2, max: 8, step: 0.25, label: "Block Width" },
   baseDepth: { min: 2, max: 8, step: 0.25, label: "Block Length" },
-  slabHeight: { min: 1, max: 3, step: 0.1, label: "Slab Height" },
+  slabHeight: { min: 1, max: 5, step: 0.1, label: "Slab Height" },
   motionRange: { min: 1, max: 10, step: 0.25, label: "Motion Range" },
   motionSpeed: { min: 0.4, max: 5, step: 0.05, label: "Move Speed" },
   speedRamp: { min: 0, max: 0.8, step: 0.02, label: "Speed Ramp" },
@@ -1521,19 +1521,31 @@ export class Game {
       }
     });
 
-    const requiresReset =
+    const dimensionsChanged =
       previousConfig.baseWidth !== this.debugConfig.baseWidth ||
       previousConfig.baseDepth !== this.debugConfig.baseDepth ||
-      previousConfig.slabHeight !== this.debugConfig.slabHeight ||
-      previousConfig.prebuiltLevels !== this.debugConfig.prebuiltLevels;
+      previousConfig.slabHeight !== this.debugConfig.slabHeight;
+
+    const prebuiltLevelsChanged = previousConfig.prebuiltLevels !== this.debugConfig.prebuiltLevels;
 
     const performanceStructureChanged =
       previousConfig.performanceQualityPreset !== this.debugConfig.performanceQualityPreset ||
       previousConfig.archivalKeepRecentLevels !== this.debugConfig.archivalKeepRecentLevels ||
       previousConfig.archivalChunkSize !== this.debugConfig.archivalChunkSize;
 
-    if (requiresReset && this.gameState !== "playing") {
+    if (dimensionsChanged || prebuiltLevelsChanged) {
+      const wasPlaying = this.gameState === "playing";
       this.resetWorld();
+
+      if (wasPlaying) {
+        this.gameState = "playing";
+        this.spawnNextActive();
+        this.statusMessage = "Debug dimensions updated.";
+      } else {
+        this.gameState = "idle";
+        this.statusMessage = "Adjust the starting stack or timing window, then start a new run.";
+      }
+
       return;
     }
 
