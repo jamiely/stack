@@ -12,7 +12,10 @@ This document tracks implemented gameplay features and notable behavior decision
 - Score increments on each successful placement
 - Height display tracks current tower floors
 - Combo HUD tracks perfect streak progress (`current/target`, default target `8`)
-- Perfect hits increment combo, partial trims/misses reset it, and reaching target marks a reward-ready state for the upcoming V2.2 reward system
+- Perfect hits increment combo while partial trims/misses reset it
+- Recovery reward triggers at combo milestones (default every `8` perfect hits):
+  - applies capped slab growth toward base dimensions
+  - enables temporary movement slowdown for a configurable number of floors
 - Restart and return-to-title flows are supported via a single contextual primary menu button (no separate rebuild action)
 
 ## Visual and Camera Behavior
@@ -42,7 +45,8 @@ Runtime tuning panel includes:
 - Camera: height, distance, lerp
 - Slab dimensions: base width, base depth, slab height
 - Motion: range, base speed, speed ramp
-- Placement: perfect tolerance
+- Placement: perfect tolerance, combo target length
+- Recovery rewards: growth multiplier, slowdown factor, slowdown floors
 - Setup: prebuilt starting levels
 - Effects: debris lifetime, debris tumble strength
 - Scene: grid visibility
@@ -66,7 +70,7 @@ Runtime tuning panel includes:
 - `setPaused(paused)`
 - `setActiveOffset(offset)`
 - `placeAtOffset(offset)`
-- `getState()` (includes level, last placement outcome, combo state `{ current, best, target, rewardReady }`, and test-mode metadata including paused state/seed)
+- `getState()` (includes level, last placement outcome, top slab dimensions, combo state `{ current, best, target, rewardReady }`, recovery state `{ rewardsEarned, slowdownPlacementsRemaining, speedMultiplier }`, and test-mode metadata including paused state/seed)
 
 ## Automated Verification
 
@@ -80,6 +84,7 @@ Runtime tuning panel includes:
   - Miss transition to game over and restart reset behavior
   - Runtime debug-speed tuning affecting active slab movement
   - Scripted deterministic placement sequences via test API
-  - Perfect streak sequence reaching combo target with HUD + test-state verification
+  - Combo milestone sequence triggering recovery growth + slowdown with HUD + test-state verification
+  - Debug streak/recovery tuning changing runtime reward behavior
   - Mobile-sized touch/tap stop input path
 - Unit coverage threshold is enforced at 90% for the logic layer

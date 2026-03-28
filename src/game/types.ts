@@ -40,6 +40,10 @@ export interface DebugConfig {
   motionSpeed: number;
   speedRamp: number;
   perfectTolerance: number;
+  comboTarget: number;
+  recoveryGrowthMultiplier: number;
+  recoverySlowdownFactor: number;
+  recoverySlowdownPlacements: number;
   prebuiltLevels: number;
   debrisLifetime: number;
   debrisTumbleSpeed: number;
@@ -61,11 +65,17 @@ export interface PublicGameState {
   activeAxis: Axis | null;
   activePosition: { x: number; y: number; z: number } | null;
   lastPlacementOutcome: TrimResult["outcome"] | null;
+  topDimensions: SlabDimensions | null;
   combo: {
     current: number;
     best: number;
     target: number;
     rewardReady: boolean;
+  };
+  recovery: {
+    rewardsEarned: number;
+    slowdownPlacementsRemaining: number;
+    speedMultiplier: number;
   };
   debugConfig: DebugConfig;
   testMode: {

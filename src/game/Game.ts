@@ -15,8 +15,10 @@ import {
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { advanceOscillation } from "./logic/oscillation";
 import { createSeededRandom } from "./logic/random";
+import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
+import type { RecoveryState } from "./logic/recovery";
 import type { ComboState } from "./logic/streak";
 import type { OscillationState } from "./logic/oscillation";
 import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
@@ -41,6 +43,10 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   motionSpeed: { min: 0.4, max: 5, step: 0.05, label: "Move Speed" },
   speedRamp: { min: 0, max: 0.8, step: 0.02, label: "Speed Ramp" },
   perfectTolerance: { min: 0, max: 0.5, step: 0.01, label: "Perfect Window" },
+  comboTarget: { min: 2, max: 12, step: 1, label: "Combo Target" },
+  recoveryGrowthMultiplier: { min: 1, max: 1.5, step: 0.01, label: "Recovery Growth" },
+  recoverySlowdownFactor: { min: 0.25, max: 1, step: 0.01, label: "Recovery Slowdown" },
+  recoverySlowdownPlacements: { min: 0, max: 8, step: 1, label: "Slowdown Floors" },
   prebuiltLevels: { min: 1, max: 8, step: 1, label: "Starting Stack" },
   debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
   debrisTumbleSpeed: { min: 0.2, max: 3, step: 0.05, label: "Debris Tumble" },
@@ -48,7 +54,6 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
 
 const CAMERA_X = 8;
 const FIXED_STEP_DEFAULT_SECONDS = 1 / 60;
-const COMBO_TARGET_DEFAULT = 8;
 
 declare global {
   interface Window {
@@ -110,7 +115,8 @@ export class Game {
   private lastFrameTime = 0;
   private gameState: GameState = "idle";
   private score = 0;
-  private combo: ComboState = createComboState(COMBO_TARGET_DEFAULT);
+  private combo: ComboState = createComboState(defaultDebugConfig.comboTarget);
+  private recovery: RecoveryState = createRecoveryState();
   private lastPlacementOutcome: TrimResult["outcome"] | null = null;
   private impactPulseRemaining = 0;
   private seededRandom: (() => number) | null = null;
@@ -410,7 +416,8 @@ export class Game {
   private resetWorld(): void {
     this.lastFrameTime = 0;
     this.score = 0;
-    this.combo = createComboState(this.combo.target);
+    this.combo = createComboState(this.debugConfig.comboTarget);
+    this.recovery = createRecoveryState();
     this.lastPlacementOutcome = null;
     this.impactPulseRemaining = 0;
     this.seededRandom = this.testMode.seed === null ? null : createSeededRandom(this.testMode.seed);
@@ -502,13 +509,32 @@ export class Game {
 
     this.lastPlacementOutcome = result.outcome;
     this.combo = updateComboState(this.combo, result.outcome);
+    this.recovery = applyPlacementRecoveryTick(this.recovery);
+
+    const recoveryResolution = resolveRecoveryReward(this.recovery, this.combo, result.landedSlab, {
+      baseWidth: this.debugConfig.baseWidth,
+      baseDepth: this.debugConfig.baseDepth,
+      growthMultiplier: this.debugConfig.recoveryGrowthMultiplier,
+      slowdownPlacements: this.debugConfig.recoverySlowdownPlacements,
+    });
+
+    this.recovery = recoveryResolution.state;
+    const rewardedLandedSlab = recoveryResolution.landedSlab;
+
     this.triggerImpactPulse(result.outcome === "perfect" ? 0.25 : 0.18);
-    this.landedSlabs.push(result.landedSlab);
-    this.stackGroup.add(this.createSlabMesh(result.landedSlab, false));
+    this.landedSlabs.push(rewardedLandedSlab);
+    this.stackGroup.add(this.createSlabMesh(rewardedLandedSlab, false));
     this.score += 1;
-    if (result.outcome === "perfect") {
+
+    if (recoveryResolution.triggered) {
+      const slowdownPercent = Math.round((1 - this.debugConfig.recoverySlowdownFactor) * 100);
+      this.statusMessage =
+        slowdownPercent > 0
+          ? `Recovery reward! Slab footprint restored and speed reduced ${slowdownPercent}% for ${this.recovery.slowdownPlacementsRemaining} floors.`
+          : "Recovery reward! Slab footprint restored to help you stabilize the tower.";
+    } else if (result.outcome === "perfect") {
       this.statusMessage = this.combo.rewardReady
-        ? `Combo ready at ${this.combo.current}/${this.combo.target}. Reward system unlocks in V2.2.`
+        ? `Combo ready at ${this.combo.current}/${this.combo.target}.`
         : `Perfect alignment. Combo ${this.combo.current}/${this.combo.target}.`;
     } else {
       this.statusMessage = `Trimmed ${result.trimmedSize.toFixed(2)} units off the ${result.landedSlab.axis.toUpperCase()} axis.`;
@@ -529,7 +555,8 @@ export class Game {
     this.oscillation = advanceOscillation(
       this.oscillation,
       deltaSeconds,
-      getTravelSpeed(this.activeSlab.level, this.debugConfig),
+      getTravelSpeed(this.activeSlab.level, this.debugConfig) *
+        getRecoverySpeedMultiplier(this.recovery, this.debugConfig.recoverySlowdownFactor),
       this.debugConfig.motionRange,
     );
 
@@ -606,6 +633,14 @@ export class Game {
     this.debugConfig = clampDebugConfig(config);
     this.gridHelper.visible = this.debugConfig.gridVisible;
 
+    if (previousConfig.comboTarget !== this.debugConfig.comboTarget) {
+      this.combo = {
+        ...this.combo,
+        target: this.debugConfig.comboTarget,
+        rewardReady: this.combo.current >= this.debugConfig.comboTarget,
+      };
+    }
+
     this.debugPanel.querySelectorAll<HTMLInputElement>("[data-debug-key]").forEach((input) => {
       const key = input.dataset.debugKey as keyof DebugConfig | undefined;
       if (!key) {
@@ -668,7 +703,9 @@ export class Game {
       }
 
       node.textContent =
-        key === "prebuiltLevels" ? String(this.debugConfig[key]) : `${this.debugConfig[key].toFixed(2)}`;
+        key === "prebuiltLevels" || key === "comboTarget" || key === "recoverySlowdownPlacements"
+          ? String(this.debugConfig[key])
+          : `${this.debugConfig[key].toFixed(2)}`;
     });
   }
 
@@ -741,11 +778,17 @@ export class Game {
           }
         : null,
       lastPlacementOutcome: this.lastPlacementOutcome,
+      topDimensions: this.landedSlabs.length > 0 ? { ...this.landedSlabs[this.landedSlabs.length - 1]!.dimensions } : null,
       combo: {
         current: this.combo.current,
         best: this.combo.best,
         target: this.combo.target,
         rewardReady: this.combo.rewardReady,
+      },
+      recovery: {
+        rewardsEarned: this.recovery.rewardsEarned,
+        slowdownPlacementsRemaining: this.recovery.slowdownPlacementsRemaining,
+        speedMultiplier: getRecoverySpeedMultiplier(this.recovery, this.debugConfig.recoverySlowdownFactor),
       },
       debugConfig: { ...this.debugConfig },
       testMode: {

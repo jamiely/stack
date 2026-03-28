@@ -9,15 +9,25 @@ interface E2EState {
   activeAxis: "x" | "z" | null;
   activePosition: { x: number; y: number; z: number } | null;
   lastPlacementOutcome: "landed" | "perfect" | "miss" | null;
+  topDimensions: { width: number; depth: number; height: number } | null;
   combo: {
     current: number;
     best: number;
     target: number;
     rewardReady: boolean;
   };
+  recovery: {
+    rewardsEarned: number;
+    slowdownPlacementsRemaining: number;
+    speedMultiplier: number;
+  };
   debugConfig: {
     motionSpeed: number;
     motionRange: number;
+    comboTarget: number;
+    recoveryGrowthMultiplier: number;
+    recoverySlowdownFactor: number;
+    recoverySlowdownPlacements: number;
   };
   testMode: {
     enabled: boolean;
@@ -206,7 +216,7 @@ test("scripted placement sequence is deterministic across runs", async ({ page }
   expect(first).toEqual(second);
 });
 
-test("perfect streak reaches combo target and updates HUD/test API", async ({ page }) => {
+test("combo milestone triggers recovery reward growth + slowdown", async ({ page }) => {
   await page.goto("/?test&paused=0&seed=42");
 
   await page.evaluate(() => {
@@ -215,7 +225,6 @@ test("perfect streak reaches combo target and updates HUD/test API", async ({ pa
         startGame: () => void;
         setPaused: (paused: boolean) => void;
         placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
-        getState: () => E2EState;
       };
     }).__towerStackerTestApi;
 
@@ -225,6 +234,7 @@ test("perfect streak reaches combo target and updates HUD/test API", async ({ pa
 
     api.startGame();
     api.setPaused(true);
+    api.placeAtOffset(0.3);
 
     for (let index = 0; index < 8; index += 1) {
       api.placeAtOffset(0);
@@ -233,6 +243,10 @@ test("perfect streak reaches combo target and updates HUD/test API", async ({ pa
 
   await expect.poll(async () => (await getTestState(page))?.combo.current).toBe(8);
   await expect.poll(async () => (await getTestState(page))?.combo.rewardReady).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.recovery.rewardsEarned).toBe(1);
+  await expect.poll(async () => (await getTestState(page))?.recovery.slowdownPlacementsRemaining).toBe(3);
+  await expect.poll(async () => (await getTestState(page))?.recovery.speedMultiplier).toBeLessThan(1);
+  await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(4);
   await expect(page.getByTestId("combo-value")).toHaveText("8/8");
 });
 
@@ -362,6 +376,50 @@ test("debug controls can tune movement speed at runtime", async ({ page }) => {
 
   expect(baseDelta).toBeGreaterThan(0);
   expect(tunedDelta).toBeGreaterThan(baseDelta * 1.5);
+});
+
+test("debug combo target + growth tuning changes recovery behavior", async ({ page }) => {
+  await page.goto("/?debug&test&paused=0&seed=42");
+  await expect(page.getByTestId("debug-panel")).toBeVisible();
+
+  await page.locator('input[data-debug-key="comboTarget"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "2";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="recoveryGrowthMultiplier"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "1.5";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.debugConfig.comboTarget).toBe(2);
+  await expect.poll(async () => (await getTestState(page))?.debugConfig.recoveryGrowthMultiplier).toBe(1.5);
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.startGame();
+    api.setPaused(true);
+    api.placeAtOffset(0.8);
+    api.placeAtOffset(0);
+    api.placeAtOffset(0.4);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.recovery.rewardsEarned).toBe(1);
+  await expect.poll(async () => (await getTestState(page))?.combo.target).toBe(2);
+  await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(4);
 });
 
 test.describe("mobile touch pass", () => {
