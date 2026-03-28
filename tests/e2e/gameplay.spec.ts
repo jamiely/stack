@@ -281,3 +281,28 @@ test("debug controls can tune movement speed at runtime", async ({ page }) => {
   expect(baseDelta).toBeGreaterThan(0);
   expect(tunedDelta).toBeGreaterThan(baseDelta * 1.5);
 });
+
+test.describe("mobile touch pass", () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+
+  test("tap input on a mobile-sized viewport stops the active slab", async ({ page }) => {
+    await page.goto("/?test");
+
+    await page.evaluate(() => {
+      const api = (window as Window & {
+        __towerStackerTestApi?: { startGame: () => void; setActiveOffset: (offset: number) => boolean };
+      }).__towerStackerTestApi;
+
+      api?.startGame();
+      api?.setActiveOffset(0);
+    });
+
+    await page.locator(".game-shell").tap({ position: { x: 20, y: 20 } });
+
+    await expect.poll(async () => (await getTestState(page))?.score).toBe(1);
+  });
+});

@@ -76,4 +76,5 @@ Runtime tuning panel includes:
   - Miss transition to game over and restart reset behavior
   - Runtime debug-speed tuning affecting active slab movement
   - Scripted deterministic placement sequences via test API
+  - Mobile-sized touch/tap stop input path
 - Unit coverage threshold is enforced at 90% for the logic layer
