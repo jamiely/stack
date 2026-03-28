@@ -12,9 +12,8 @@ The repo now includes a playable early milestone:
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
 - Playwright smoke coverage for boot, start flow, and debug gating
+- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping and scripted placement setup
 - Git hooks for unit tests on commit and Playwright on commit/push
-
-Deterministic test mode and deeper Playwright coverage are still pending.
 
 ## Development
 
@@ -42,6 +41,7 @@ The dev server runs on `http://127.0.0.1:4173`.
 - `Return To Title`: exit the active run
 - `Restart Run`: restart after a miss
 - Visit `/?debug` to expose the runtime tuning panel
+- Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused
 - Debug panel controls: tune camera, slab dimensions, movement speed/ramp, perfect tolerance, starting stack size, debris lifetime, and grid visibility
 
 ## Notes

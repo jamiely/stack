@@ -16,7 +16,7 @@ import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { advanceOscillation } from "./logic/oscillation";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { OscillationState } from "./logic/oscillation";
-import type { DebugConfig, GameState, SlabData } from "./types";
+import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions } from "./types";
 
 type DebugNumberKey = Exclude<keyof DebugConfig, "gridVisible">;
 
@@ -43,9 +43,34 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
 };
 
 const CAMERA_X = 8;
+const FIXED_STEP_DEFAULT_SECONDS = 1 / 60;
+
+declare global {
+  interface Window {
+    __towerStackerTestApi?: TestApi;
+  }
+}
+
+function readTestModeOptions(search: string): TestModeOptions {
+  const params = new URLSearchParams(search);
+  const enabled = params.has("test") || params.has("testMode");
+  const startPaused = enabled && params.get("paused") !== "0";
+  const stepParam = Number(params.get("step"));
+  const fixedStepSeconds =
+    Number.isFinite(stepParam) && stepParam > 0 && stepParam <= 0.25 ? stepParam : FIXED_STEP_DEFAULT_SECONDS;
+
+  return {
+    enabled,
+    startPaused,
+    fixedStepSeconds,
+  };
+}
 
 export class Game {
   private readonly debugEnabled: boolean;
+  private readonly testMode: TestModeOptions;
+  private simulationPaused = false;
+
   private readonly container: HTMLDivElement;
   private readonly shell: HTMLDivElement;
   private readonly canvas: HTMLCanvasElement;
@@ -80,9 +105,14 @@ export class Game {
 
   public constructor(container: HTMLDivElement) {
     this.container = container;
-    this.debugEnabled = new URLSearchParams(window.location.search).has("debug");
+    const query = window.location.search;
+    this.debugEnabled = new URLSearchParams(query).has("debug");
+    this.testMode = readTestModeOptions(query);
+    this.simulationPaused = this.testMode.enabled && this.testMode.startPaused;
+
     this.shell = document.createElement("div");
     this.shell.className = "game-shell";
+    this.shell.dataset.testMode = this.testMode.enabled ? "on" : "off";
     this.shell.addEventListener("pointerdown", this.handlePointerStop);
 
     this.canvas = document.createElement("canvas");
@@ -104,7 +134,9 @@ export class Game {
     this.messageValue.dataset.testid = "status-message";
 
     this.overlayTitle = document.createElement("h1");
+    this.overlayTitle.dataset.testid = "overlay-title";
     this.overlayBody = document.createElement("p");
+    this.overlayBody.dataset.testid = "overlay-body";
     this.primaryButton = document.createElement("button");
     this.secondaryButton = document.createElement("button");
     this.debugPanel = document.createElement("div");
@@ -127,6 +159,10 @@ export class Game {
     window.requestAnimationFrame(this.tick);
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("keydown", this.handleKeyDown);
+
+    if (this.testMode.enabled) {
+      window.__towerStackerTestApi = this.createTestApi();
+    }
   }
 
   private buildScene(): void {
@@ -169,6 +205,7 @@ export class Game {
     this.primaryButton.addEventListener("click", this.handlePrimaryAction);
 
     this.secondaryButton.className = "button button--secondary";
+    this.secondaryButton.dataset.testid = "secondary-button";
     this.secondaryButton.type = "button";
     this.secondaryButton.addEventListener("click", this.handleSecondaryAction);
 
@@ -314,13 +351,21 @@ export class Game {
     const deltaSeconds = this.lastFrameTime === 0 ? 0 : (timestamp - this.lastFrameTime) / 1000;
     this.lastFrameTime = timestamp;
 
-    this.updateActiveSlab(deltaSeconds);
-    this.updateDebris(deltaSeconds);
-    this.updateCamera();
+    if (!this.simulationPaused) {
+      this.runSimulationStep(deltaSeconds);
+    } else {
+      this.updateCamera();
+    }
 
     this.renderer?.render(this.scene, this.camera);
     window.requestAnimationFrame(this.tick);
   };
+
+  private runSimulationStep(deltaSeconds: number): void {
+    this.updateActiveSlab(deltaSeconds);
+    this.updateDebris(deltaSeconds);
+    this.updateCamera();
+  }
 
   private startGame(): void {
     this.resetWorld();
@@ -560,12 +605,72 @@ export class Game {
     });
   }
 
-  private createSlabMesh(slab: SlabData, isTop: boolean): Mesh {
+  private createTestApi(): TestApi {
+    return {
+      startGame: () => this.startGame(),
+      stopActiveSlab: () => this.stopActiveSlab(),
+      restartGame: () => this.startGame(),
+      returnToTitle: () => this.returnToTitle(),
+      applyDebugConfig: (config) => {
+        this.applyDebugConfig(config);
+        this.renderHud();
+      },
+      stepSimulation: (steps = 1) => {
+        const clampedSteps = Math.max(1, Math.floor(steps));
+        for (let index = 0; index < clampedSteps; index += 1) {
+          this.runSimulationStep(this.testMode.fixedStepSeconds);
+        }
+        this.renderer?.render(this.scene, this.camera);
+      },
+      setPaused: (paused) => {
+        this.simulationPaused = paused;
+        this.renderHud();
+      },
+      setActiveOffset: (offset) => {
+        if (!this.activeSlab || !this.activeMesh) {
+          return false;
+        }
+
+        if (this.activeSlab.axis === "x") {
+          this.activeSlab.position.x = offset;
+          this.activeMesh.position.x = offset;
+        } else {
+          this.activeSlab.position.z = offset;
+          this.activeMesh.position.z = offset;
+        }
+
+        if (this.oscillation) {
+          this.oscillation.offset = offset;
+        }
+
+        return true;
+      },
+      getState: () => this.getPublicState(),
+    };
+  }
+
+  private getPublicState(): PublicGameState {
+    return {
+      gameState: this.gameState,
+      score: this.score,
+      height: this.landedSlabs.length,
+      activeAxis: this.activeSlab?.axis ?? null,
+      activePosition: this.activeSlab
+        ? {
+            x: this.activeSlab.position.x,
+            y: this.activeSlab.position.y,
+            z: this.activeSlab.position.z,
+          }
+        : null,
+      debugConfig: { ...this.debugConfig },
+    };
+  }
+
+  private createSlabMesh(slab: SlabData, _isTop: boolean): Mesh {
     const geometry = new BoxGeometry(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
-    const color = isTop ? "#ff9360" : this.getSlabColor(slab.level);
     const material = new MeshStandardMaterial({
-      color,
-      emissive: isTop ? "#25110a" : this.getSlabEmissive(slab.level),
+      color: "#ff9360",
+      emissive: "#25110a",
       metalness: 0.12,
       roughness: 0.82,
     });
@@ -573,16 +678,6 @@ export class Game {
     const mesh = new Mesh(geometry, material);
     mesh.position.set(slab.position.x, slab.position.y, slab.position.z);
     return mesh;
-  }
-
-  private getSlabColor(level: number): string {
-    const hue = (42 + level * 31) % 360;
-    return new Color().setHSL(hue / 360, 0.72, 0.67).getStyle();
-  }
-
-  private getSlabEmissive(level: number): string {
-    const hue = (42 + level * 31) % 360;
-    return new Color().setHSL(hue / 360, 0.58, 0.16).getStyle();
   }
 
   private spawnDebris(slab: SlabData, axis: SlabData["axis"], fullMiss: boolean): void {
