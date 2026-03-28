@@ -3,6 +3,18 @@
 ## Summary
 Build a greenfield desktop-first browser prototype of `Tower Stacker` using plain Three.js, TypeScript, and Vite with hot reload. V1 focuses on the core stacking loop only, but it must still be fully playable: title/start screen, live height/score UI, game-over with restart, upward camera follow, alternating X/Z placement, and simple falling overhang animation. Mobile is limited to touch input support in the initial plan; Electron is not part of V1, but the architecture should stay packaging-friendly. Testing and tuning are part of the core scope: add Playwright coverage for end-to-end functionality, a dedicated test mode that supports deterministic stepping, runtime debug controls for gameplay parameters, and unit tests targeting at least 90% coverage for the testable logic layer.
 
+## Implementation Status (2026-03-28)
+
+All listed V1 milestones are implemented in the repository:
+
+- ✅ Project bootstrap (Vite + TypeScript + Three.js shell)
+- ✅ Playable core loop (alternating X/Z trim gameplay, miss/game-over, restart)
+- ✅ Playability shell (title/start, HUD score+height, camera follow)
+- ✅ Testability and tuning (runtime debug panel, deterministic `?test` mode, guarded test API, scripted placement helpers)
+- ✅ Basic juice (debris animation + impact flash feedback)
+- ✅ Automated verification and coverage (unit + Playwright suites, CI, 90% threshold enforced)
+- ✅ Mobile input pass (tap/touch path validated in Playwright mobile viewport)
+
 ## Key Changes
 - Initialize a Vite + TypeScript app with a minimal game shell: Three.js scene, renderer, camera, resize handling, asset-free placeholder visuals, and a small HTML/CSS HUD layer for menus and score.
 - Implement the game as a deterministic state-driven loop rather than a React-style component tree. Core modules should cover:
