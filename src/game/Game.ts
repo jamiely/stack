@@ -14,9 +14,10 @@ import {
 } from "three";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
-import { getPlacementFeedbackPlan } from "./logic/feedback";
+import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
 import { advanceOscillation } from "./logic/oscillation";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
+import { advanceCollapseSequence, createCollapseSequence, sampleCollapseFrame, shouldTriggerCollapse } from "./logic/collapse";
 import { resolveIntegrityTelemetry } from "./logic/integrity";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
@@ -25,6 +26,7 @@ import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab }
 import type { RecoveryState } from "./logic/recovery";
 import type { ComboState } from "./logic/streak";
 import type { DistractionState } from "./logic/distractions";
+import type { CollapseSequenceState, CollapseTrigger } from "./logic/collapse";
 import type { IntegrityTelemetry } from "./logic/integrity";
 import type { OscillationState } from "./logic/oscillation";
 import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
@@ -72,6 +74,10 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   integrityPrecariousThreshold: { min: 0.35, max: 0.85, step: 0.01, label: "Precarious Threshold" },
   integrityUnstableThreshold: { min: 0.45, max: 1.2, step: 0.01, label: "Unstable Threshold" },
   integrityWobbleStrength: { min: 0, max: 1.5, step: 0.01, label: "Integrity Wobble" },
+  collapseDurationSeconds: { min: 0.6, max: 3, step: 0.05, label: "Collapse Duration" },
+  collapseTiltStrength: { min: 0.1, max: 1.3, step: 0.01, label: "Collapse Tilt" },
+  collapseCameraPullback: { min: 0, max: 12, step: 0.1, label: "Collapse Pullback" },
+  collapseDropDistance: { min: 0.5, max: 8, step: 0.1, label: "Collapse Drop" },
   prebuiltLevels: { min: 1, max: 8, step: 1, label: "Starting Stack" },
   debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
   debrisTumbleSpeed: { min: 0.2, max: 3, step: 0.05, label: "Debris Tumble" },
@@ -175,6 +181,9 @@ export class Game {
     },
     defaultDebugConfig.integrityWobbleStrength,
   );
+  private collapseSequence: CollapseSequenceState | null = null;
+  private collapseProgress = 0;
+  private collapseCameraPullback = 0;
   private simulationElapsedSeconds = 0;
   private statusMessage = "Line up the moving slab and keep the tower alive.";
 
@@ -490,6 +499,7 @@ export class Game {
     this.updateActiveSlab(deltaSeconds);
     this.updateDebris(deltaSeconds);
     this.updateImpactPulse(deltaSeconds);
+    this.updateCollapseSequence(deltaSeconds);
     this.updateCamera();
   }
 
@@ -517,10 +527,16 @@ export class Game {
     this.lastPlacementOutcome = null;
     this.impactPulseRemaining = 0;
     this.seededRandom = this.testMode.seed === null ? null : createSeededRandom(this.testMode.seed);
+    this.collapseSequence = null;
+    this.collapseProgress = 0;
+    this.collapseCameraPullback = 0;
     const distractionSeed = this.testMode.seed ?? 0x53a9c321;
     this.distractionState = createDistractionState(distractionSeed);
     this.shell.style.setProperty("--impact-alpha", "0");
     this.shell.style.setProperty("--contrast-alpha", "0");
+    this.shell.style.setProperty("--collapse-alpha", "0");
+    this.stackGroup.rotation.set(0, 0, 0);
+    this.stackGroup.position.set(0, 0, 0);
     this.clearGroup(this.stackGroup);
     this.clearGroup(this.debrisGroup);
     this.debrisPieces = [];
@@ -589,6 +605,10 @@ export class Game {
     this.scene.remove(this.activeMesh);
 
     if (result.outcome === "miss") {
+      const missOffset = {
+        x: this.activeSlab.position.x - target.position.x,
+        z: this.activeSlab.position.z - target.position.z,
+      };
       this.spawnDebris(this.activeSlab, this.activeSlab.axis, true);
       this.activeSlab = null;
       this.activeMesh = null;
@@ -596,8 +616,9 @@ export class Game {
       this.lastPlacementOutcome = result.outcome;
       this.combo = updateComboState(this.combo, result.outcome);
       this.feedbackManager.play(getPlacementFeedbackPlan(result.outcome));
+      this.beginCollapseSequence("miss", missOffset);
       this.gameState = "game_over";
-      this.statusMessage = "Missed the tower. Restart and try to recover your rhythm.";
+      this.statusMessage = "Hard miss! Tower collapse sequence triggered.";
       this.renderHud();
       return;
     }
@@ -631,6 +652,18 @@ export class Game {
     this.refreshIntegrityTelemetry();
     this.score += 1;
 
+    if (shouldTriggerCollapse(result.outcome, this.integrityTelemetry.tier)) {
+      this.beginCollapseSequence("instability", this.integrityTelemetry.offset);
+      this.gameState = "game_over";
+      this.statusMessage =
+        "Structural integrity failed. Center-of-mass drift exceeded the tower support and triggered collapse.";
+      this.activeSlab = null;
+      this.activeMesh = null;
+      this.oscillation = null;
+      this.renderHud();
+      return;
+    }
+
     if (recoveryResolution.triggered) {
       const slowdownPercent = Math.round((1 - this.debugConfig.recoverySlowdownFactor) * 100);
       this.statusMessage =
@@ -650,6 +683,17 @@ export class Game {
     this.oscillation = null;
     this.spawnNextActive();
     this.renderHud();
+  }
+
+  private beginCollapseSequence(trigger: CollapseTrigger, offset: { x: number; z: number }): void {
+    this.collapseSequence = createCollapseSequence(trigger, offset, {
+      durationSeconds: this.debugConfig.collapseDurationSeconds,
+      tiltStrength: this.debugConfig.collapseTiltStrength,
+      pullbackDistance: this.debugConfig.collapseCameraPullback,
+      dropDistance: this.debugConfig.collapseDropDistance,
+    });
+    this.feedbackManager.play(getFailureFeedbackPlan(trigger));
+    this.triggerImpactPulse(0.36);
   }
 
   private updateDistractions(deltaSeconds: number): void {
@@ -750,10 +794,28 @@ export class Game {
     this.shell.style.setProperty("--impact-alpha", alpha.toFixed(3));
   }
 
+  private updateCollapseSequence(deltaSeconds: number): void {
+    if (!this.collapseSequence) {
+      this.collapseProgress = 0;
+      this.collapseCameraPullback = 0;
+      this.shell.style.setProperty("--collapse-alpha", "0");
+      return;
+    }
+
+    this.collapseSequence = advanceCollapseSequence(this.collapseSequence, deltaSeconds);
+    const frame = sampleCollapseFrame(this.collapseSequence);
+    this.collapseProgress = frame.progress;
+    this.collapseCameraPullback = frame.cameraPullback;
+    this.stackGroup.rotation.set(frame.stackTiltX, 0, frame.stackTiltZ);
+    this.stackGroup.position.y = -frame.stackDropY;
+    this.shell.style.setProperty("--collapse-alpha", (0.12 + frame.progress * 0.35).toFixed(3));
+  }
+
   private updateCamera(): void {
     const targetSlab = this.activeSlab ?? this.landedSlabs[this.landedSlabs.length - 1];
-    const targetY = (targetSlab?.position.y ?? 0) + this.debugConfig.cameraHeight;
-    const targetZ = this.debugConfig.cameraDistance;
+    const collapseFrame = this.collapseSequence ? sampleCollapseFrame(this.collapseSequence) : null;
+    const targetY = (targetSlab?.position.y ?? 0) + this.debugConfig.cameraHeight - (collapseFrame?.cameraDrop ?? 0);
+    const targetZ = this.debugConfig.cameraDistance + (collapseFrame?.cameraPullback ?? 0);
 
     this.camera.position.lerp(
       new Vector3(CAMERA_X, targetY, targetZ),
@@ -775,7 +837,7 @@ export class Game {
       this.camera.position.z += Math.cos(wobblePhase * 0.85) * this.integrityTelemetry.wobbleStrength * 0.4;
     }
 
-    this.camera.lookAt(0, Math.max(1.4, targetY - this.debugConfig.cameraHeight + 0.5), 0);
+    this.camera.lookAt(0, Math.max(1.2, targetY - this.debugConfig.cameraHeight + 0.5), 0);
   }
 
   private updateMetrics(): void {
@@ -853,13 +915,13 @@ export class Game {
     } else if (this.gameState === "game_over") {
       this.overlayTitle.textContent = "Tower Fell";
       this.overlayBody.textContent =
-        "The moving slab missed the target. Restart the run or adjust the debug tuning for a different difficulty curve.";
+        "Failure now triggers the collapse sequence (hard miss or unstable integrity drift). Restart the run or tune collapse/debug thresholds.";
       this.primaryButton.textContent = "Restart Run";
       overlay?.classList.remove("overlay--hidden");
     } else {
       this.overlayTitle.textContent = "Tower Stacker";
       this.overlayBody.textContent =
-        "Playable milestone: alternating X/Z movement, permanent trimming, camera follow, falling debris, and live gameplay tuning are active.";
+        "Playable milestone: alternating X/Z movement, permanent trimming, collapse fail sequence, and live gameplay tuning are active.";
       this.primaryButton.textContent = "Start Run";
       overlay?.classList.remove("overlay--hidden");
     }
@@ -987,6 +1049,13 @@ export class Game {
         centerOfMass: { ...this.integrityTelemetry.centerOfMass },
         topCenter: { ...this.integrityTelemetry.topCenter },
         offset: { ...this.integrityTelemetry.offset },
+      },
+      collapse: {
+        active: this.collapseSequence !== null && this.collapseProgress < 1,
+        trigger: this.collapseSequence?.trigger ?? null,
+        progress: this.collapseProgress,
+        cameraPullback: this.collapseCameraPullback,
+        completed: this.collapseSequence !== null && this.collapseProgress >= 1,
       },
       debugConfig: { ...this.debugConfig },
       testMode: {

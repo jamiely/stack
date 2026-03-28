@@ -25,6 +25,7 @@ body {
 .game-shell {
   --impact-alpha: 0;
   --contrast-alpha: 0;
+  --collapse-alpha: 0;
   position: relative;
   min-height: 100vh;
   overflow: hidden;
@@ -46,9 +47,11 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: var(--impact-alpha);
-  background: radial-gradient(circle at 50% 40%, rgba(255, 200, 103, 0.55), transparent 60%);
-  transition: opacity 40ms linear;
+  opacity: max(var(--impact-alpha), var(--collapse-alpha));
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 200, 103, calc(0.55 * var(--impact-alpha))), transparent 60%),
+    radial-gradient(circle at 50% 70%, rgba(255, 97, 97, calc(0.8 * var(--collapse-alpha))), rgba(14, 4, 10, calc(0.8 * var(--collapse-alpha))) 72%);
+  transition: opacity 60ms linear;
 }
 
 .game-canvas {

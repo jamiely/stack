@@ -30,7 +30,7 @@ interface E2EState {
     eventsTriggered: number;
     audioEventsPlayed: number;
     hapticEventsPlayed: number;
-    lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | null;
+    lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | "collapse_failure" | null;
   };
   distractions: {
     enabled: boolean;
@@ -76,6 +76,10 @@ interface E2EState {
     integrityPrecariousThreshold: number;
     integrityUnstableThreshold: number;
     integrityWobbleStrength: number;
+    collapseDurationSeconds: number;
+    collapseTiltStrength: number;
+    collapseCameraPullback: number;
+    collapseDropDistance: number;
   };
   integrity: {
     tier: "stable" | "precarious" | "unstable";
@@ -84,6 +88,13 @@ interface E2EState {
     centerOfMass: { x: number; z: number };
     topCenter: { x: number; z: number };
     offset: { x: number; z: number };
+  };
+  collapse: {
+    active: boolean;
+    trigger: "miss" | "instability" | null;
+    progress: number;
+    cameraPullback: number;
+    completed: boolean;
   };
   testMode: {
     enabled: boolean;
@@ -344,17 +355,22 @@ test("miss transitions to game over and restart resets state", async ({ page }) 
         startGame: () => void;
         setActiveOffset: (offset: number) => boolean;
         stopActiveSlab: () => void;
+        stepSimulation: (steps?: number) => void;
       };
     }).__towerStackerTestApi;
 
     api?.startGame();
     api?.setActiveOffset(10);
     api?.stopActiveSlab();
+    api?.stepSimulation(90);
   });
 
   await expect(page.getByTestId("overlay-title")).toHaveText("Tower Fell");
   await expect.poll(async () => (await getTestState(page))?.gameState).toBe("game_over");
   await expect.poll(async () => (await getTestState(page))?.score).toBe(0);
+  await expect.poll(async () => (await getTestState(page))?.collapse.trigger).toBe("miss");
+  await expect.poll(async () => (await getTestState(page))?.collapse.cameraPullback ?? 0).toBeGreaterThan(0);
+  await expect.poll(async () => (await getTestState(page))?.feedback.lastEvent).toBe("collapse_failure");
 
   await page.evaluate(() => {
     const api = (window as Window & {
@@ -638,6 +654,70 @@ test("integrity telemetry reports deterministic stable/precarious/unstable trans
   await expect.poll(async () => (await getTestState(page))?.integrity.tier).toBe("unstable");
   await expect.poll(async () => (await getTestState(page))?.integrity.normalizedOffset ?? 0).toBeGreaterThan(0.6);
   await expect.poll(async () => (await getTestState(page))?.integrity.wobbleStrength).toBeCloseTo(0.4, 5);
+});
+
+test("unstable integrity triggers collapse fail sequence without requiring a hard miss", async ({ page }) => {
+  await page.goto("/?debug&test");
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+      };
+    }).__towerStackerTestApi;
+
+    api?.startGame();
+    api?.setPaused(true);
+  });
+
+  await page.locator('input[data-debug-key="prebuiltLevels"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "1";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="integrityPrecariousThreshold"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "0.2";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="integrityUnstableThreshold"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "0.6";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  const scripted = await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+        stepSimulation: (steps?: number) => void;
+        getState: () => E2EState;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return null;
+    }
+
+    const outcomes = [api.placeAtOffset(1.6), api.placeAtOffset(1.9)];
+    api.stepSimulation(180);
+    return {
+      outcomes,
+      state: api.getState(),
+    };
+  });
+
+  expect(scripted).not.toBeNull();
+  expect(scripted?.outcomes.filter((outcome) => outcome === "miss")).toHaveLength(0);
+
+  await expect.poll(async () => (await getTestState(page))?.integrity.tier).toBe("unstable");
+  await expect.poll(async () => (await getTestState(page))?.gameState).toBe("game_over");
+  await expect.poll(async () => (await getTestState(page))?.collapse.trigger).toBe("instability");
+  await expect.poll(async () => (await getTestState(page))?.collapse.completed).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.feedback.lastEvent).toBe("collapse_failure");
 });
 
 test("audio/haptics toggles gate runtime feedback emission", async ({ page }) => {

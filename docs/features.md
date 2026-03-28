@@ -21,6 +21,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - V3 distraction framework runs as a deterministic side-channel (seeded + level-gated) without mutating trim/placement math
 - V3.2 actor layer now renders gorilla climber + tremor pulses, UFO flyby + contrast-wash flashes, and front-layer cloud occlusion driven by deterministic distraction signals
 - Structural integrity telemetry computes a deterministic tower center-of-mass approximation and classifies `stable`/`precarious`/`unstable` tiers against tunable thresholds
+- Collapse fail sequence triggers on hard misses or unstable integrity, applying deterministic fallback toppling visuals, failure camera pullback, and collapse feedback cues
 
 ## Visual and Camera Behavior
 
@@ -28,6 +29,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - Successful placements trigger a brief impact flash pulse
 - Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer), contrast wash intensity, and camera tremor pulse effects
 - Precarious integrity tier introduces deterministic camera wobble scaled by configurable instability strength
+- Active collapse sequence applies deterministic tower tilt/drop presentation and camera pullback progression
 - Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
 - Slab color palette varies by slab level (hue progression)
 - **Color stability rule:** a slab keeps its color when it transitions from active to landed (no post-placement recolor)
@@ -56,6 +58,7 @@ Runtime tuning panel includes:
 - Feedback: audio enable toggle, haptics enable toggle
 - Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud), deterministic motion speed, and level-start thresholds for tentacle/gorilla/ufo/cloud gating
 - Integrity: precarious threshold, unstable threshold, and camera wobble strength
+- Collapse: fail-sequence duration, tilt strength, camera pullback distance, and drop distance
 - Setup: prebuilt starting levels
 - Effects: debris lifetime, debris tumble strength
 - Scene: grid visibility
@@ -79,7 +82,7 @@ Runtime tuning panel includes:
 - `setPaused(paused)`
 - `setActiveOffset(offset)`
 - `placeAtOffset(offset)`
-- `getState()` (includes level, last placement outcome, top slab dimensions, combo state `{ current, best, target, rewardReady }`, recovery state `{ rewardsEarned, slowdownPlacementsRemaining, speedMultiplier }`, feedback state `{ audioEnabled, hapticsEnabled, audioSupported, hapticsSupported, audioUnlocked, eventsTriggered, audioEventsPlayed, hapticEventsPlayed, lastEvent }`, distraction state `{ enabled, level, active, signals, visuals }`, integrity state `{ tier, normalizedOffset, wobbleStrength, centerOfMass, topCenter, offset }`, and test-mode metadata including paused state/seed)
+- `getState()` (includes level, last placement outcome, top slab dimensions, combo state `{ current, best, target, rewardReady }`, recovery state `{ rewardsEarned, slowdownPlacementsRemaining, speedMultiplier }`, feedback state `{ audioEnabled, hapticsEnabled, audioSupported, hapticsSupported, audioUnlocked, eventsTriggered, audioEventsPlayed, hapticEventsPlayed, lastEvent }`, distraction state `{ enabled, level, active, signals, visuals }`, integrity state `{ tier, normalizedOffset, wobbleStrength, centerOfMass, topCenter, offset }`, collapse state `{ active, trigger, progress, cameraPullback, completed }`, and test-mode metadata including paused state/seed)
 
 ## Automated Verification
 
@@ -99,5 +102,6 @@ Runtime tuning panel includes:
   - Distraction framework level-gating + runtime global toggle behavior
   - Gorilla/UFO/cloud actor rendering activation and continued trim correctness while distractions are active
   - Deterministic integrity telemetry transitions (`stable` → `precarious` → `unstable`) through scripted placements
+  - Deterministic collapse trigger from unstable integrity without requiring a hard miss
   - Mobile-sized touch/tap stop input path
 - Unit coverage threshold is enforced at 90% for the logic layer

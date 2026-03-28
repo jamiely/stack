@@ -1,6 +1,6 @@
 import type { TrimResult } from "../types";
 
-export type FeedbackEvent = "placement_perfect" | "placement_landed" | "placement_miss";
+export type FeedbackEvent = "placement_perfect" | "placement_landed" | "placement_miss" | "collapse_failure";
 
 export interface AudioToneStep {
   frequency: number;
@@ -15,6 +15,8 @@ export interface FeedbackPlan {
   audio: AudioToneStep[];
   hapticPattern: number | number[] | null;
 }
+
+export type FailureFeedbackTrigger = "miss" | "instability";
 
 const PERFECT_PLAN: FeedbackPlan = {
   event: "placement_perfect",
@@ -40,6 +42,25 @@ const MISS_PLAN: FeedbackPlan = {
   hapticPattern: [16, 28, 24],
 };
 
+const COLLAPSE_PLAN_BY_TRIGGER: Record<FailureFeedbackTrigger, FeedbackPlan> = {
+  miss: {
+    event: "collapse_failure",
+    audio: [
+      { frequency: 182, durationMs: 240, gain: 0.09, offsetMs: 0, type: "sawtooth" },
+      { frequency: 126, durationMs: 260, gain: 0.08, offsetMs: 140, type: "sawtooth" },
+    ],
+    hapticPattern: [24, 46, 52],
+  },
+  instability: {
+    event: "collapse_failure",
+    audio: [
+      { frequency: 210, durationMs: 180, gain: 0.07, offsetMs: 0, type: "square" },
+      { frequency: 150, durationMs: 230, gain: 0.08, offsetMs: 90, type: "sawtooth" },
+    ],
+    hapticPattern: [18, 24, 36],
+  },
+};
+
 export function getPlacementFeedbackPlan(outcome: TrimResult["outcome"]): FeedbackPlan | null {
   if (outcome === "perfect") {
     return PERFECT_PLAN;
@@ -54,6 +75,10 @@ export function getPlacementFeedbackPlan(outcome: TrimResult["outcome"]): Feedba
   }
 
   return null;
+}
+
+export function getFailureFeedbackPlan(trigger: FailureFeedbackTrigger): FeedbackPlan {
+  return COLLAPSE_PLAN_BY_TRIGGER[trigger];
 }
 
 export function clampToneGain(gain: number): number {

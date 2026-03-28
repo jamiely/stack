@@ -61,6 +61,10 @@ export interface DebugConfig {
   integrityPrecariousThreshold: number;
   integrityUnstableThreshold: number;
   integrityWobbleStrength: number;
+  collapseDurationSeconds: number;
+  collapseTiltStrength: number;
+  collapseCameraPullback: number;
+  collapseDropDistance: number;
   prebuiltLevels: number;
   debrisLifetime: number;
   debrisTumbleSpeed: number;
@@ -103,7 +107,7 @@ export interface PublicGameState {
     eventsTriggered: number;
     audioEventsPlayed: number;
     hapticEventsPlayed: number;
-    lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | null;
+    lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | "collapse_failure" | null;
   };
   distractions: {
     enabled: boolean;
@@ -148,6 +152,13 @@ export interface PublicGameState {
       x: number;
       z: number;
     };
+  };
+  collapse: {
+    active: boolean;
+    trigger: "miss" | "instability" | null;
+    progress: number;
+    cameraPullback: number;
+    completed: boolean;
   };
   debugConfig: DebugConfig;
   testMode: {
