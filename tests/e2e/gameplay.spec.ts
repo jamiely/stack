@@ -73,6 +73,17 @@ interface E2EState {
     distractionGorillaStartLevel: number;
     distractionUfoStartLevel: number;
     distractionCloudStartLevel: number;
+    integrityPrecariousThreshold: number;
+    integrityUnstableThreshold: number;
+    integrityWobbleStrength: number;
+  };
+  integrity: {
+    tier: "stable" | "precarious" | "unstable";
+    normalizedOffset: number;
+    wobbleStrength: number;
+    centerOfMass: { x: number; z: number };
+    topCenter: { x: number; z: number };
+    offset: { x: number; z: number };
   };
   testMode: {
     enabled: boolean;
@@ -562,6 +573,71 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 1).toBe(0);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 1).toBe(0);
+});
+
+test("integrity telemetry reports deterministic stable/precarious/unstable transitions", async ({ page }) => {
+  await page.goto("/?debug&test&paused=0&seed=42");
+  await expect(page.getByTestId("debug-panel")).toBeVisible();
+
+  await page.locator('input[data-debug-key="prebuiltLevels"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "1";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="integrityPrecariousThreshold"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "0.2";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="integrityUnstableThreshold"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "0.6";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="integrityWobbleStrength"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "0.4";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.startGame();
+    api.setPaused(true);
+    api.placeAtOffset(1.6);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.integrity.tier).toBe("precarious");
+  await expect.poll(async () => (await getTestState(page))?.integrity.normalizedOffset ?? 0).toBeGreaterThan(0.2);
+  await expect.poll(async () => (await getTestState(page))?.integrity.wobbleStrength ?? 0).toBeGreaterThan(0);
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+      };
+    }).__towerStackerTestApi;
+
+    api?.placeAtOffset(1.9);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.integrity.tier).toBe("unstable");
+  await expect.poll(async () => (await getTestState(page))?.integrity.normalizedOffset ?? 0).toBeGreaterThan(0.6);
+  await expect.poll(async () => (await getTestState(page))?.integrity.wobbleStrength).toBeCloseTo(0.4, 5);
 });
 
 test("audio/haptics toggles gate runtime feedback emission", async ({ page }) => {

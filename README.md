@@ -14,11 +14,12 @@ The repo now includes a playable early milestone:
 - Recovery rewards at combo milestones: capped slab-growth recovery plus temporary movement slowdown windows
 - Lightweight audio + haptics feedback manager (perfect/trim/miss cues) with safe browser capability gating
 - V3 distraction framework with deterministic seeded state, level-gated channel activation, runtime toggle/threshold tuning hooks, and V3.2 actor visuals (gorilla climber, UFO flyby/contrast wash, front-layer cloud occlusion, tremor pulse)
+- V4.1 structural integrity telemetry with deterministic center-of-mass approximation, `stable/precarious/unstable` tiering, and precarious camera wobble feedback
 - Upward camera follow, score/height HUD, impact flash feedback, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
 - Playwright coverage for boot/start, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
-- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, recovery telemetry, feedback telemetry, and distraction-state/actor-visual assertions
+- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, recovery telemetry, feedback telemetry, distraction-state/actor-visual assertions, and integrity telemetry assertions
 - Git hooks for unit tests on commit and Playwright on commit/push
 
 ## Development
@@ -49,7 +50,7 @@ The dev server runs on `http://127.0.0.1:4173`.
 - Visit `/?debug` to expose the runtime tuning panel
 - In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
 - Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused; optional `&seed=<int>` drives deterministic seeded active-slab spawn states and is surfaced through test-state snapshots
-- Debug panel controls: tune camera, slab dimensions, movement speed/ramp, perfect tolerance, combo target, recovery growth/slowdown behavior, audio/haptics enablement, distraction toggles/thresholds/speed, starting stack size, debris lifetime/tumble, and grid visibility
+- Debug panel controls: tune camera, slab dimensions, movement speed/ramp, perfect tolerance, combo target, recovery growth/slowdown behavior, audio/haptics enablement, distraction toggles/thresholds/speed, integrity thresholds/wobble strength, starting stack size, debris lifetime/tumble, and grid visibility
 - HUD includes a combo card (`current/target`) so perfect streak progress is visible even outside debug mode
 
 ## Notes

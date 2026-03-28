@@ -58,6 +58,9 @@ export interface DebugConfig {
   distractionContrastEnabled: boolean;
   distractionCloudEnabled: boolean;
   distractionCloudStartLevel: number;
+  integrityPrecariousThreshold: number;
+  integrityUnstableThreshold: number;
+  integrityWobbleStrength: number;
   prebuiltLevels: number;
   debrisLifetime: number;
   debrisTumbleSpeed: number;
@@ -127,6 +130,23 @@ export interface PublicGameState {
       cloudOpacity: number;
       contrastOpacity: number;
       tremorStrength: number;
+    };
+  };
+  integrity: {
+    tier: "stable" | "precarious" | "unstable";
+    normalizedOffset: number;
+    wobbleStrength: number;
+    centerOfMass: {
+      x: number;
+      z: number;
+    };
+    topCenter: {
+      x: number;
+      z: number;
+    };
+    offset: {
+      x: number;
+      z: number;
     };
   };
   debugConfig: DebugConfig;

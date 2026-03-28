@@ -17,6 +17,7 @@ import { FeedbackManager } from "./FeedbackManager";
 import { getPlacementFeedbackPlan } from "./logic/feedback";
 import { advanceOscillation } from "./logic/oscillation";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
+import { resolveIntegrityTelemetry } from "./logic/integrity";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
@@ -24,6 +25,7 @@ import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab }
 import type { RecoveryState } from "./logic/recovery";
 import type { ComboState } from "./logic/streak";
 import type { DistractionState } from "./logic/distractions";
+import type { IntegrityTelemetry } from "./logic/integrity";
 import type { OscillationState } from "./logic/oscillation";
 import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
 
@@ -67,6 +69,9 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   distractionGorillaStartLevel: { min: 0, max: 80, step: 1, label: "Gorilla Start" },
   distractionUfoStartLevel: { min: 0, max: 100, step: 1, label: "UFO Start" },
   distractionCloudStartLevel: { min: 0, max: 120, step: 1, label: "Cloud Start" },
+  integrityPrecariousThreshold: { min: 0.35, max: 0.85, step: 0.01, label: "Precarious Threshold" },
+  integrityUnstableThreshold: { min: 0.45, max: 1.2, step: 0.01, label: "Unstable Threshold" },
+  integrityWobbleStrength: { min: 0, max: 1.5, step: 0.01, label: "Integrity Wobble" },
   prebuiltLevels: { min: 1, max: 8, step: 1, label: "Starting Stack" },
   debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
   debrisTumbleSpeed: { min: 0.2, max: 3, step: 0.05, label: "Debris Tumble" },
@@ -162,6 +167,15 @@ export class Game {
   private impactPulseRemaining = 0;
   private seededRandom: (() => number) | null = null;
   private distractionState: DistractionState = createDistractionState(0x53a9c321);
+  private integrityTelemetry: IntegrityTelemetry = resolveIntegrityTelemetry(
+    [],
+    {
+      precarious: defaultDebugConfig.integrityPrecariousThreshold,
+      unstable: defaultDebugConfig.integrityUnstableThreshold,
+    },
+    defaultDebugConfig.integrityWobbleStrength,
+  );
+  private simulationElapsedSeconds = 0;
   private statusMessage = "Line up the moving slab and keep the tower alive.";
 
   public constructor(container: HTMLDivElement) {
@@ -470,6 +484,7 @@ export class Game {
   };
 
   private runSimulationStep(deltaSeconds: number): void {
+    this.simulationElapsedSeconds += deltaSeconds;
     this.updateDistractions(deltaSeconds);
     this.updateDistractionActors();
     this.updateActiveSlab(deltaSeconds);
@@ -495,6 +510,7 @@ export class Game {
 
   private resetWorld(): void {
     this.lastFrameTime = 0;
+    this.simulationElapsedSeconds = 0;
     this.score = 0;
     this.combo = createComboState(this.debugConfig.comboTarget);
     this.recovery = createRecoveryState();
@@ -517,6 +533,7 @@ export class Game {
       this.stackGroup.add(this.createSlabMesh(slab, false));
     });
 
+    this.refreshIntegrityTelemetry();
     this.updateDistractionActors();
   }
 
@@ -611,6 +628,7 @@ export class Game {
     this.triggerImpactPulse(result.outcome === "perfect" ? 0.25 : 0.18);
     this.landedSlabs.push(rewardedLandedSlab);
     this.stackGroup.add(this.createSlabMesh(rewardedLandedSlab, false));
+    this.refreshIntegrityTelemetry();
     this.score += 1;
 
     if (recoveryResolution.triggered) {
@@ -751,6 +769,12 @@ export class Game {
       this.camera.position.y += Math.cos(shakePhase * 0.9) * 0.04 * tremorStrength;
     }
 
+    if (this.integrityTelemetry.tier === "precarious") {
+      const wobblePhase = this.simulationElapsedSeconds * 14;
+      this.camera.position.x += Math.sin(wobblePhase) * this.integrityTelemetry.wobbleStrength;
+      this.camera.position.z += Math.cos(wobblePhase * 0.85) * this.integrityTelemetry.wobbleStrength * 0.4;
+    }
+
     this.camera.lookAt(0, Math.max(1.4, targetY - this.debugConfig.cameraHeight + 0.5), 0);
   }
 
@@ -777,6 +801,15 @@ export class Game {
         target: this.debugConfig.comboTarget,
         rewardReady: this.combo.current >= this.debugConfig.comboTarget,
       };
+    }
+
+    const integrityConfigChanged =
+      previousConfig.integrityPrecariousThreshold !== this.debugConfig.integrityPrecariousThreshold ||
+      previousConfig.integrityUnstableThreshold !== this.debugConfig.integrityUnstableThreshold ||
+      previousConfig.integrityWobbleStrength !== this.debugConfig.integrityWobbleStrength;
+
+    if (integrityConfigChanged) {
+      this.refreshIntegrityTelemetry();
     }
 
     this.debugPanel.querySelectorAll<HTMLInputElement>("[data-debug-key]").forEach((input) => {
@@ -947,6 +980,14 @@ export class Game {
             : 0,
         },
       },
+      integrity: {
+        tier: this.integrityTelemetry.tier,
+        normalizedOffset: this.integrityTelemetry.normalizedOffset,
+        wobbleStrength: this.integrityTelemetry.wobbleStrength,
+        centerOfMass: { ...this.integrityTelemetry.centerOfMass },
+        topCenter: { ...this.integrityTelemetry.topCenter },
+        offset: { ...this.integrityTelemetry.offset },
+      },
       debugConfig: { ...this.debugConfig },
       testMode: {
         enabled: this.testMode.enabled,
@@ -955,6 +996,17 @@ export class Game {
         seed: this.testMode.seed,
       },
     };
+  }
+
+  private refreshIntegrityTelemetry(): void {
+    this.integrityTelemetry = resolveIntegrityTelemetry(
+      this.landedSlabs,
+      {
+        precarious: this.debugConfig.integrityPrecariousThreshold,
+        unstable: this.debugConfig.integrityUnstableThreshold,
+      },
+      this.debugConfig.integrityWobbleStrength,
+    );
   }
 
   private createSlabMesh(slab: SlabData, _isTop: boolean): Mesh {
