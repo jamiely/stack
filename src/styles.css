@@ -96,20 +96,33 @@ body {
 
 .distraction-clouds {
   position: absolute;
-  inset: 14% -20% auto -20%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  inset: 0;
   opacity: 0;
   transition: opacity 80ms linear;
 }
 
 .distraction-cloud {
-  width: 28vw;
+  position: absolute;
+  width: clamp(10rem, 28vw, 24rem);
   height: 5.3rem;
   border-radius: 999px;
   background: radial-gradient(circle at 50% 50%, rgba(241, 247, 255, 0.88), rgba(196, 213, 235, 0.42) 70%, rgba(143, 162, 194, 0.1));
   filter: blur(1px);
+}
+
+.distraction-cloud:nth-child(1) {
+  top: 16%;
+  left: 8%;
+}
+
+.distraction-cloud:nth-child(2) {
+  top: 42%;
+  left: 36%;
+}
+
+.distraction-cloud:nth-child(3) {
+  top: 65%;
+  left: 64%;
 }
 
 .distraction-tremor {

@@ -13,11 +13,11 @@ The repo now includes a playable early milestone:
 - Combo streak tracking (default target: 8 perfect hits) with live HUD progress
 - Recovery rewards at combo milestones: capped slab-growth recovery plus temporary movement slowdown windows
 - Lightweight audio + haptics feedback manager (perfect/trim/miss cues) with safe browser capability gating
-- V3 distraction framework with deterministic seeded state, level-gated channel activation, runtime toggle/threshold tuning hooks, on-demand debug launch triggers, and V3.2 actor visuals (gorilla perimeter climbing with rhythmic slam pulses, UFO full-circuit tower orbit with off-screen fly-off exits toward the player + contrast wash, front-layer cloud occlusion, tremor pulse)
+- V3 distraction framework with deterministic seeded state, level-gated channel activation, runtime toggle/threshold tuning hooks, on-demand debug launch triggers, and V3.2 actor visuals (gorilla perimeter climbing with rhythmic slam pulses, UFO full-circuit tower orbit with off-screen fly-off exits toward the player + contrast wash, persistent front-layer cloud cover with stack occlusion, tremor pulse)
 - V4.1 structural integrity telemetry with deterministic center-of-mass approximation, `stable/precarious/unstable` tiering, and precarious camera wobble feedback
 - V4.2 collapse fail sequence: hard misses or unstable integrity now trigger a deterministic tower-topple presentation with failure camera pullback and collapse feedback cues
 - V5.1 performance/scalability pass: distant slab archival into static chunk proxies, distraction LOD throttling, strict debris pooling/caps, and runtime perf diagnostics
-- Upward camera follow, score/height HUD, impact flash feedback, and falling debris
+- Upward camera follow, score/player-built-height HUD (excluding prebuilt starter slabs), impact flash feedback, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
 - Playwright coverage for boot/start, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
@@ -46,13 +46,14 @@ The dev server runs on `http://127.0.0.1:4173`.
 ## Controls
 
 - `Start Run`: begins a stacking run
-- `Space`, `Enter`, mouse click, or tap while playing: stop the moving slab
+- `Space`/`Enter` on key release, mouse click, or tap while playing: stop the moving slab
+- During `game_over`, gameplay input (`Space`/`Enter` release, click, or touch in the play area) immediately restarts the run
 - `Return To Title`: exit the active run
 - `Restart Run`: restart after a miss
 - Visit `/?debug` to expose the runtime tuning panel
 - In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
 - Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused; optional `&seed=<int>` drives deterministic seeded active-slab spawn states and is surfaced through test-state snapshots
-- Debug panel controls: tune camera, slab dimensions (slab-height default now 2.0 with a 1.0–3.0 runtime range), movement speed/ramp, perfect tolerance, combo target, recovery growth/slowdown behavior, audio/haptics enablement, distraction toggles/thresholds/speed, launch distraction channels on demand (tentacle/gorilla/tremor/ufo/contrast/clouds), integrity thresholds/wobble strength, collapse duration/tilt/pullback/drop, quality preset + auto fallback + frame budget, archival/LOD/debris perf knobs, starting stack size, debris lifetime/tumble, and grid visibility
+- Debug panel controls: tune camera, slab dimensions (slab-height default now 2.0 with a 1.0–3.0 runtime range), movement speed/ramp, perfect tolerance, combo target, recovery growth/slowdown behavior, audio/haptics enablement, distraction toggles/thresholds/speed, launch distraction channels on demand (tentacle/gorilla/tremor/ufo/contrast/clouds), integrity thresholds/wobble strength, collapse duration/tilt/pullback/drop, quality preset + auto fallback + frame budget, archival/LOD/debris perf knobs, starting stack size (default raised so base extends below screen), debris lifetime/tumble, and grid visibility
 - HUD includes a combo card (`current/target`) so perfect streak progress is visible even outside debug mode
 
 ## Notes

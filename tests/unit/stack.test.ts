@@ -84,7 +84,7 @@ describe("stack logic", () => {
 
     expect(next.axis).toBe("x");
     expect(next.position).toEqual({
-      x: -defaultDebugConfig.motionRange,
+      x: 1.25 - defaultDebugConfig.motionRange,
       y: 4,
       z: -0.5,
     });

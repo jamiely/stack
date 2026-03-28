@@ -36,9 +36,9 @@ export function spawnActiveSlab(target: SlabData, config: DebugConfig): SlabData
     level: nextLevel,
     axis,
     position: {
-      x: axis === "x" ? -config.motionRange : target.position.x,
+      x: axis === "x" ? target.position.x - config.motionRange : target.position.x,
       y: target.position.y + config.slabHeight,
-      z: axis === "z" ? -config.motionRange : target.position.z,
+      z: axis === "z" ? target.position.z - config.motionRange : target.position.z,
     },
     dimensions: {
       width: target.dimensions.width,

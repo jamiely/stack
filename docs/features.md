@@ -10,7 +10,7 @@ This document tracks implemented gameplay features and notable behavior decision
   - `landed` (partial overlap, trims active slab)
   - `miss` (no overlap, game over)
 - Score increments on each successful placement
-- Height display tracks current tower floors
+- Height display tracks only player-built floors and excludes prebuilt starting stack slabs
 - Combo HUD tracks perfect streak progress (`current/target`, default target `8`)
 - Perfect hits increment combo while partial trims/misses reset it
 - Recovery reward triggers at combo milestones (default every `8` perfect hits):
@@ -19,7 +19,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - Audio + haptics feedback manager emits distinct cues for `perfect`, `landed`, and `miss` outcomes with browser-safe capability gating
 - Restart and return-to-title flows are supported via a single contextual primary menu button (no separate rebuild action)
 - V3 distraction framework runs as a deterministic side-channel (seeded + level-gated) without mutating trim/placement math
-- V3.2 actor layer now renders a gorilla that climbs around the tower perimeter with rhythmic slam pulses, a UFO that can complete a full tower orbit and then flies off-screen toward the player in Z instead of popping out when deactivating (with contrast-wash flashes), and front-layer cloud occlusion driven by deterministic distraction signals
+- V3.2 actor layer now renders a gorilla that climbs around the tower perimeter with rhythmic slam pulses, a UFO that can complete a full tower orbit and then flies off-screen toward the player in Z instead of popping out when deactivating (with contrast-wash flashes), and persistent front-layer cloud cover (including mid-screen occluders) with distraction-driven intensity boosts
 - Structural integrity telemetry computes a deterministic tower center-of-mass approximation and classifies `stable`/`precarious`/`unstable` tiers against tunable thresholds
 - Collapse fail sequence triggers on hard misses or unstable integrity, applying deterministic fallback toppling visuals, failure camera pullback, and collapse feedback cues
 - V5.1 performance layer archives distant slabs into static chunk proxies, applies distraction LOD throttling, and enforces strict debris pooling/active caps through runtime quality controls
@@ -37,10 +37,11 @@ This document tracks implemented gameplay features and notable behavior decision
 
 ## Input
 
-- Keyboard: `Space` / `Enter`
+- Keyboard: `Space` / `Enter` on **key release** to place the active slab
 - Pointer: click/tap on play area
+- While in `game_over`, direct gameplay input (`Space`/`Enter` release or touch/click in the play area) immediately starts a fresh run
 - Input is blocked when interacting with overlay/debug controls
-- Touch input is supported through pointer events
+- Touch input is handled explicitly for mobile `touchstart` and desktop pointer paths
 
 ## Debug Controls (`?debug`)
 
@@ -61,7 +62,7 @@ Runtime tuning panel includes:
 - Integrity: precarious threshold, unstable threshold, and camera wobble strength
 - Collapse: fail-sequence duration, tilt strength, camera pullback distance, and drop distance
 - Performance: quality preset (`0` low / `1` medium / `2` high), auto-quality toggle, frame-budget target, archival keep-level/chunk sizing, distraction LOD near/far distances, active debris cap, and debris pool limit
-- Setup: prebuilt starting levels
+- Setup: prebuilt starting levels (default raised so the base extends below the bottom screen edge)
 - Effects: debris lifetime, debris tumble strength
 - Scene: grid visibility
 
@@ -94,7 +95,8 @@ Runtime tuning panel includes:
   - Debug-panel and status-surface query gating
   - Test-mode API exposure and deterministic single-step advancement
   - Test-mode paused boot defaults and `paused=0` auto-run override
-  - Keyboard and pointer stop input paths
+  - Keyboard keyup + pointer/touch stop input paths
+  - Immediate restart from `game_over` using gameplay input (`Space`/touch)
   - Miss transition to game over and restart reset behavior
   - Runtime debug-speed tuning affecting active slab movement
   - Scripted deterministic placement sequences via test API

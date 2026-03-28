@@ -117,7 +117,7 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   lodFarDistance: { min: 4, max: 48, step: 1, label: "LOD Far Distance" },
   maxActiveDebris: { min: 2, max: 80, step: 1, label: "Max Active Debris" },
   debrisPoolLimit: { min: 0, max: 120, step: 1, label: "Debris Pool Limit" },
-  prebuiltLevels: { min: 1, max: 8, step: 1, label: "Starting Stack" },
+  prebuiltLevels: { min: 1, max: 12, step: 1, label: "Starting Stack" },
   debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
   debrisTumbleSpeed: { min: 0.2, max: 3, step: 0.05, label: "Debris Tumble" },
 };
@@ -246,6 +246,7 @@ export class Game {
   private lastFrameTime = 0;
   private gameState: GameState = "idle";
   private score = 0;
+  private startingStackLevels = 0;
   private combo: ComboState = createComboState(defaultDebugConfig.comboTarget);
   private recovery: RecoveryState = createRecoveryState();
   private lastPlacementOutcome: TrimResult["outcome"] | null = null;
@@ -296,6 +297,7 @@ export class Game {
     this.shell.className = "game-shell";
     this.shell.dataset.testMode = this.testMode.enabled ? "on" : "off";
     this.shell.addEventListener("pointerdown", this.handlePointerStop);
+    this.shell.addEventListener("touchstart", this.handleTouchStart, { passive: false });
 
     this.canvas = document.createElement("canvas");
     this.canvas.className = "game-canvas";
@@ -353,7 +355,7 @@ export class Game {
     this.renderHud();
     window.requestAnimationFrame(this.tick);
     window.addEventListener("resize", this.handleResize);
-    window.addEventListener("keydown", this.handleKeyDown);
+    window.addEventListener("keyup", this.handleKeyUp);
 
     if (this.testMode.enabled) {
       window.__towerStackerTestApi = this.createTestApi();
@@ -362,6 +364,7 @@ export class Game {
 
   private buildScene(): void {
     this.camera.position.set(CAMERA_X, this.debugConfig.cameraHeight, this.debugConfig.cameraDistance);
+    this.gridHelper.position.y = -12;
     this.scene.add(this.stackGroup, this.archivedGroup, this.debrisGroup, this.gridHelper);
 
     const ambientLight = new AmbientLight(0xffffff, 1.8);
@@ -585,7 +588,7 @@ export class Game {
     this.updateMetrics();
   };
 
-  private readonly handleKeyDown = (event: KeyboardEvent): void => {
+  private readonly handleKeyUp = (event: KeyboardEvent): void => {
     if (event.code !== "Space" && event.code !== "Enter") {
       return;
     }
@@ -605,13 +608,13 @@ export class Game {
       return;
     }
 
-    if (this.gameState === "idle") {
+    if (this.gameState === "idle" || this.gameState === "game_over") {
       this.startGame();
     }
   };
 
   private readonly handlePointerStop = (event: PointerEvent): void => {
-    if (this.gameState !== "playing") {
+    if (event.pointerType === "touch") {
       return;
     }
 
@@ -621,7 +624,38 @@ export class Game {
     }
 
     this.feedbackManager.primeFromGesture();
-    this.stopActiveSlab();
+
+    if (this.gameState === "playing") {
+      this.stopActiveSlab();
+      return;
+    }
+
+    if (this.gameState === "game_over") {
+      this.startGame();
+    }
+  };
+
+  private readonly handleTouchStart = (event: TouchEvent): void => {
+    if (event.touches.length > 1) {
+      return;
+    }
+
+    if (event.target instanceof Element && event.target.closest(".overlay, .debug-panel")) {
+      return;
+    }
+
+    event.preventDefault();
+
+    this.feedbackManager.primeFromGesture();
+
+    if (this.gameState === "playing") {
+      this.stopActiveSlab();
+      return;
+    }
+
+    if (this.gameState === "game_over") {
+      this.startGame();
+    }
   };
 
   private readonly tick = (timestamp: number): void => {
@@ -747,6 +781,7 @@ export class Game {
     this.averageFrameTimeMs = 0;
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.landedSlabs = createInitialStack(this.debugConfig);
+    this.startingStackLevels = this.landedSlabs.length;
 
     this.landedSlabs.forEach((slab) => {
       const mesh = this.createSlabMesh(slab, false);
@@ -767,26 +802,23 @@ export class Game {
 
     const activeSlab = spawnActiveSlab(target, this.debugConfig);
     this.activeSlab = activeSlab;
-    const seededStart = this.seededRandom
-      ? {
-          offset: this.seededRandom() * (this.debugConfig.motionRange * 2) - this.debugConfig.motionRange,
-          direction: (this.seededRandom() < 0.5 ? 1 : -1) as 1 | -1,
-        }
-      : {
-          offset: -this.debugConfig.motionRange,
-          direction: 1 as 1 | -1,
-        };
+
+    const targetAxisPosition = activeSlab.axis === "x" ? target.position.x : target.position.z;
+    const spawnSide = this.seededRandom ? ((this.seededRandom() < 0.5 ? -1 : 1) as 1 | -1) : (-1 as 1 | -1);
+    const spawnOffset = targetAxisPosition + spawnSide * this.debugConfig.motionRange;
+    const spawnDirection = (spawnSide * -1) as 1 | -1;
 
     this.oscillation = {
       axis: activeSlab.axis,
-      offset: seededStart.offset,
-      direction: seededStart.direction,
+      center: targetAxisPosition,
+      offset: spawnOffset,
+      direction: spawnDirection,
     };
 
     if (activeSlab.axis === "x") {
-      activeSlab.position.x = seededStart.offset;
+      activeSlab.position.x = spawnOffset;
     } else {
-      activeSlab.position.z = seededStart.offset;
+      activeSlab.position.z = spawnOffset;
     }
 
     if (this.activeMesh) {
@@ -1145,7 +1177,7 @@ export class Game {
     }
 
     if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {
-      const cloudOpacity = snapshot.active.clouds ? 0.18 + snapshot.signals.clouds * 0.52 : 0;
+      const cloudOpacity = 0.2 + (snapshot.active.clouds ? snapshot.signals.clouds * 0.38 : 0);
       const cloudDrift = this.distractionState.elapsedSeconds * 14 * this.debugConfig.distractionMotionSpeed;
       this.cloudLayer.style.opacity = cloudOpacity.toFixed(3);
       this.cloudLayer.style.transform = `translateX(${(cloudDrift % 80).toFixed(2)}px)`;
@@ -1470,7 +1502,7 @@ export class Game {
   private renderHud(): void {
     const overlay = this.hud.querySelector<HTMLElement>(".overlay");
     this.scoreValue.textContent = String(this.score);
-    this.heightValue.textContent = `${this.landedSlabs.length} floors`;
+    this.heightValue.textContent = `${Math.max(0, this.landedSlabs.length - this.startingStackLevels)} floors`;
     this.comboValue.textContent = `${this.combo.current}/${this.combo.target}`;
     this.messageValue.textContent = this.statusMessage;
     const perf = this.getPerformanceSnapshot();
@@ -1586,7 +1618,7 @@ export class Game {
     return {
       gameState: this.gameState,
       score: this.score,
-      height: this.landedSlabs.length,
+      height: Math.max(0, this.landedSlabs.length - this.startingStackLevels),
       level: this.landedSlabs.length - 1,
       activeAxis: this.activeSlab?.axis ?? null,
       activePosition: this.activeSlab

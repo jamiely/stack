@@ -103,7 +103,7 @@ describe("clampDebugConfig", () => {
       lodFarDistance: 4,
       maxActiveDebris: 80,
       debrisPoolLimit: 0,
-      prebuiltLevels: 8,
+      prebuiltLevels: 12,
       debrisLifetime: 0.4,
       debrisTumbleSpeed: 0.2,
       gridVisible: true,

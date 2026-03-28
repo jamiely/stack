@@ -4,6 +4,7 @@ export interface OscillationState {
   axis: Axis;
   offset: number;
   direction: 1 | -1;
+  center: number;
 }
 
 export function advanceOscillation(
@@ -14,14 +15,16 @@ export function advanceOscillation(
 ): OscillationState {
   const distance = speed * deltaSeconds * state.direction;
   const nextOffset = state.offset + distance;
+  const minBound = state.center - range;
+  const maxBound = state.center + range;
 
-  if (Math.abs(nextOffset) <= range) {
+  if (nextOffset >= minBound && nextOffset <= maxBound) {
     return { ...state, offset: nextOffset };
   }
 
-  const overshoot = Math.abs(nextOffset) - range;
+  const overshoot = nextOffset > maxBound ? nextOffset - maxBound : minBound - nextOffset;
   const bouncedDirection = (state.direction * -1) as 1 | -1;
-  const boundedOffset = bouncedDirection === -1 ? range - overshoot : -range + overshoot;
+  const boundedOffset = bouncedDirection === -1 ? maxBound - overshoot : minBound + overshoot;
 
   return {
     ...state,
