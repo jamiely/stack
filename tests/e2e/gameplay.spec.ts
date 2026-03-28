@@ -592,7 +592,7 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
       __towerStackerTestApi?: { stepSimulation: (steps?: number) => void };
     }).__towerStackerTestApi;
 
-    api?.stepSimulation(160);
+    api?.stepSimulation(500);
   });
 
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);

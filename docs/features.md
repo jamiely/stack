@@ -19,7 +19,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - Audio + haptics feedback manager emits distinct cues for `perfect`, `landed`, and `miss` outcomes with browser-safe capability gating
 - Restart and return-to-title flows are supported via a single contextual primary menu button (no separate rebuild action)
 - V3 distraction framework runs as a deterministic side-channel (seeded + level-gated) without mutating trim/placement math
-- V3.2 actor layer now renders gorilla climber + tremor pulses, a UFO that orbits around the tower and flies off-screen instead of popping out when deactivating (with contrast-wash flashes), and front-layer cloud occlusion driven by deterministic distraction signals
+- V3.2 actor layer now renders gorilla climber + tremor pulses, a UFO that can complete a full tower orbit and then flies off-screen toward the player in Z instead of popping out when deactivating (with contrast-wash flashes), and front-layer cloud occlusion driven by deterministic distraction signals
 - Structural integrity telemetry computes a deterministic tower center-of-mass approximation and classifies `stable`/`precarious`/`unstable` tiers against tunable thresholds
 - Collapse fail sequence triggers on hard misses or unstable integrity, applying deterministic fallback toppling visuals, failure camera pullback, and collapse feedback cues
 - V5.1 performance layer archives distant slabs into static chunk proxies, applies distraction LOD throttling, and enforces strict debris pooling/active caps through runtime quality controls
