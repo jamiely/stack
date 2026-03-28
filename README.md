@@ -2,6 +2,8 @@
 
 Desktop-first browser prototype for the `Tower Stacker` stacking game described in [docs/design.md](/Users/jamiely/code/stack/docs/design.md) and staged through [plan.md](/Users/jamiely/code/stack/plan.md).
 
+Feature tracking notes live in [docs/features.md](/Users/jamiely/code/stack/docs/features.md).
+
 ## Current Status
 
 The repo now includes a playable early milestone:

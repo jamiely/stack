@@ -1,0 +1,67 @@
+# Tower Stacker Features
+
+This document tracks implemented gameplay features and notable behavior decisions for the current V1 prototype.
+
+## Core Gameplay
+
+- Alternating slab movement axes by level (`X` then `Z` then `X`...)
+- Stop-and-trim placement logic with three outcomes:
+  - `perfect` (within tolerance, preserves target footprint)
+  - `landed` (partial overlap, trims active slab)
+  - `miss` (no overlap, game over)
+- Score increments on each successful placement
+- Height display tracks current tower floors
+- Restart and return-to-title flows are supported
+
+## Visual and Camera Behavior
+
+- Camera follows tower height with configurable distance/lerp
+- Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
+- Slab color palette varies by slab level (hue progression)
+- **Color stability rule:** a slab keeps its color when it transitions from active to landed (no post-placement recolor)
+
+## Input
+
+- Keyboard: `Space` / `Enter`
+- Pointer: click/tap on play area
+- Input is blocked when interacting with overlay/debug controls
+- Touch input is supported through pointer events
+
+## Debug Controls (`?debug`)
+
+Runtime tuning panel includes:
+
+- Camera: height, distance, lerp
+- Slab dimensions: base width, base depth, slab height
+- Motion: range, base speed, speed ramp
+- Placement: perfect tolerance
+- Setup: prebuilt starting levels
+- Effects: debris lifetime
+- Scene: grid visibility
+
+## Deterministic Test Mode (`?test` or `?testMode`)
+
+- Test mode can start paused by default
+- `&paused=0` starts test mode unpaused
+- Fixed-step size is configurable via query (`step`), clamped for safety
+- Guarded test API is exposed at `window.__towerStackerTestApi`
+
+### Exposed Test API
+
+- `startGame()`
+- `stopActiveSlab()`
+- `restartGame()`
+- `returnToTitle()`
+- `applyDebugConfig(config)`
+- `stepSimulation(steps?)`
+- `setPaused(paused)`
+- `setActiveOffset(offset)`
+- `getState()`
+
+## Automated Verification
+
+- Unit tests cover pure logic modules (trim, spawn, oscillation, config clamping)
+- Playwright smoke tests cover:
+  - Title boot and start flow
+  - Debug-panel query gating
+- Unit coverage threshold is enforced at 90% for the logic layer
