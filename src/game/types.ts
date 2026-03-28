@@ -121,6 +121,13 @@ export interface PublicGameState {
       contrastWash: number;
       clouds: number;
     };
+    visuals: {
+      gorillaOpacity: number;
+      ufoOpacity: number;
+      cloudOpacity: number;
+      contrastOpacity: number;
+      tremorStrength: number;
+    };
   };
   debugConfig: DebugConfig;
   testMode: {

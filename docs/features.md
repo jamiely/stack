@@ -19,11 +19,13 @@ This document tracks implemented gameplay features and notable behavior decision
 - Audio + haptics feedback manager emits distinct cues for `perfect`, `landed`, and `miss` outcomes with browser-safe capability gating
 - Restart and return-to-title flows are supported via a single contextual primary menu button (no separate rebuild action)
 - V3 distraction framework runs as a deterministic side-channel (seeded + level-gated) without mutating trim/placement math
+- V3.2 actor layer now renders gorilla climber + tremor pulses, UFO flyby + contrast-wash flashes, and front-layer cloud occlusion driven by deterministic distraction signals
 
 ## Visual and Camera Behavior
 
 - Camera follows tower height with configurable distance/lerp
 - Successful placements trigger a brief impact flash pulse
+- Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer), contrast wash intensity, and camera tremor pulse effects
 - Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
 - Slab color palette varies by slab level (hue progression)
 - **Color stability rule:** a slab keeps its color when it transitions from active to landed (no post-placement recolor)
@@ -74,7 +76,7 @@ Runtime tuning panel includes:
 - `setPaused(paused)`
 - `setActiveOffset(offset)`
 - `placeAtOffset(offset)`
-- `getState()` (includes level, last placement outcome, top slab dimensions, combo state `{ current, best, target, rewardReady }`, recovery state `{ rewardsEarned, slowdownPlacementsRemaining, speedMultiplier }`, feedback state `{ audioEnabled, hapticsEnabled, audioSupported, hapticsSupported, audioUnlocked, eventsTriggered, audioEventsPlayed, hapticEventsPlayed, lastEvent }`, distraction state `{ enabled, level, active, signals }`, and test-mode metadata including paused state/seed)
+- `getState()` (includes level, last placement outcome, top slab dimensions, combo state `{ current, best, target, rewardReady }`, recovery state `{ rewardsEarned, slowdownPlacementsRemaining, speedMultiplier }`, feedback state `{ audioEnabled, hapticsEnabled, audioSupported, hapticsSupported, audioUnlocked, eventsTriggered, audioEventsPlayed, hapticEventsPlayed, lastEvent }`, distraction state `{ enabled, level, active, signals, visuals }`, and test-mode metadata including paused state/seed)
 
 ## Automated Verification
 
@@ -92,5 +94,6 @@ Runtime tuning panel includes:
   - Debug streak/recovery tuning changing runtime reward behavior
   - Audio/haptics toggle gating for runtime feedback emission
   - Distraction framework level-gating + runtime global toggle behavior
+  - Gorilla/UFO/cloud actor rendering activation and continued trim correctness while distractions are active
   - Mobile-sized touch/tap stop input path
 - Unit coverage threshold is enforced at 90% for the logic layer

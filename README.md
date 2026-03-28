@@ -13,12 +13,12 @@ The repo now includes a playable early milestone:
 - Combo streak tracking (default target: 8 perfect hits) with live HUD progress
 - Recovery rewards at combo milestones: capped slab-growth recovery plus temporary movement slowdown windows
 - Lightweight audio + haptics feedback manager (perfect/trim/miss cues) with safe browser capability gating
-- V3 distraction framework with deterministic seeded state, level-gated channel activation, and runtime toggle/threshold tuning hooks
+- V3 distraction framework with deterministic seeded state, level-gated channel activation, runtime toggle/threshold tuning hooks, and V3.2 actor visuals (gorilla climber, UFO flyby/contrast wash, front-layer cloud occlusion, tremor pulse)
 - Upward camera follow, score/height HUD, impact flash feedback, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
 - Playwright coverage for boot/start, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
-- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, recovery telemetry, feedback telemetry, and distraction-state assertions
+- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, recovery telemetry, feedback telemetry, and distraction-state/actor-visual assertions
 - Git hooks for unit tests on commit and Playwright on commit/push
 
 ## Development

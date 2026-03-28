@@ -130,6 +130,11 @@ export class Game {
   private readonly primaryButton: HTMLButtonElement;
   private readonly debugPanel: HTMLDivElement;
   private readonly rendererStatus: HTMLParagraphElement;
+  private readonly distractionLayer: HTMLDivElement;
+  private readonly gorillaActor: HTMLDivElement;
+  private readonly ufoActor: HTMLDivElement;
+  private readonly cloudLayer: HTMLDivElement;
+  private readonly tremorPulse: HTMLDivElement;
 
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(50, 1, 0.1, 100);
@@ -200,18 +205,24 @@ export class Game {
     this.primaryButton = document.createElement("button");
     this.debugPanel = document.createElement("div");
     this.rendererStatus = document.createElement("p");
+    this.distractionLayer = document.createElement("div");
+    this.gorillaActor = document.createElement("div");
+    this.ufoActor = document.createElement("div");
+    this.cloudLayer = document.createElement("div");
+    this.tremorPulse = document.createElement("div");
 
     this.renderer = this.createRenderer();
 
     this.scene.background = new Color("#07101c");
     this.buildScene();
     this.buildHud();
+    this.buildDistractionOverlay();
     this.resetWorld();
   }
 
   public mount(): void {
     this.container.replaceChildren(this.shell);
-    this.shell.append(this.canvas, this.hud);
+    this.shell.append(this.canvas, this.distractionLayer, this.hud);
     this.updateMetrics();
     this.applyDebugConfig(this.debugConfig);
     this.renderHud();
@@ -301,6 +312,29 @@ export class Game {
     if (this.debugEnabled) {
       this.hud.append(this.debugPanel);
     }
+  }
+
+  private buildDistractionOverlay(): void {
+    this.distractionLayer.className = "distraction-layer";
+
+    this.gorillaActor.className = "distraction-actor distraction-actor--gorilla";
+    this.gorillaActor.dataset.testid = "actor-gorilla";
+
+    this.ufoActor.className = "distraction-actor distraction-actor--ufo";
+    this.ufoActor.dataset.testid = "actor-ufo";
+
+    this.cloudLayer.className = "distraction-clouds";
+    this.cloudLayer.dataset.testid = "actor-clouds";
+    for (let index = 0; index < 3; index += 1) {
+      const cloud = document.createElement("span");
+      cloud.className = "distraction-cloud";
+      this.cloudLayer.append(cloud);
+    }
+
+    this.tremorPulse.className = "distraction-tremor";
+    this.tremorPulse.dataset.testid = "actor-tremor";
+
+    this.distractionLayer.append(this.gorillaActor, this.ufoActor, this.cloudLayer, this.tremorPulse);
   }
 
   private createDebugControls(): DocumentFragment {
@@ -437,6 +471,7 @@ export class Game {
 
   private runSimulationStep(deltaSeconds: number): void {
     this.updateDistractions(deltaSeconds);
+    this.updateDistractionActors();
     this.updateActiveSlab(deltaSeconds);
     this.updateDebris(deltaSeconds);
     this.updateImpactPulse(deltaSeconds);
@@ -469,6 +504,7 @@ export class Game {
     const distractionSeed = this.testMode.seed ?? 0x53a9c321;
     this.distractionState = createDistractionState(distractionSeed);
     this.shell.style.setProperty("--impact-alpha", "0");
+    this.shell.style.setProperty("--contrast-alpha", "0");
     this.clearGroup(this.stackGroup);
     this.clearGroup(this.debrisGroup);
     this.debrisPieces = [];
@@ -480,6 +516,8 @@ export class Game {
     this.landedSlabs.forEach((slab) => {
       this.stackGroup.add(this.createSlabMesh(slab, false));
     });
+
+    this.updateDistractionActors();
   }
 
   private spawnNextActive(): void {
@@ -605,6 +643,34 @@ export class Game {
     );
   }
 
+  private updateDistractionActors(): void {
+    const snapshot = this.distractionState.snapshot;
+
+    const gorillaOpacity = snapshot.active.gorilla ? 0.3 + snapshot.signals.gorilla * 0.7 : 0;
+    const gorillaX = 14 + snapshot.signals.gorilla * 24;
+    const gorillaY = 86 - Math.min(60, snapshot.level * 1.3 + snapshot.signals.gorilla * 8);
+    this.gorillaActor.style.opacity = gorillaOpacity.toFixed(3);
+    this.gorillaActor.style.transform = `translate(${gorillaX.toFixed(2)}vw, ${gorillaY.toFixed(2)}vh)`;
+
+    const ufoOpacity = snapshot.active.ufo ? 0.26 + snapshot.signals.ufo * 0.74 : 0;
+    const ufoX = 66 + Math.sin(this.distractionState.elapsedSeconds * 0.8) * 11;
+    const ufoY = 14 + Math.cos(this.distractionState.elapsedSeconds * 1.1 + snapshot.signals.ufo) * 6;
+    this.ufoActor.style.opacity = ufoOpacity.toFixed(3);
+    this.ufoActor.style.transform = `translate(${ufoX.toFixed(2)}vw, ${ufoY.toFixed(2)}vh)`;
+
+    const cloudOpacity = snapshot.active.clouds ? 0.18 + snapshot.signals.clouds * 0.52 : 0;
+    const cloudDrift = this.distractionState.elapsedSeconds * 14 * this.debugConfig.distractionMotionSpeed;
+    this.cloudLayer.style.opacity = cloudOpacity.toFixed(3);
+    this.cloudLayer.style.transform = `translateX(${(cloudDrift % 80).toFixed(2)}px)`;
+
+    const contrastOpacity = snapshot.active.contrastWash ? snapshot.signals.contrastWash * 0.35 : 0;
+    this.shell.style.setProperty("--contrast-alpha", contrastOpacity.toFixed(3));
+
+    const tremorStrength = snapshot.active.tremor ? snapshot.signals.tremor : 0;
+    this.tremorPulse.style.opacity = (tremorStrength * 0.75).toFixed(3);
+    this.tremorPulse.style.transform = `scale(${(1 + tremorStrength * 0.4).toFixed(3)})`;
+  }
+
   private updateActiveSlab(deltaSeconds: number): void {
     if (this.gameState !== "playing" || !this.activeSlab || !this.activeMesh || !this.oscillation) {
       return;
@@ -675,6 +741,16 @@ export class Game {
       new Vector3(CAMERA_X, targetY, targetZ),
       this.debugConfig.cameraLerp,
     );
+
+    const tremorStrength = this.distractionState.snapshot.active.tremor
+      ? this.distractionState.snapshot.signals.tremor
+      : 0;
+    if (tremorStrength > 0) {
+      const shakePhase = this.distractionState.elapsedSeconds * 58;
+      this.camera.position.x += Math.sin(shakePhase) * 0.03 * tremorStrength;
+      this.camera.position.y += Math.cos(shakePhase * 0.9) * 0.04 * tremorStrength;
+    }
+
     this.camera.lookAt(0, Math.max(1.4, targetY - this.debugConfig.cameraHeight + 0.5), 0);
   }
 
@@ -861,6 +937,15 @@ export class Game {
         level: this.distractionState.snapshot.level,
         active: { ...this.distractionState.snapshot.active },
         signals: { ...this.distractionState.snapshot.signals },
+        visuals: {
+          gorillaOpacity: Number(this.gorillaActor.style.opacity || 0),
+          ufoOpacity: Number(this.ufoActor.style.opacity || 0),
+          cloudOpacity: Number(this.cloudLayer.style.opacity || 0),
+          contrastOpacity: Number(this.shell.style.getPropertyValue("--contrast-alpha") || 0),
+          tremorStrength: this.distractionState.snapshot.active.tremor
+            ? this.distractionState.snapshot.signals.tremor
+            : 0,
+        },
       },
       debugConfig: { ...this.debugConfig },
       testMode: {

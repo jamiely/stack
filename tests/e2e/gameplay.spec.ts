@@ -51,6 +51,13 @@ interface E2EState {
       contrastWash: number;
       clouds: number;
     };
+    visuals: {
+      gorillaOpacity: number;
+      ufoOpacity: number;
+      cloudOpacity: number;
+      contrastOpacity: number;
+      tremorStrength: number;
+    };
   };
   debugConfig: {
     motionSpeed: number;
@@ -460,7 +467,7 @@ test("debug combo target + growth tuning changes recovery behavior", async ({ pa
   await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(4);
 });
 
-test("distraction framework is level-gated and runtime-toggleable", async ({ page }) => {
+test("gorilla/ufo/cloud actors are level-gated and core placement still works while active", async ({ page }) => {
   await page.goto("/?debug&test&paused=0&seed=42");
   await expect(page.getByTestId("debug-panel")).toBeVisible();
 
@@ -507,13 +514,34 @@ test("distraction framework is level-gated and runtime-toggleable", async ({ pag
     for (let index = 0; index < 8; index += 1) {
       api.placeAtOffset(0);
     }
-    api.stepSimulation(1);
+    api.stepSimulation(4);
   });
 
-  await expect.poll(async () => (await getTestState(page))?.distractions.active.tentacle).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 0).toBeGreaterThan(0.2);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0.2);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.cloudOpacity ?? 0).toBeGreaterThan(0.1);
+
+  await expect(page.getByTestId("actor-gorilla")).toBeVisible();
+  await expect(page.getByTestId("actor-ufo")).toBeVisible();
+  await expect(page.getByTestId("actor-clouds")).toBeVisible();
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+        stepSimulation: (steps?: number) => void;
+      };
+    }).__towerStackerTestApi;
+
+    api?.placeAtOffset(0);
+    api?.stepSimulation(1);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.score).toBe(9);
+  await expect.poll(async () => (await getTestState(page))?.lastPlacementOutcome).toBe("perfect");
 
   await page.locator('input[data-debug-key="distractionsEnabled"]').evaluate((node) => {
     const input = node as HTMLInputElement;
@@ -530,9 +558,10 @@ test("distraction framework is level-gated and runtime-toggleable", async ({ pag
   });
 
   await expect.poll(async () => (await getTestState(page))?.debugConfig.distractionsEnabled).toBe(false);
-  await expect.poll(async () => (await getTestState(page))?.distractions.active.tentacle).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 1).toBe(0);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 1).toBe(0);
 });
 
 test("audio/haptics toggles gate runtime feedback emission", async ({ page }) => {
