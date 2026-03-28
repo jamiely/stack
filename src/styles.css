@@ -277,6 +277,32 @@ body {
   text-transform: uppercase;
 }
 
+.debug-panel__actions {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.2rem;
+}
+
+.debug-panel__actions-title {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(247, 239, 224, 0.72);
+}
+
+.debug-panel__actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.debug-panel__action {
+  padding: 0.45rem 0.55rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+}
+
 .debug-panel label {
   display: grid;
   gap: 0.35rem;
@@ -326,5 +352,9 @@ body {
   .debug-panel {
     top: auto;
     bottom: 17rem;
+  }
+
+  .debug-panel__actions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

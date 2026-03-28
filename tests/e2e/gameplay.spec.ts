@@ -522,6 +522,84 @@ test("debug combo target + growth tuning changes recovery behavior", async ({ pa
   await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(4);
 });
 
+test("debug distraction launch buttons can trigger channels on demand", async ({ page }) => {
+  await page.goto("/?debug&test");
+  await expect(page.getByTestId("debug-panel")).toBeVisible();
+
+  await page.locator('input[data-debug-key="distractionTentacleStartLevel"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "80";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="distractionGorillaStartLevel"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "80";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="distractionUfoStartLevel"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "100";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="distractionCloudStartLevel"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "120";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+      };
+    }).__towerStackerTestApi;
+
+    api?.startGame();
+    api?.setPaused(true);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.tentacle).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(false);
+
+  await page.getByTestId("debug-launch-tentacle").click();
+  await page.getByTestId("debug-launch-gorilla").click();
+  await page.getByTestId("debug-launch-tremor").click();
+  await page.getByTestId("debug-launch-ufo").click();
+  await page.getByTestId("debug-launch-contrastWash").click();
+  await page.getByTestId("debug-launch-clouds").click();
+
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.tentacle).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.tremor).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.contrastWash).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(true);
+
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 0).toBeGreaterThan(0.2);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0.2);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.cloudOpacity ?? 0).toBeGreaterThan(0.1);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.contrastOpacity ?? 0).toBeGreaterThan(0.2);
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.tremorStrength ?? 0).toBeGreaterThan(0.9);
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: { stepSimulation: (steps?: number) => void };
+    }).__towerStackerTestApi;
+
+    api?.stepSimulation(160);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(false);
+});
+
 test("gorilla/ufo/cloud actors are level-gated and core placement still works while active", async ({ page }) => {
   await page.goto("/?debug&test&paused=0&seed=42");
   await expect(page.getByTestId("debug-panel")).toBeVisible();

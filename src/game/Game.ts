@@ -33,7 +33,7 @@ import { createComboState, updateComboState } from "./logic/streak";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { RecoveryState } from "./logic/recovery";
 import type { ComboState } from "./logic/streak";
-import type { DistractionState } from "./logic/distractions";
+import type { DistractionChannel, DistractionSnapshot, DistractionState } from "./logic/distractions";
 import type { CollapseSequenceState, CollapseTrigger } from "./logic/collapse";
 import type { IntegrityTelemetry } from "./logic/integrity";
 import type { OscillationState } from "./logic/oscillation";
@@ -138,10 +138,39 @@ const DEBUG_TOGGLE_META: Record<DebugToggleKey, { label: string }> = {
   performanceAutoQualityEnabled: { label: "Auto Quality" },
 };
 
+const DEBUG_DISTRACTION_CHANNELS: DistractionChannel[] = [
+  "tentacle",
+  "gorilla",
+  "tremor",
+  "ufo",
+  "contrastWash",
+  "clouds",
+];
+const DEBUG_DISTRACTION_LAUNCH_DURATION_SECONDS = 2.5;
+const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
+  tentacle: { label: "Tentacle" },
+  gorilla: { label: "Gorilla" },
+  tremor: { label: "Tremor" },
+  ufo: { label: "UFO" },
+  contrastWash: { label: "Contrast" },
+  clouds: { label: "Clouds" },
+};
+
 declare global {
   interface Window {
     __towerStackerTestApi?: TestApi;
   }
+}
+
+function createDistractionTimerRecord(value: number): Record<DistractionChannel, number> {
+  return {
+    tentacle: value,
+    gorilla: value,
+    tremor: value,
+    ufo: value,
+    contrastWash: value,
+    clouds: value,
+  };
 }
 
 function readTestModeOptions(search: string): TestModeOptions {
@@ -217,6 +246,7 @@ export class Game {
   private impactPulseRemaining = 0;
   private seededRandom: (() => number) | null = null;
   private distractionState: DistractionState = createDistractionState(0x53a9c321);
+  private forcedDistractionTimers: Record<DistractionChannel, number> = createDistractionTimerRecord(0);
   private integrityTelemetry: IntegrityTelemetry = resolveIntegrityTelemetry(
     [],
     {
@@ -497,6 +527,32 @@ export class Game {
       fragment.append(toggleLabel);
     });
 
+    const distractionLaunch = document.createElement("section");
+    distractionLaunch.className = "debug-panel__actions";
+
+    const distractionLaunchTitle = document.createElement("h3");
+    distractionLaunchTitle.className = "debug-panel__actions-title";
+    distractionLaunchTitle.textContent = "Launch Distractions";
+    distractionLaunch.append(distractionLaunchTitle);
+
+    const launchGrid = document.createElement("div");
+    launchGrid.className = "debug-panel__actions-grid";
+
+    DEBUG_DISTRACTION_CHANNELS.forEach((channel) => {
+      const launchButton = document.createElement("button");
+      launchButton.type = "button";
+      launchButton.className = "button button--secondary debug-panel__action";
+      launchButton.dataset.testid = `debug-launch-${channel}`;
+      launchButton.textContent = DEBUG_DISTRACTION_BUTTON_META[channel].label;
+      launchButton.addEventListener("click", () => {
+        this.triggerDebugDistraction(channel);
+      });
+      launchGrid.append(launchButton);
+    });
+
+    distractionLaunch.append(launchGrid);
+    fragment.append(distractionLaunch);
+
     return fragment;
   }
 
@@ -559,10 +615,13 @@ export class Game {
     this.lastFrameTime = timestamp;
     this.updatePerformanceFrameTimes(deltaSeconds);
 
+    this.tickForcedDistractionTimers(deltaSeconds);
+
     if (!this.simulationPaused) {
       this.runSimulationStep(deltaSeconds);
     } else {
       this.updateImpactPulse(deltaSeconds);
+      this.updateDistractionActors();
       this.updateCamera();
     }
 
@@ -643,6 +702,7 @@ export class Game {
     this.collapseCameraPullback = 0;
     const distractionSeed = this.testMode.seed ?? 0x53a9c321;
     this.distractionState = createDistractionState(distractionSeed);
+    this.forcedDistractionTimers = createDistractionTimerRecord(0);
     this.shell.style.setProperty("--impact-alpha", "0");
     this.shell.style.setProperty("--contrast-alpha", "0");
     this.shell.style.setProperty("--collapse-alpha", "0");
@@ -824,6 +884,74 @@ export class Game {
     this.triggerImpactPulse(0.36);
   }
 
+  private triggerDebugDistraction(channel: DistractionChannel): void {
+    if (!this.canForceDistractionChannel(channel)) {
+      return;
+    }
+
+    this.forcedDistractionTimers[channel] = DEBUG_DISTRACTION_LAUNCH_DURATION_SECONDS;
+    this.updateDistractionActors();
+  }
+
+  private canForceDistractionChannel(channel: DistractionChannel): boolean {
+    if (!this.debugConfig.distractionsEnabled) {
+      return false;
+    }
+
+    switch (channel) {
+      case "tentacle":
+        return this.debugConfig.distractionTentacleEnabled;
+      case "gorilla":
+        return this.debugConfig.distractionGorillaEnabled;
+      case "tremor":
+        return this.debugConfig.distractionTremorEnabled;
+      case "ufo":
+        return this.debugConfig.distractionUfoEnabled;
+      case "contrastWash":
+        return this.debugConfig.distractionContrastEnabled;
+      case "clouds":
+        return this.debugConfig.distractionCloudEnabled;
+      default:
+        return false;
+    }
+  }
+
+  private tickForcedDistractionTimers(deltaSeconds: number): void {
+    if (deltaSeconds <= 0) {
+      return;
+    }
+
+    DEBUG_DISTRACTION_CHANNELS.forEach((channel) => {
+      const remaining = this.forcedDistractionTimers[channel];
+      if (remaining <= 0) {
+        return;
+      }
+
+      this.forcedDistractionTimers[channel] = Math.max(0, remaining - deltaSeconds);
+    });
+  }
+
+  private getEffectiveDistractionSnapshot(): DistractionSnapshot {
+    const snapshot = this.distractionState.snapshot;
+    const active = { ...snapshot.active };
+    const signals = { ...snapshot.signals };
+
+    DEBUG_DISTRACTION_CHANNELS.forEach((channel) => {
+      if (this.forcedDistractionTimers[channel] <= 0 || !this.canForceDistractionChannel(channel)) {
+        return;
+      }
+
+      active[channel] = true;
+      signals[channel] = Math.max(signals[channel], 1);
+    });
+
+    return {
+      ...snapshot,
+      active,
+      signals,
+    };
+  }
+
   private updateDistractions(deltaSeconds: number): void {
     const scalars = getQualityScalars(this.activeQualityPreset);
     const shouldUpdate = this.frameCounter % Math.max(1, scalars.distractionUpdateStride) === 0;
@@ -841,7 +969,7 @@ export class Game {
   }
 
   private updateDistractionActors(): void {
-    const snapshot = this.distractionState.snapshot;
+    const snapshot = this.getEffectiveDistractionSnapshot();
     const scalars = getQualityScalars(this.activeQualityPreset);
     const lodNear = Math.round(this.debugConfig.lodNearDistance * scalars.lodDistanceMultiplier);
     const lodFar = Math.round(this.debugConfig.lodFarDistance * scalars.lodDistanceMultiplier);
@@ -987,9 +1115,8 @@ export class Game {
       this.debugConfig.cameraLerp,
     );
 
-    const tremorStrength = this.distractionState.snapshot.active.tremor
-      ? this.distractionState.snapshot.signals.tremor
-      : 0;
+    const distractionSnapshot = this.getEffectiveDistractionSnapshot();
+    const tremorStrength = distractionSnapshot.active.tremor ? distractionSnapshot.signals.tremor : 0;
     if (tremorStrength > 0) {
       const shakePhase = this.distractionState.elapsedSeconds * 58;
       this.camera.position.x += Math.sin(shakePhase) * 0.03 * tremorStrength;
@@ -1300,6 +1427,7 @@ export class Game {
 
   private getPublicState(): PublicGameState {
     const feedback = this.feedbackManager.getSnapshot();
+    const distractionSnapshot = this.getEffectiveDistractionSnapshot();
 
     return {
       gameState: this.gameState,
@@ -1329,18 +1457,16 @@ export class Game {
       },
       feedback,
       distractions: {
-        enabled: this.distractionState.snapshot.enabled,
-        level: this.distractionState.snapshot.level,
-        active: { ...this.distractionState.snapshot.active },
-        signals: { ...this.distractionState.snapshot.signals },
+        enabled: distractionSnapshot.enabled,
+        level: distractionSnapshot.level,
+        active: { ...distractionSnapshot.active },
+        signals: { ...distractionSnapshot.signals },
         visuals: {
           gorillaOpacity: Number(this.gorillaActor.style.opacity || 0),
           ufoOpacity: Number(this.ufoActor.style.opacity || 0),
           cloudOpacity: Number(this.cloudLayer.style.opacity || 0),
           contrastOpacity: Number(this.shell.style.getPropertyValue("--contrast-alpha") || 0),
-          tremorStrength: this.distractionState.snapshot.active.tremor
-            ? this.distractionState.snapshot.signals.tremor
-            : 0,
+          tremorStrength: distractionSnapshot.active.tremor ? distractionSnapshot.signals.tremor : 0,
         },
       },
       integrity: {

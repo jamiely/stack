@@ -57,7 +57,7 @@ Runtime tuning panel includes:
 - Placement: perfect tolerance, combo target length
 - Recovery rewards: growth multiplier, slowdown factor, slowdown floors
 - Feedback: audio enable toggle, haptics enable toggle
-- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud), deterministic motion speed, and level-start thresholds for tentacle/gorilla/ufo/cloud gating
+- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud), deterministic motion speed, level-start thresholds for tentacle/gorilla/ufo/cloud gating, and on-demand launch buttons for each distraction channel
 - Integrity: precarious threshold, unstable threshold, and camera wobble strength
 - Collapse: fail-sequence duration, tilt strength, camera pullback distance, and drop distance
 - Performance: quality preset (`0` low / `1` medium / `2` high), auto-quality toggle, frame-budget target, archival keep-level/chunk sizing, distraction LOD near/far distances, active debris cap, and debris pool limit
@@ -103,6 +103,7 @@ Runtime tuning panel includes:
   - Audio/haptics toggle gating for runtime feedback emission
   - Distraction framework level-gating + runtime global toggle behavior
   - Gorilla/UFO/cloud actor rendering activation and continued trim correctness while distractions are active
+  - Debug on-demand distraction launch buttons forcing each channel active for a short runtime window
   - Deterministic integrity telemetry transitions (`stable` → `precarious` → `unstable`) through scripted placements
   - Deterministic collapse trigger from unstable integrity without requiring a hard miss
   - High-start-stack performance smoke with archival/quality toggles and responsive input assertion
