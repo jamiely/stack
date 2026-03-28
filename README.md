@@ -13,7 +13,7 @@ The repo now includes a playable early milestone:
 - Combo streak tracking (default target: 8 perfect hits) with live HUD progress
 - Recovery rewards at combo milestones: capped slab-growth recovery plus temporary movement slowdown windows
 - Lightweight audio + haptics feedback manager (perfect/trim/miss cues) with safe browser capability gating
-- V3 distraction framework with deterministic seeded state, level-gated channel activation, runtime toggle/threshold tuning hooks, on-demand debug launch triggers, and V3.2 actor visuals (gorilla climber, UFO full-circuit tower orbit with off-screen fly-off exits toward the player + contrast wash, front-layer cloud occlusion, tremor pulse)
+- V3 distraction framework with deterministic seeded state, level-gated channel activation, runtime toggle/threshold tuning hooks, on-demand debug launch triggers, and V3.2 actor visuals (gorilla perimeter climbing with rhythmic slam pulses, UFO full-circuit tower orbit with off-screen fly-off exits toward the player + contrast wash, front-layer cloud occlusion, tremor pulse)
 - V4.1 structural integrity telemetry with deterministic center-of-mass approximation, `stable/precarious/unstable` tiering, and precarious camera wobble feedback
 - V4.2 collapse fail sequence: hard misses or unstable integrity now trigger a deterministic tower-topple presentation with failure camera pullback and collapse feedback cues
 - V5.1 performance/scalability pass: distant slab archival into static chunk proxies, distraction LOD throttling, strict debris pooling/caps, and runtime perf diagnostics
