@@ -348,8 +348,8 @@ export class Game {
     this.oscillation = null;
     this.landedSlabs = createInitialStack(this.debugConfig);
 
-    this.landedSlabs.forEach((slab, index) => {
-      this.stackGroup.add(this.createSlabMesh(slab, index === this.landedSlabs.length - 1));
+    this.landedSlabs.forEach((slab) => {
+      this.stackGroup.add(this.createSlabMesh(slab, false));
     });
   }
 
@@ -408,7 +408,7 @@ export class Game {
     }
 
     this.landedSlabs.push(result.landedSlab);
-    this.stackGroup.add(this.createSlabMesh(result.landedSlab, true));
+    this.stackGroup.add(this.createSlabMesh(result.landedSlab, false));
     this.score += 1;
     this.statusMessage =
       result.outcome === "perfect"
