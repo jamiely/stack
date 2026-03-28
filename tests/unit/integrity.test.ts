@@ -30,6 +30,10 @@ function makeSlab(overrides: Partial<SlabData> = {}): SlabData {
 }
 
 describe("integrity logic", () => {
+  it("returns a zero center of mass for an empty stack", () => {
+    expect(computeCenterOfMass([])).toEqual({ x: 0, z: 0, totalMass: 0 });
+  });
+
   it("computes weighted center of mass across slab footprints", () => {
     const center = computeCenterOfMass([
       makeSlab({ position: { x: 0, y: 0, z: 0 }, dimensions: { width: 4, depth: 4, height: 1 } }),
@@ -39,6 +43,17 @@ describe("integrity logic", () => {
     expect(center.totalMass).toBe(20);
     expect(center.x).toBeCloseTo(0.4);
     expect(center.z).toBeCloseTo(0);
+  });
+
+  it("guards against zero-volume slabs when computing mass", () => {
+    const center = computeCenterOfMass([
+      makeSlab({ position: { x: 5, y: 0, z: 0 }, dimensions: { width: 0, depth: 0, height: 0 } }),
+      makeSlab({ position: { x: 1, y: 1, z: 2 }, dimensions: { width: 2, depth: 2, height: 1 }, level: 1 }),
+    ]);
+
+    expect(center.totalMass).toBeGreaterThan(4);
+    expect(center.x).toBeLessThan(1.001);
+    expect(center.z).toBeCloseTo(2, 3);
   });
 
   it("classifies stable/precarious/unstable tiers by normalized offset", () => {
@@ -82,5 +97,19 @@ describe("integrity logic", () => {
 
     expect(unstableTelemetry.tier).toBe("unstable");
     expect(unstableTelemetry.wobbleStrength).toBe(0.3);
+  });
+
+  it("guards top slab dimensions and wobble denominator against zero values", () => {
+    const telemetry = resolveIntegrityTelemetry(
+      [
+        makeSlab({ level: 0, position: { x: 0, y: 0, z: 0 }, dimensions: { width: 4, depth: 4, height: 1 } }),
+        makeSlab({ level: 1, position: { x: 0, y: 1, z: 0.0002 }, dimensions: { width: 0, depth: 0, height: 1 } }),
+      ],
+      { precarious: 0.1, unstable: 0.1 },
+      0.25,
+    );
+
+    expect(telemetry.tier).toBe("unstable");
+    expect(telemetry.wobbleStrength).toBe(0.25);
   });
 });

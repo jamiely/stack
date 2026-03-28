@@ -1,6 +1,6 @@
 # Tower Stacker Features
 
-This document tracks implemented gameplay features and notable behavior decisions for the current V1 prototype.
+This document tracks implemented gameplay features and notable behavior decisions for the current browser implementation.
 
 ## Core Gameplay
 

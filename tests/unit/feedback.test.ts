@@ -18,6 +18,7 @@ describe("feedback logic", () => {
     expect(miss?.event).toBe("placement_miss");
     expect(miss?.audio).toHaveLength(2);
     expect(miss?.hapticPattern).toEqual([16, 28, 24]);
+    expect(getPlacementFeedbackPlan("unexpected" as never)).toBeNull();
   });
 
   it("maps collapse failure triggers to deterministic feedback plans", () => {
@@ -37,5 +38,6 @@ describe("feedback logic", () => {
     expect(clampToneGain(0.12)).toBeCloseTo(0.12, 6);
     expect(clampToneGain(9)).toBe(0.3);
     expect(clampToneGain(Number.NaN)).toBe(0);
+    expect(clampToneGain(Number.POSITIVE_INFINITY)).toBe(0);
   });
 });
