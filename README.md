@@ -48,3 +48,4 @@ The dev server runs on `http://127.0.0.1:4173`.
 
 - The Playwright path supports environments where WebGL is unavailable by degrading to a non-WebGL fallback while preserving the HUD and interaction surface.
 - Local hooks can be enabled with `git config core.hooksPath .githooks` if they are not already configured.
+- `.github/workflows/deploy-pages.yml` publishes the built site to GitHub Pages from `main` and builds with a repository-name base path so project Pages URLs resolve assets correctly.
