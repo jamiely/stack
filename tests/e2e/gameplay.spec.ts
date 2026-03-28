@@ -80,6 +80,14 @@ interface E2EState {
     collapseTiltStrength: number;
     collapseCameraPullback: number;
     collapseDropDistance: number;
+    performanceQualityPreset: number;
+    performanceAutoQualityEnabled: boolean;
+    archivalKeepRecentLevels: number;
+    archivalChunkSize: number;
+    lodNearDistance: number;
+    lodFarDistance: number;
+    maxActiveDebris: number;
+    debrisPoolLimit: number;
   };
   integrity: {
     tier: "stable" | "precarious" | "unstable";
@@ -95,6 +103,26 @@ interface E2EState {
     progress: number;
     cameraPullback: number;
     completed: boolean;
+  };
+  performance: {
+    qualityPreset: "low" | "medium" | "high";
+    requestedPreset: "low" | "medium" | "high";
+    autoQualityEnabled: boolean;
+    frameTimeMs: number;
+    averageFrameTimeMs: number;
+    frameBudgetMs: number;
+    activeObjects: number;
+    visibleSlabs: number;
+    archivedSlabs: number;
+    archivedChunks: number;
+    debrisActive: number;
+    debrisPooled: number;
+    distractionLod: {
+      gorilla: "high" | "medium" | "low";
+      ufo: "high" | "medium" | "low";
+      clouds: "high" | "medium" | "low";
+      tremor: "high" | "medium" | "low";
+    };
   };
   testMode: {
     enabled: boolean;
@@ -818,6 +846,118 @@ test("audio/haptics toggles gate runtime feedback emission", async ({ page }) =>
   await expect.poll(async () => (await getTestState(page))?.feedback.eventsTriggered).toBe(2);
   await expect.poll(async () => (await getTestState(page))?.feedback.audioEventsPlayed).toBe(1);
   await expect.poll(async () => (await getTestState(page))?.feedback.hapticEventsPlayed).toBe(1);
+});
+
+test("high-start-stack perf profile keeps input responsive with archival + quality controls", async ({ page }) => {
+  await page.goto("/?debug&test&paused=0&seed=42");
+  await expect(page.getByTestId("debug-panel")).toBeVisible();
+
+  const applyRange = async (key: string, value: string) => {
+    await page.locator(`input[data-debug-key="${key}"]`).evaluate((node, next) => {
+      const input = node as HTMLInputElement;
+      input.value = String(next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, value);
+  };
+
+  await applyRange("prebuiltLevels", "8");
+  await applyRange("performanceQualityPreset", "0");
+  await applyRange("archivalKeepRecentLevels", "4");
+  await applyRange("archivalChunkSize", "3");
+  await applyRange("maxActiveDebris", "6");
+  await applyRange("debrisPoolLimit", "12");
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+        stepSimulation: (steps?: number) => void;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.startGame();
+    api.setPaused(true);
+
+    for (let index = 0; index < 12; index += 1) {
+      api.placeAtOffset(index % 2 === 0 ? 0.9 : -0.9);
+      api.stepSimulation(2);
+    }
+
+    api.setPaused(false);
+  });
+
+  await page.locator(".game-shell").click({ position: { x: 16, y: 16 } });
+
+  await expect.poll(async () => (await getTestState(page))?.score ?? 0).toBeGreaterThan(0);
+  await expect.poll(async () => (await getTestState(page))?.performance.qualityPreset).toBe("low");
+  await expect.poll(async () => (await getTestState(page))?.performance.archivedSlabs ?? 0).toBeGreaterThan(0);
+  await expect.poll(async () => (await getTestState(page))?.performance.archivedChunks ?? 0).toBeGreaterThan(0);
+  await expect.poll(async () => (await getTestState(page))?.performance.activeObjects ?? 0).toBeLessThan(80);
+});
+
+test("optimization toggles preserve deterministic scripted outcomes", async ({ page }) => {
+  const runScript = async () => {
+    await page.goto("/?debug&test&paused=0&seed=99");
+
+    return page.evaluate(() => {
+      const api = (window as Window & {
+        __towerStackerTestApi?: {
+          startGame: () => void;
+          setPaused: (paused: boolean) => void;
+          applyDebugConfig: (config: E2EState["debugConfig"]) => void;
+          placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+          stepSimulation: (steps?: number) => void;
+          getState: () => E2EState;
+        };
+      }).__towerStackerTestApi;
+
+      if (!api) {
+        return null;
+      }
+
+      api.startGame();
+      api.setPaused(true);
+      const base = api.getState();
+      api.applyDebugConfig({
+        ...base.debugConfig,
+        performanceQualityPreset: 0,
+        performanceAutoQualityEnabled: true,
+        archivalKeepRecentLevels: 5,
+        archivalChunkSize: 3,
+        lodNearDistance: 4,
+        lodFarDistance: 10,
+        maxActiveDebris: 8,
+        debrisPoolLimit: 16,
+      });
+
+      const outcomes = [0.8, -0.6, 0, 0.65, -0.5, 0].map((offset) => api.placeAtOffset(offset));
+      api.stepSimulation(24);
+      const state = api.getState();
+
+      return {
+        outcomes,
+        score: state.score,
+        level: state.level,
+        integrityTier: state.integrity.tier,
+        collapseTrigger: state.collapse.trigger,
+        qualityPreset: state.performance.qualityPreset,
+        archivedSlabs: state.performance.archivedSlabs,
+      };
+    });
+  };
+
+  const first = await runScript();
+  const second = await runScript();
+
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  expect(first).toEqual(second);
 });
 
 test.describe("mobile touch pass", () => {

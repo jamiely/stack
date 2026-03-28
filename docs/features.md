@@ -22,6 +22,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - V3.2 actor layer now renders gorilla climber + tremor pulses, UFO flyby + contrast-wash flashes, and front-layer cloud occlusion driven by deterministic distraction signals
 - Structural integrity telemetry computes a deterministic tower center-of-mass approximation and classifies `stable`/`precarious`/`unstable` tiers against tunable thresholds
 - Collapse fail sequence triggers on hard misses or unstable integrity, applying deterministic fallback toppling visuals, failure camera pullback, and collapse feedback cues
+- V5.1 performance layer archives distant slabs into static chunk proxies, applies distraction LOD throttling, and enforces strict debris pooling/active caps through runtime quality controls
 
 ## Visual and Camera Behavior
 
@@ -59,6 +60,7 @@ Runtime tuning panel includes:
 - Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud), deterministic motion speed, and level-start thresholds for tentacle/gorilla/ufo/cloud gating
 - Integrity: precarious threshold, unstable threshold, and camera wobble strength
 - Collapse: fail-sequence duration, tilt strength, camera pullback distance, and drop distance
+- Performance: quality preset (`0` low / `1` medium / `2` high), auto-quality toggle, frame-budget target, archival keep-level/chunk sizing, distraction LOD near/far distances, active debris cap, and debris pool limit
 - Setup: prebuilt starting levels
 - Effects: debris lifetime, debris tumble strength
 - Scene: grid visibility
@@ -82,7 +84,7 @@ Runtime tuning panel includes:
 - `setPaused(paused)`
 - `setActiveOffset(offset)`
 - `placeAtOffset(offset)`
-- `getState()` (includes level, last placement outcome, top slab dimensions, combo state `{ current, best, target, rewardReady }`, recovery state `{ rewardsEarned, slowdownPlacementsRemaining, speedMultiplier }`, feedback state `{ audioEnabled, hapticsEnabled, audioSupported, hapticsSupported, audioUnlocked, eventsTriggered, audioEventsPlayed, hapticEventsPlayed, lastEvent }`, distraction state `{ enabled, level, active, signals, visuals }`, integrity state `{ tier, normalizedOffset, wobbleStrength, centerOfMass, topCenter, offset }`, collapse state `{ active, trigger, progress, cameraPullback, completed }`, and test-mode metadata including paused state/seed)
+- `getState()` (includes level, last placement outcome, top slab dimensions, combo state `{ current, best, target, rewardReady }`, recovery state `{ rewardsEarned, slowdownPlacementsRemaining, speedMultiplier }`, feedback state `{ audioEnabled, hapticsEnabled, audioSupported, hapticsSupported, audioUnlocked, eventsTriggered, audioEventsPlayed, hapticEventsPlayed, lastEvent }`, distraction state `{ enabled, level, active, signals, visuals }`, integrity state `{ tier, normalizedOffset, wobbleStrength, centerOfMass, topCenter, offset }`, collapse state `{ active, trigger, progress, cameraPullback, completed }`, performance state `{ qualityPreset, frameTimeMs, averageFrameTimeMs, activeObjects, visibleSlabs, archivedSlabs, archivedChunks, debrisActive, debrisPooled, distractionLod }`, and test-mode metadata including paused state/seed)
 
 ## Automated Verification
 
@@ -103,5 +105,7 @@ Runtime tuning panel includes:
   - Gorilla/UFO/cloud actor rendering activation and continued trim correctness while distractions are active
   - Deterministic integrity telemetry transitions (`stable` → `precarious` → `unstable`) through scripted placements
   - Deterministic collapse trigger from unstable integrity without requiring a hard miss
+  - High-start-stack performance smoke with archival/quality toggles and responsive input assertion
+  - Deterministic scripted outcomes preserved with optimization toggles enabled
   - Mobile-sized touch/tap stop input path
 - Unit coverage threshold is enforced at 90% for the logic layer

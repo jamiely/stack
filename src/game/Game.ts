@@ -18,6 +18,14 @@ import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedba
 import { advanceOscillation } from "./logic/oscillation";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
 import { advanceCollapseSequence, createCollapseSequence, sampleCollapseFrame, shouldTriggerCollapse } from "./logic/collapse";
+import {
+  collectArchivableLevels,
+  getQualityScalars,
+  resolveAdaptiveQualityPreset,
+  selectDistractionLodTier,
+  shouldUpdateForLod,
+  toQualityPreset,
+} from "./logic/performance";
 import { resolveIntegrityTelemetry } from "./logic/integrity";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
@@ -29,6 +37,7 @@ import type { DistractionState } from "./logic/distractions";
 import type { CollapseSequenceState, CollapseTrigger } from "./logic/collapse";
 import type { IntegrityTelemetry } from "./logic/integrity";
 import type { OscillationState } from "./logic/oscillation";
+import type { DistractionLodTier, QualityPreset } from "./logic/performance";
 import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
 
 type DebugToggleKey =
@@ -41,7 +50,8 @@ type DebugToggleKey =
   | "distractionTremorEnabled"
   | "distractionUfoEnabled"
   | "distractionContrastEnabled"
-  | "distractionCloudEnabled";
+  | "distractionCloudEnabled"
+  | "performanceAutoQualityEnabled";
 type DebugNumberKey = Exclude<keyof DebugConfig, DebugToggleKey>;
 
 interface DebrisPiece {
@@ -49,6 +59,27 @@ interface DebrisPiece {
   velocity: { x: number; y: number; z: number };
   angularVelocity: { x: number; y: number; z: number };
   remainingLifetime: number;
+}
+
+interface PerformanceSnapshot {
+  qualityPreset: QualityPreset;
+  requestedPreset: QualityPreset;
+  autoQualityEnabled: boolean;
+  frameTimeMs: number;
+  averageFrameTimeMs: number;
+  frameBudgetMs: number;
+  activeObjects: number;
+  visibleSlabs: number;
+  archivedSlabs: number;
+  archivedChunks: number;
+  debrisActive: number;
+  debrisPooled: number;
+  distractionLod: {
+    gorilla: DistractionLodTier;
+    ufo: DistractionLodTier;
+    clouds: DistractionLodTier;
+    tremor: DistractionLodTier;
+  };
 }
 
 const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: number; label: string }> = {
@@ -78,6 +109,14 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   collapseTiltStrength: { min: 0.1, max: 1.3, step: 0.01, label: "Collapse Tilt" },
   collapseCameraPullback: { min: 0, max: 12, step: 0.1, label: "Collapse Pullback" },
   collapseDropDistance: { min: 0.5, max: 8, step: 0.1, label: "Collapse Drop" },
+  performanceQualityPreset: { min: 0, max: 2, step: 1, label: "Quality Preset (0-2)" },
+  performanceFrameBudgetMs: { min: 10, max: 40, step: 0.1, label: "Frame Budget ms" },
+  archivalKeepRecentLevels: { min: 4, max: 40, step: 1, label: "Archive Keep Levels" },
+  archivalChunkSize: { min: 2, max: 16, step: 1, label: "Archive Chunk Size" },
+  lodNearDistance: { min: 2, max: 24, step: 1, label: "LOD Near Distance" },
+  lodFarDistance: { min: 4, max: 48, step: 1, label: "LOD Far Distance" },
+  maxActiveDebris: { min: 2, max: 80, step: 1, label: "Max Active Debris" },
+  debrisPoolLimit: { min: 0, max: 120, step: 1, label: "Debris Pool Limit" },
   prebuiltLevels: { min: 1, max: 8, step: 1, label: "Starting Stack" },
   debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
   debrisTumbleSpeed: { min: 0.2, max: 3, step: 0.05, label: "Debris Tumble" },
@@ -96,6 +135,7 @@ const DEBUG_TOGGLE_META: Record<DebugToggleKey, { label: string }> = {
   distractionUfoEnabled: { label: "UFO Layer" },
   distractionContrastEnabled: { label: "Contrast Wash" },
   distractionCloudEnabled: { label: "Cloud Occlusion" },
+  performanceAutoQualityEnabled: { label: "Auto Quality" },
 };
 
 declare global {
@@ -136,6 +176,7 @@ export class Game {
   private readonly heightValue: HTMLSpanElement;
   private readonly comboValue: HTMLSpanElement;
   private readonly messageValue: HTMLSpanElement;
+  private readonly perfValue: HTMLSpanElement;
   private readonly overlayTitle: HTMLHeadingElement;
   private readonly overlayBody: HTMLParagraphElement;
   private readonly primaryButton: HTMLButtonElement;
@@ -151,6 +192,7 @@ export class Game {
   private readonly camera = new PerspectiveCamera(50, 1, 0.1, 100);
   private readonly renderer: WebGLRenderer | null;
   private readonly stackGroup = new Group();
+  private readonly archivedGroup = new Group();
   private readonly debrisGroup = new Group();
   private readonly gridHelper = new GridHelper(28, 28, 0xd8b162, 0x28425f);
 
@@ -160,9 +202,11 @@ export class Game {
     hapticsEnabled: defaultDebugConfig.feedbackHapticsEnabled,
   });
   private landedSlabs: SlabData[] = [];
+  private slabMeshes = new Map<number, Mesh>();
   private activeSlab: SlabData | null = null;
   private activeMesh: Mesh | null = null;
   private debrisPieces: DebrisPiece[] = [];
+  private debrisPool: Mesh[] = [];
   private oscillation: OscillationState | null = null;
   private lastFrameTime = 0;
   private gameState: GameState = "idle";
@@ -185,6 +229,18 @@ export class Game {
   private collapseProgress = 0;
   private collapseCameraPullback = 0;
   private simulationElapsedSeconds = 0;
+  private frameCounter = 0;
+  private frameTimeMs = 0;
+  private averageFrameTimeMs = 0;
+  private activeQualityPreset: QualityPreset = toQualityPreset(defaultDebugConfig.performanceQualityPreset);
+  private archivedLevelSet = new Set<number>();
+  private archivedChunkCount = 0;
+  private distractionLod: PerformanceSnapshot["distractionLod"] = {
+    gorilla: "high",
+    ufo: "high",
+    clouds: "high",
+    tremor: "high",
+  };
   private statusMessage = "Line up the moving slab and keep the tower alive.";
 
   public constructor(container: HTMLDivElement) {
@@ -220,6 +276,10 @@ export class Game {
     this.messageValue = document.createElement("span");
     this.messageValue.className = "hud__message";
     this.messageValue.dataset.testid = "status-message";
+
+    this.perfValue = document.createElement("span");
+    this.perfValue.className = "hud__message hud__message--compact";
+    this.perfValue.dataset.testid = "perf-message";
 
     this.overlayTitle = document.createElement("h1");
     this.overlayTitle.dataset.testid = "overlay-title";
@@ -260,7 +320,7 @@ export class Game {
 
   private buildScene(): void {
     this.camera.position.set(CAMERA_X, this.debugConfig.cameraHeight, this.debugConfig.cameraDistance);
-    this.scene.add(this.stackGroup, this.debrisGroup, this.gridHelper);
+    this.scene.add(this.stackGroup, this.archivedGroup, this.debrisGroup, this.gridHelper);
 
     const ambientLight = new AmbientLight(0xffffff, 1.8);
     const directionalLight = new DirectionalLight(0xfff0c8, 2.2);
@@ -285,6 +345,9 @@ export class Game {
       <div class="hud__card hud__card--wide" data-testid="status-card">
         <span class="hud__label">Status</span>
       </div>
+      <div class="hud__card hud__card--wide" data-testid="perf-card">
+        <span class="hud__label">Perf</span>
+      </div>
     `
       : `
       <div class="hud__card">
@@ -304,6 +367,7 @@ export class Game {
     cards[2]?.append(this.comboValue);
     if (this.debugEnabled) {
       cards[3]?.append(this.messageValue);
+      cards[4]?.append(this.perfValue);
     }
 
     const overlay = document.createElement("section");
@@ -387,9 +451,22 @@ export class Game {
         input.value = String(this.debugConfig[key]);
         input.dataset.debugKey = key;
         input.addEventListener("input", () => {
+          const integerKeys: DebugNumberKey[] = [
+            "comboTarget",
+            "recoverySlowdownPlacements",
+            "prebuiltLevels",
+            "performanceQualityPreset",
+            "archivalKeepRecentLevels",
+            "archivalChunkSize",
+            "lodNearDistance",
+            "lodFarDistance",
+            "maxActiveDebris",
+            "debrisPoolLimit",
+          ];
+          const rawValue = Number(input.value);
           const nextConfig = {
             ...this.debugConfig,
-            [key]: key === "prebuiltLevels" ? Math.round(Number(input.value)) : Number(input.value),
+            [key]: integerKeys.includes(key) ? Math.round(rawValue) : rawValue,
           };
           this.applyDebugConfig(nextConfig);
           this.renderHud();
@@ -480,6 +557,7 @@ export class Game {
   private readonly tick = (timestamp: number): void => {
     const deltaSeconds = this.lastFrameTime === 0 ? 0 : (timestamp - this.lastFrameTime) / 1000;
     this.lastFrameTime = timestamp;
+    this.updatePerformanceFrameTimes(deltaSeconds);
 
     if (!this.simulationPaused) {
       this.runSimulationStep(deltaSeconds);
@@ -494,6 +572,8 @@ export class Game {
 
   private runSimulationStep(deltaSeconds: number): void {
     this.simulationElapsedSeconds += deltaSeconds;
+    this.frameCounter += 1;
+    this.refreshQualityPreset();
     this.updateDistractions(deltaSeconds);
     this.updateDistractionActors();
     this.updateActiveSlab(deltaSeconds);
@@ -501,6 +581,37 @@ export class Game {
     this.updateImpactPulse(deltaSeconds);
     this.updateCollapseSequence(deltaSeconds);
     this.updateCamera();
+  }
+
+  private updatePerformanceFrameTimes(deltaSeconds: number): void {
+    const frameTimeMs = Math.max(0, deltaSeconds * 1000);
+    this.frameTimeMs = frameTimeMs;
+    if (this.averageFrameTimeMs === 0) {
+      this.averageFrameTimeMs = frameTimeMs;
+      return;
+    }
+
+    const smoothing = 0.08;
+    this.averageFrameTimeMs += (frameTimeMs - this.averageFrameTimeMs) * smoothing;
+  }
+
+  private refreshQualityPreset(): void {
+    const requestedPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
+    const nextPreset = resolveAdaptiveQualityPreset(
+      this.activeQualityPreset,
+      requestedPreset,
+      this.debugConfig.performanceAutoQualityEnabled,
+      this.averageFrameTimeMs,
+      this.debugConfig.performanceFrameBudgetMs,
+    );
+
+    if (nextPreset !== this.activeQualityPreset) {
+      this.activeQualityPreset = nextPreset;
+      this.syncArchivedRepresentation();
+    }
+
+    const scalars = getQualityScalars(this.activeQualityPreset);
+    this.renderer?.setPixelRatio(Math.min(window.devicePixelRatio, scalars.pixelRatioCap));
   }
 
   private startGame(): void {
@@ -537,18 +648,32 @@ export class Game {
     this.shell.style.setProperty("--collapse-alpha", "0");
     this.stackGroup.rotation.set(0, 0, 0);
     this.stackGroup.position.set(0, 0, 0);
-    this.clearGroup(this.stackGroup);
-    this.clearGroup(this.debrisGroup);
+    this.archivedGroup.rotation.set(0, 0, 0);
+    this.archivedGroup.position.set(0, 0, 0);
+    this.clearGroup(this.stackGroup, true);
+    this.clearGroup(this.archivedGroup, true);
+    this.clearGroup(this.debrisGroup, true);
+    this.slabMeshes = new Map<number, Mesh>();
+    this.archivedLevelSet = new Set<number>();
+    this.archivedChunkCount = 0;
     this.debrisPieces = [];
+    this.debrisPool = [];
     this.activeMesh = null;
     this.activeSlab = null;
     this.oscillation = null;
+    this.frameCounter = 0;
+    this.frameTimeMs = 0;
+    this.averageFrameTimeMs = 0;
+    this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.landedSlabs = createInitialStack(this.debugConfig);
 
     this.landedSlabs.forEach((slab) => {
-      this.stackGroup.add(this.createSlabMesh(slab, false));
+      const mesh = this.createSlabMesh(slab, false);
+      this.slabMeshes.set(slab.level, mesh);
+      this.stackGroup.add(mesh);
     });
 
+    this.syncArchivedRepresentation();
     this.refreshIntegrityTelemetry();
     this.updateDistractionActors();
   }
@@ -648,7 +773,10 @@ export class Game {
 
     this.triggerImpactPulse(result.outcome === "perfect" ? 0.25 : 0.18);
     this.landedSlabs.push(rewardedLandedSlab);
-    this.stackGroup.add(this.createSlabMesh(rewardedLandedSlab, false));
+    const landedMesh = this.createSlabMesh(rewardedLandedSlab, false);
+    this.slabMeshes.set(rewardedLandedSlab.level, landedMesh);
+    this.stackGroup.add(landedMesh);
+    this.syncArchivedRepresentation();
     this.refreshIntegrityTelemetry();
     this.score += 1;
 
@@ -697,9 +825,16 @@ export class Game {
   }
 
   private updateDistractions(deltaSeconds: number): void {
+    const scalars = getQualityScalars(this.activeQualityPreset);
+    const shouldUpdate = this.frameCounter % Math.max(1, scalars.distractionUpdateStride) === 0;
+    if (!shouldUpdate) {
+      return;
+    }
+
+    const steppedDelta = deltaSeconds * Math.max(1, scalars.distractionUpdateStride);
     this.distractionState = updateDistractionState(
       this.distractionState,
-      deltaSeconds,
+      steppedDelta,
       this.landedSlabs.length - 1,
       this.debugConfig,
     );
@@ -707,30 +842,48 @@ export class Game {
 
   private updateDistractionActors(): void {
     const snapshot = this.distractionState.snapshot;
+    const scalars = getQualityScalars(this.activeQualityPreset);
+    const lodNear = Math.round(this.debugConfig.lodNearDistance * scalars.lodDistanceMultiplier);
+    const lodFar = Math.round(this.debugConfig.lodFarDistance * scalars.lodDistanceMultiplier);
 
-    const gorillaOpacity = snapshot.active.gorilla ? 0.3 + snapshot.signals.gorilla * 0.7 : 0;
-    const gorillaX = 14 + snapshot.signals.gorilla * 24;
-    const gorillaY = 86 - Math.min(60, snapshot.level * 1.3 + snapshot.signals.gorilla * 8);
-    this.gorillaActor.style.opacity = gorillaOpacity.toFixed(3);
-    this.gorillaActor.style.transform = `translate(${gorillaX.toFixed(2)}vw, ${gorillaY.toFixed(2)}vh)`;
+    this.distractionLod = {
+      gorilla: selectDistractionLodTier(Math.max(0, snapshot.level - this.debugConfig.distractionGorillaStartLevel), lodNear, lodFar),
+      ufo: selectDistractionLodTier(Math.max(0, snapshot.level - this.debugConfig.distractionUfoStartLevel), lodNear, lodFar),
+      clouds: selectDistractionLodTier(Math.max(0, snapshot.level - this.debugConfig.distractionCloudStartLevel), lodNear, lodFar),
+      tremor: selectDistractionLodTier(snapshot.level, lodNear, lodFar),
+    };
 
-    const ufoOpacity = snapshot.active.ufo ? 0.26 + snapshot.signals.ufo * 0.74 : 0;
-    const ufoX = 66 + Math.sin(this.distractionState.elapsedSeconds * 0.8) * 11;
-    const ufoY = 14 + Math.cos(this.distractionState.elapsedSeconds * 1.1 + snapshot.signals.ufo) * 6;
-    this.ufoActor.style.opacity = ufoOpacity.toFixed(3);
-    this.ufoActor.style.transform = `translate(${ufoX.toFixed(2)}vw, ${ufoY.toFixed(2)}vh)`;
+    if (shouldUpdateForLod(this.distractionLod.gorilla, this.frameCounter, scalars.distractionUpdateStride)) {
+      const gorillaOpacity = snapshot.active.gorilla ? 0.3 + snapshot.signals.gorilla * 0.7 : 0;
+      const gorillaX = 14 + snapshot.signals.gorilla * 24;
+      const gorillaY = 86 - Math.min(60, snapshot.level * 1.3 + snapshot.signals.gorilla * 8);
+      this.gorillaActor.style.opacity = gorillaOpacity.toFixed(3);
+      this.gorillaActor.style.transform = `translate(${gorillaX.toFixed(2)}vw, ${gorillaY.toFixed(2)}vh)`;
+    }
 
-    const cloudOpacity = snapshot.active.clouds ? 0.18 + snapshot.signals.clouds * 0.52 : 0;
-    const cloudDrift = this.distractionState.elapsedSeconds * 14 * this.debugConfig.distractionMotionSpeed;
-    this.cloudLayer.style.opacity = cloudOpacity.toFixed(3);
-    this.cloudLayer.style.transform = `translateX(${(cloudDrift % 80).toFixed(2)}px)`;
+    if (shouldUpdateForLod(this.distractionLod.ufo, this.frameCounter, scalars.distractionUpdateStride)) {
+      const ufoOpacity = snapshot.active.ufo ? 0.26 + snapshot.signals.ufo * 0.74 : 0;
+      const ufoX = 66 + Math.sin(this.distractionState.elapsedSeconds * 0.8) * 11;
+      const ufoY = 14 + Math.cos(this.distractionState.elapsedSeconds * 1.1 + snapshot.signals.ufo) * 6;
+      this.ufoActor.style.opacity = ufoOpacity.toFixed(3);
+      this.ufoActor.style.transform = `translate(${ufoX.toFixed(2)}vw, ${ufoY.toFixed(2)}vh)`;
+    }
+
+    if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {
+      const cloudOpacity = snapshot.active.clouds ? 0.18 + snapshot.signals.clouds * 0.52 : 0;
+      const cloudDrift = this.distractionState.elapsedSeconds * 14 * this.debugConfig.distractionMotionSpeed;
+      this.cloudLayer.style.opacity = cloudOpacity.toFixed(3);
+      this.cloudLayer.style.transform = `translateX(${(cloudDrift % 80).toFixed(2)}px)`;
+    }
 
     const contrastOpacity = snapshot.active.contrastWash ? snapshot.signals.contrastWash * 0.35 : 0;
     this.shell.style.setProperty("--contrast-alpha", contrastOpacity.toFixed(3));
 
-    const tremorStrength = snapshot.active.tremor ? snapshot.signals.tremor : 0;
-    this.tremorPulse.style.opacity = (tremorStrength * 0.75).toFixed(3);
-    this.tremorPulse.style.transform = `scale(${(1 + tremorStrength * 0.4).toFixed(3)})`;
+    if (shouldUpdateForLod(this.distractionLod.tremor, this.frameCounter, scalars.distractionUpdateStride)) {
+      const tremorStrength = snapshot.active.tremor ? snapshot.signals.tremor : 0;
+      this.tremorPulse.style.opacity = (tremorStrength * 0.75).toFixed(3);
+      this.tremorPulse.style.transform = `scale(${(1 + tremorStrength * 0.4).toFixed(3)})`;
+    }
   }
 
   private updateActiveSlab(deltaSeconds: number): void {
@@ -773,10 +926,20 @@ export class Game {
 
       const stillVisible = piece.remainingLifetime > 0 && piece.mesh.position.y > -12;
       if (!stillVisible) {
-        this.debrisGroup.remove(piece.mesh);
+        this.recycleDebrisMesh(piece.mesh);
       }
       return stillVisible;
     });
+
+    const scalars = getQualityScalars(this.activeQualityPreset);
+    const maxActiveDebris = Math.max(1, Math.round(this.debugConfig.maxActiveDebris * scalars.maxDebrisMultiplier));
+    while (this.debrisPieces.length > maxActiveDebris) {
+      const piece = this.debrisPieces.shift();
+      if (!piece) {
+        break;
+      }
+      this.recycleDebrisMesh(piece.mesh);
+    }
   }
 
   private triggerImpactPulse(durationSeconds: number): void {
@@ -807,7 +970,9 @@ export class Game {
     this.collapseProgress = frame.progress;
     this.collapseCameraPullback = frame.cameraPullback;
     this.stackGroup.rotation.set(frame.stackTiltX, 0, frame.stackTiltZ);
+    this.archivedGroup.rotation.set(frame.stackTiltX, 0, frame.stackTiltZ);
     this.stackGroup.position.y = -frame.stackDropY;
+    this.archivedGroup.position.y = -frame.stackDropY;
     this.shell.style.setProperty("--collapse-alpha", (0.12 + frame.progress * 0.35).toFixed(3));
   }
 
@@ -848,6 +1013,114 @@ export class Game {
     this.renderer?.setSize(width, height, false);
   }
 
+  private syncArchivedRepresentation(): void {
+    const topLevel = this.landedSlabs.length > 0 ? this.landedSlabs[this.landedSlabs.length - 1]!.level : 0;
+    const scalars = getQualityScalars(this.activeQualityPreset);
+    const keepRecentLevels = Math.max(1, Math.round(this.debugConfig.archivalKeepRecentLevels * scalars.keepRecentMultiplier));
+    const archivableLevels = collectArchivableLevels(
+      this.landedSlabs.map((slab) => slab.level),
+      topLevel,
+      keepRecentLevels,
+    );
+    this.archivedLevelSet = new Set<number>(archivableLevels);
+
+    this.landedSlabs.forEach((slab) => {
+      const mesh = this.slabMeshes.get(slab.level);
+      if (!mesh) {
+        return;
+      }
+
+      if (this.archivedLevelSet.has(slab.level)) {
+        if (mesh.parent === this.stackGroup) {
+          this.stackGroup.remove(mesh);
+        }
+      } else if (mesh.parent !== this.stackGroup) {
+        this.stackGroup.add(mesh);
+      }
+    });
+
+    this.rebuildArchivedChunks();
+  }
+
+  private rebuildArchivedChunks(): void {
+    this.clearGroup(this.archivedGroup, true);
+    this.archivedChunkCount = 0;
+
+    if (this.archivedLevelSet.size === 0) {
+      return;
+    }
+
+    const scalars = getQualityScalars(this.activeQualityPreset);
+    const chunkSize = Math.max(2, Math.round(this.debugConfig.archivalChunkSize * scalars.chunkSizeMultiplier));
+
+    const chunkMap = new Map<number, SlabData[]>();
+    this.landedSlabs.forEach((slab) => {
+      if (!this.archivedLevelSet.has(slab.level)) {
+        return;
+      }
+
+      const chunkIndex = Math.floor(slab.level / chunkSize);
+      const chunk = chunkMap.get(chunkIndex) ?? [];
+      chunk.push(slab);
+      chunkMap.set(chunkIndex, chunk);
+    });
+
+    chunkMap.forEach((chunkSlabs) => {
+      if (chunkSlabs.length === 0) {
+        return;
+      }
+
+      let minX = Number.POSITIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let minZ = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+      let maxZ = Number.NEGATIVE_INFINITY;
+
+      chunkSlabs.forEach((slab) => {
+        minX = Math.min(minX, slab.position.x - slab.dimensions.width / 2);
+        maxX = Math.max(maxX, slab.position.x + slab.dimensions.width / 2);
+        minY = Math.min(minY, slab.position.y - slab.dimensions.height / 2);
+        maxY = Math.max(maxY, slab.position.y + slab.dimensions.height / 2);
+        minZ = Math.min(minZ, slab.position.z - slab.dimensions.depth / 2);
+        maxZ = Math.max(maxZ, slab.position.z + slab.dimensions.depth / 2);
+      });
+
+      const width = Math.max(0.2, maxX - minX);
+      const height = Math.max(0.2, maxY - minY);
+      const depth = Math.max(0.2, maxZ - minZ);
+      const geometry = new BoxGeometry(width, height, depth);
+      const material = new MeshStandardMaterial({
+        color: new Color("#7b5a39"),
+        emissive: new Color("#15100a"),
+        metalness: 0.02,
+        roughness: 0.96,
+      });
+      const mesh = new Mesh(geometry, material);
+      mesh.position.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
+      this.archivedGroup.add(mesh);
+      this.archivedChunkCount += 1;
+    });
+  }
+
+  private getPerformanceSnapshot(): PerformanceSnapshot {
+    return {
+      qualityPreset: this.activeQualityPreset,
+      requestedPreset: toQualityPreset(this.debugConfig.performanceQualityPreset),
+      autoQualityEnabled: this.debugConfig.performanceAutoQualityEnabled,
+      frameTimeMs: this.frameTimeMs,
+      averageFrameTimeMs: this.averageFrameTimeMs,
+      frameBudgetMs: this.debugConfig.performanceFrameBudgetMs,
+      activeObjects: this.stackGroup.children.length + this.archivedGroup.children.length + this.debrisGroup.children.length,
+      visibleSlabs: this.stackGroup.children.length,
+      archivedSlabs: this.archivedLevelSet.size,
+      archivedChunks: this.archivedChunkCount,
+      debrisActive: this.debrisPieces.length,
+      debrisPooled: this.debrisPool.length,
+      distractionLod: { ...this.distractionLod },
+    };
+  }
+
   private applyDebugConfig(config: DebugConfig): void {
     const previousConfig = this.debugConfig;
     this.debugConfig = clampDebugConfig(config);
@@ -874,6 +1147,10 @@ export class Game {
       this.refreshIntegrityTelemetry();
     }
 
+    if (!this.debugConfig.performanceAutoQualityEnabled) {
+      this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
+    }
+
     this.debugPanel.querySelectorAll<HTMLInputElement>("[data-debug-key]").forEach((input) => {
       const key = input.dataset.debugKey as keyof DebugConfig | undefined;
       if (!key) {
@@ -894,8 +1171,18 @@ export class Game {
       previousConfig.slabHeight !== this.debugConfig.slabHeight ||
       previousConfig.prebuiltLevels !== this.debugConfig.prebuiltLevels;
 
+    const performanceStructureChanged =
+      previousConfig.performanceQualityPreset !== this.debugConfig.performanceQualityPreset ||
+      previousConfig.archivalKeepRecentLevels !== this.debugConfig.archivalKeepRecentLevels ||
+      previousConfig.archivalChunkSize !== this.debugConfig.archivalChunkSize;
+
     if (requiresReset && this.gameState !== "playing") {
       this.resetWorld();
+      return;
+    }
+
+    if (performanceStructureChanged) {
+      this.syncArchivedRepresentation();
     }
   }
 
@@ -905,6 +1192,8 @@ export class Game {
     this.heightValue.textContent = `${this.landedSlabs.length} floors`;
     this.comboValue.textContent = `${this.combo.current}/${this.combo.target}`;
     this.messageValue.textContent = this.statusMessage;
+    const perf = this.getPerformanceSnapshot();
+    this.perfValue.textContent = `${perf.qualityPreset.toUpperCase()} ${perf.averageFrameTimeMs.toFixed(1)}ms avg · objs ${perf.activeObjects} · slabs ${perf.visibleSlabs}/${perf.archivedSlabs}a · debris ${perf.debrisActive}/${perf.debrisPooled}p`;
 
     if (this.gameState === "playing") {
       this.overlayTitle.textContent = "Tower Live";
@@ -921,7 +1210,7 @@ export class Game {
     } else {
       this.overlayTitle.textContent = "Tower Stacker";
       this.overlayBody.textContent =
-        "Playable milestone: alternating X/Z movement, permanent trimming, collapse fail sequence, and live gameplay tuning are active.";
+        "Playable milestone: alternating X/Z movement, permanent trimming, collapse fail sequence, and runtime performance archival/LOD tuning are active.";
       this.primaryButton.textContent = "Start Run";
       overlay?.classList.remove("overlay--hidden");
     }
@@ -936,10 +1225,22 @@ export class Game {
         return;
       }
 
-      node.textContent =
-        key === "prebuiltLevels" || key === "comboTarget" || key === "recoverySlowdownPlacements"
-          ? String(this.debugConfig[key])
-          : `${this.debugConfig[key].toFixed(2)}`;
+      const integerKeys: DebugNumberKey[] = [
+        "prebuiltLevels",
+        "comboTarget",
+        "recoverySlowdownPlacements",
+        "performanceQualityPreset",
+        "archivalKeepRecentLevels",
+        "archivalChunkSize",
+        "lodNearDistance",
+        "lodFarDistance",
+        "maxActiveDebris",
+        "debrisPoolLimit",
+      ];
+
+      node.textContent = integerKeys.includes(key)
+        ? String(this.debugConfig[key])
+        : `${this.debugConfig[key].toFixed(2)}`;
     });
   }
 
@@ -1057,6 +1358,7 @@ export class Game {
         cameraPullback: this.collapseCameraPullback,
         completed: this.collapseSequence !== null && this.collapseProgress >= 1,
       },
+      performance: this.getPerformanceSnapshot(),
       debugConfig: { ...this.debugConfig },
       testMode: {
         enabled: this.testMode.enabled,
@@ -1103,7 +1405,10 @@ export class Game {
   }
 
   private spawnDebris(slab: SlabData, axis: SlabData["axis"], fullMiss: boolean): void {
-    const mesh = this.createSlabMesh(slab, false);
+    const mesh = this.getOrCreateDebrisMesh();
+    mesh.position.set(slab.position.x, slab.position.y, slab.position.z);
+    mesh.scale.set(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
+    mesh.visible = true;
     this.debrisGroup.add(mesh);
 
     const lateral = fullMiss ? 4.4 : 2.7;
@@ -1120,11 +1425,60 @@ export class Game {
       },
       remainingLifetime: this.debugConfig.debrisLifetime,
     });
+
+    const scalars = getQualityScalars(this.activeQualityPreset);
+    const maxActiveDebris = Math.max(1, Math.round(this.debugConfig.maxActiveDebris * scalars.maxDebrisMultiplier));
+    while (this.debrisPieces.length > maxActiveDebris) {
+      const piece = this.debrisPieces.shift();
+      if (!piece) {
+        break;
+      }
+      this.recycleDebrisMesh(piece.mesh);
+    }
   }
 
-  private clearGroup(group: Group): void {
+  private getOrCreateDebrisMesh(): Mesh {
+    const pooled = this.debrisPool.pop();
+    if (pooled) {
+      return pooled;
+    }
+
+    const geometry = new BoxGeometry(1, 1, 1);
+    const material = new MeshStandardMaterial({
+      color: new Color("#f0c970"),
+      emissive: new Color("#41270f"),
+      metalness: 0.08,
+      roughness: 0.88,
+    });
+    return new Mesh(geometry, material);
+  }
+
+  private recycleDebrisMesh(mesh: Mesh): void {
+    this.debrisGroup.remove(mesh);
+    mesh.visible = false;
+    mesh.rotation.set(0, 0, 0);
+    const poolLimit = Math.max(0, this.debugConfig.debrisPoolLimit);
+    if (this.debrisPool.length < poolLimit) {
+      this.debrisPool.push(mesh);
+      return;
+    }
+
+    mesh.geometry.dispose();
+    if (mesh.material instanceof MeshStandardMaterial) {
+      mesh.material.dispose();
+    }
+  }
+
+  private clearGroup(group: Group, disposeMeshes = false): void {
     while (group.children.length > 0) {
-      group.remove(group.children[0]!);
+      const child = group.children[0]!;
+      group.remove(child);
+      if (disposeMeshes && child instanceof Mesh) {
+        child.geometry.dispose();
+        if (child.material instanceof MeshStandardMaterial) {
+          child.material.dispose();
+        }
+      }
     }
   }
 
@@ -1134,7 +1488,7 @@ export class Game {
         antialias: true,
         canvas: this.canvas,
       });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, getQualityScalars(this.activeQualityPreset).pixelRatioCap));
       renderer.setClearColor(new Color("#07101c"));
       return renderer;
     } catch (error) {

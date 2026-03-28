@@ -178,6 +178,11 @@ body {
   line-height: 1.35;
 }
 
+.hud__message--compact {
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
 .overlay {
   position: absolute;
   left: 1.5rem;

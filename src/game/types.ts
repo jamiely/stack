@@ -65,6 +65,15 @@ export interface DebugConfig {
   collapseTiltStrength: number;
   collapseCameraPullback: number;
   collapseDropDistance: number;
+  performanceQualityPreset: number;
+  performanceAutoQualityEnabled: boolean;
+  performanceFrameBudgetMs: number;
+  archivalKeepRecentLevels: number;
+  archivalChunkSize: number;
+  lodNearDistance: number;
+  lodFarDistance: number;
+  maxActiveDebris: number;
+  debrisPoolLimit: number;
   prebuiltLevels: number;
   debrisLifetime: number;
   debrisTumbleSpeed: number;
@@ -159,6 +168,26 @@ export interface PublicGameState {
     progress: number;
     cameraPullback: number;
     completed: boolean;
+  };
+  performance: {
+    qualityPreset: "low" | "medium" | "high";
+    requestedPreset: "low" | "medium" | "high";
+    autoQualityEnabled: boolean;
+    frameTimeMs: number;
+    averageFrameTimeMs: number;
+    frameBudgetMs: number;
+    activeObjects: number;
+    visibleSlabs: number;
+    archivedSlabs: number;
+    archivedChunks: number;
+    debrisActive: number;
+    debrisPooled: number;
+    distractionLod: {
+      gorilla: "high" | "medium" | "low";
+      ufo: "high" | "medium" | "low";
+      clouds: "high" | "medium" | "low";
+      tremor: "high" | "medium" | "low";
+    };
   };
   debugConfig: DebugConfig;
   testMode: {
