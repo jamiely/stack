@@ -27,7 +27,7 @@ This document tracks implemented gameplay features and notable behavior decision
 
 ## Visual and Camera Behavior
 
-- Camera follows landed tower height (instead of the just-spawned active slab) with configurable distance/lerp, smoothing post-placement climb and reducing jumpiness
+- Camera follows landed tower height (instead of the just-spawned active slab) with configurable distance/lerp, smoothing post-placement climb and reducing jumpiness; startup framing applies a short-lived lift so the initial stack starts lower in the viewport and then eases toward normal framing as floors are added
 - Successful placements trigger a brief impact flash pulse
 - Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer), contrast wash intensity, and camera tremor pulse effects; cloud motion now continuously sways left↔right (no hard reset) with stronger opacity and guaranteed mid-screen stack occlusion
 - Precarious integrity tier introduces deterministic camera wobble scaled by configurable instability strength

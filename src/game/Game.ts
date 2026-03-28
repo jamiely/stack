@@ -155,6 +155,8 @@ const GORILLA_SLAM_CYCLE_SPEED = 0.62;
 const GORILLA_SLAM_DURATION_SECONDS = 0.2;
 const CLOUD_SWAY_DISTANCE_PX = 120;
 const STACK_LOOK_AHEAD_Y = 1.05;
+const STARTUP_CAMERA_LIFT = 2.2;
+const STARTUP_CAMERA_LIFT_FADE_FLOORS = 10;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -1320,7 +1322,14 @@ export class Game {
   private updateCamera(): void {
     const topLandedSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
     const collapseFrame = this.collapseSequence ? sampleCollapseFrame(this.collapseSequence) : null;
-    const targetY = (topLandedSlab?.position.y ?? 0) + this.debugConfig.cameraHeight - (collapseFrame?.cameraDrop ?? 0);
+    const builtFloors = Math.max(0, this.landedSlabs.length - this.startingStackLevels);
+    const startupLiftFactor = Math.max(0, 1 - builtFloors / STARTUP_CAMERA_LIFT_FADE_FLOORS);
+    const startupLift = STARTUP_CAMERA_LIFT * startupLiftFactor;
+    const targetY =
+      (topLandedSlab?.position.y ?? 0) +
+      this.debugConfig.cameraHeight +
+      startupLift -
+      (collapseFrame?.cameraDrop ?? 0);
     const targetZ = this.debugConfig.cameraDistance + (collapseFrame?.cameraPullback ?? 0);
 
     this.camera.position.lerp(
