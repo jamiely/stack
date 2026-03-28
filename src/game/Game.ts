@@ -14,6 +14,7 @@ import {
 } from "three";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { advanceOscillation } from "./logic/oscillation";
+import { createSeededRandom } from "./logic/random";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { OscillationState } from "./logic/oscillation";
 import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
@@ -107,6 +108,7 @@ export class Game {
   private score = 0;
   private lastPlacementOutcome: TrimResult["outcome"] | null = null;
   private impactPulseRemaining = 0;
+  private seededRandom: (() => number) | null = null;
   private statusMessage = "Line up the moving slab and keep the tower alive.";
 
   public constructor(container: HTMLDivElement) {
@@ -394,6 +396,7 @@ export class Game {
     this.score = 0;
     this.lastPlacementOutcome = null;
     this.impactPulseRemaining = 0;
+    this.seededRandom = this.testMode.seed === null ? null : createSeededRandom(this.testMode.seed);
     this.shell.style.setProperty("--impact-alpha", "0");
     this.clearGroup(this.stackGroup);
     this.clearGroup(this.debrisGroup);
@@ -416,11 +419,27 @@ export class Game {
 
     const activeSlab = spawnActiveSlab(target, this.debugConfig);
     this.activeSlab = activeSlab;
+    const seededStart = this.seededRandom
+      ? {
+          offset: this.seededRandom() * (this.debugConfig.motionRange * 2) - this.debugConfig.motionRange,
+          direction: (this.seededRandom() < 0.5 ? 1 : -1) as 1 | -1,
+        }
+      : {
+          offset: -this.debugConfig.motionRange,
+          direction: 1 as 1 | -1,
+        };
+
     this.oscillation = {
       axis: activeSlab.axis,
-      offset: -this.debugConfig.motionRange,
-      direction: 1,
+      offset: seededStart.offset,
+      direction: seededStart.direction,
     };
+
+    if (activeSlab.axis === "x") {
+      activeSlab.position.x = seededStart.offset;
+    } else {
+      activeSlab.position.z = seededStart.offset;
+    }
 
     if (this.activeMesh) {
       this.scene.remove(this.activeMesh);

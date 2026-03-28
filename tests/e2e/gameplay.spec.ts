@@ -74,7 +74,7 @@ test("test API is only exposed in test mode and supports deterministic stepping"
   expect(beforeStep).not.toBeNull();
   expect(afterStep).not.toBeNull();
   expect(afterStep?.activeAxis).toBe(beforeStep?.activeAxis);
-  expect(afterStep?.activePosition?.x).toBeGreaterThan(beforeStep?.activePosition?.x ?? -Infinity);
+  expect(afterStep?.activePosition?.x).not.toBe(beforeStep?.activePosition?.x);
 });
 
 test("test mode paused boot can be toggled with query params", async ({ page }) => {
@@ -108,7 +108,51 @@ test("test mode paused boot can be toggled with query params", async ({ page }) 
   await page.waitForTimeout(150);
   const runningAfterWait = await getTestState(page);
 
-  expect(runningAfterWait?.activePosition?.x).toBeGreaterThan(runningStart?.activePosition?.x ?? -Infinity);
+  expect(runningAfterWait?.activePosition?.x).not.toBe(runningStart?.activePosition?.x);
+});
+
+test("seeded startup produces stable active-slab spawn states", async ({ page }) => {
+  const getSeededStart = async (seed: number) => {
+    await page.goto(`/?test&seed=${seed}`);
+
+    return page.evaluate(() => {
+      const api = (window as Window & {
+        __towerStackerTestApi?: {
+          startGame: () => void;
+          setPaused: (paused: boolean) => void;
+          getState: () => E2EState;
+        };
+      }).__towerStackerTestApi;
+
+      if (!api) {
+        return null;
+      }
+
+      api.startGame();
+      api.setPaused(true);
+      const state = api.getState();
+
+      return {
+        activeAxis: state.activeAxis,
+        activePosition: state.activePosition,
+        seed: state.testMode.seed,
+      };
+    });
+  };
+
+  const firstSeedRunA = await getSeededStart(42);
+  const firstSeedRunB = await getSeededStart(42);
+  const otherSeedRun = await getSeededStart(7);
+
+  expect(firstSeedRunA).not.toBeNull();
+  expect(firstSeedRunB).not.toBeNull();
+  expect(otherSeedRun).not.toBeNull();
+
+  expect(firstSeedRunA).toEqual(firstSeedRunB);
+  expect(firstSeedRunA?.seed).toBe(42);
+  expect(otherSeedRun?.seed).toBe(7);
+
+  expect(firstSeedRunA?.activePosition).not.toEqual(otherSeedRun?.activePosition);
 });
 
 test("scripted placement sequence is deterministic across runs", async ({ page }) => {
@@ -247,7 +291,7 @@ test("debug controls can tune movement speed at runtime", async ({ page }) => {
   });
 
   const afterBaseStep = await getTestState(page);
-  const baseDelta = (afterBaseStep?.activePosition?.x ?? 0) - (baseState?.activePosition?.x ?? 0);
+  const baseDelta = Math.abs((afterBaseStep?.activePosition?.x ?? 0) - (baseState?.activePosition?.x ?? 0));
 
   await page.locator('input[data-debug-key="motionSpeed"]').evaluate((node) => {
     const input = node as HTMLInputElement;
@@ -256,6 +300,8 @@ test("debug controls can tune movement speed at runtime", async ({ page }) => {
   });
 
   await expect.poll(async () => (await getTestState(page))?.debugConfig.motionSpeed).toBe(5);
+
+  const beforeTunedStep = await getTestState(page);
 
   await page.evaluate(() => {
     const api = (window as Window & {
@@ -276,7 +322,7 @@ test("debug controls can tune movement speed at runtime", async ({ page }) => {
   });
 
   const afterTunedStep = await getTestState(page);
-  const tunedDelta = (afterTunedStep?.activePosition?.x ?? 0) + (afterTunedStep?.debugConfig.motionRange ?? 0);
+  const tunedDelta = Math.abs((afterTunedStep?.activePosition?.x ?? 0) - (beforeTunedStep?.activePosition?.x ?? 0));
 
   expect(baseDelta).toBeGreaterThan(0);
   expect(tunedDelta).toBeGreaterThan(baseDelta * 1.5);
