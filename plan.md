@@ -112,3 +112,101 @@ All listed V1 milestones are implemented in the repository:
 - Placeholder geometry/materials are acceptable for V1; asset production is not part of this milestone.
 - Mobile support in V1 means touch-capable interaction and usable layout, not full mobile-performance optimization from day one.
 - The 90% coverage target applies to unit-testable application logic rather than WebGL rendering code or thin framework/bootstrap glue.
+
+## V2+ Roadmap (Planning)
+
+This roadmap extends beyond V1 implementation and is intentionally incremental so each phase is demoable, testable, and reversible.
+
+### V2: Combo Recovery + Sensory Feedback
+
+**Goal:** deepen the core loop without adding heavy physics.
+
+- Add an 8-hit perfect streak system with visible combo HUD.
+- Implement milestone reward at streak completion:
+  - slab growth/recovery (capped by base dimensions), and/or
+  - short temporary slowdown window for recovery.
+- Add lightweight audio cues (WebAudio) and haptics (`navigator.vibrate`) for:
+  - perfect hit
+  - partial trim
+  - miss/game-over
+- Extend debug controls for streak and feedback tuning:
+  - streak target length
+  - growth multiplier or reset mode
+  - slowdown duration/factor
+  - audio/haptics enable flags
+
+**Testing additions (required):**
+- Unit tests for streak progression, reset behavior, and reward triggers.
+- Unit tests for speed-modifier application boundaries.
+- Playwright test for deterministic scripted sequence that reaches streak reward.
+- Playwright verification that debug streak tuning changes runtime behavior.
+
+### V3: Saboteur Distraction Layer
+
+**Goal:** add the “crazy” cognitive disruption layer while preserving deterministic gameplay logic.
+
+- Introduce distraction system with level-gated actors/effects:
+  - tentacle-like rhythmic base distraction (early levels)
+  - gorilla-style climber + occasional tremor pulses (mid levels)
+  - ufo pathing + contrast-wash flashes (higher levels)
+  - front-layer cloud occlusion at very high levels
+- Keep distractions isolated from core trim math.
+- Add per-distraction toggles and thresholds in debug panel.
+- Expose distraction state through guarded test API for Playwright assertions.
+
+**Testing additions (required):**
+- Unit tests for distraction trigger thresholds and deterministic motion seeds.
+- Playwright test that distractions remain query-gated or level-gated as designed.
+- Playwright test that core stop-and-trim remains functional while distractions are active.
+
+### V4: Structural Integrity + Collapse Sequence
+
+**Goal:** convert game-over from simple stop state into a high-value destruction moment.
+
+- Add center-of-mass approximation module for stability telemetry.
+- Define instability tiers (stable/precarious/unstable) and matching feedback:
+  - wobble in precarious band
+  - full collapse trigger when unstable or hard miss occurs
+- Implement non-physics fallback collapse animation first, with optional rigid-body mode behind debug flag.
+- Add failure camera pullback + failure audio/haptics integration.
+
+**Testing additions (required):**
+- Unit tests for CoM accumulation and threshold classification.
+- Unit tests for instability transitions and collapse trigger rules.
+- Playwright scenario reproducing deterministic collapse conditions.
+
+### V5: Performance + Content Scalability
+
+**Goal:** keep gameplay smooth as tower height and effects grow.
+
+- Implement floor archival strategy:
+  - merge/static-batch distant slabs
+  - reduce update cost for offscreen distractions
+  - keep debris pooling and cleanup strict
+- Add quality presets (low/med/high) and automatic fallback knobs.
+- Add runtime perf diagnostics in debug mode (frame time, active objects, pooled debris).
+
+**Testing additions (required):**
+- Unit tests for archival eligibility and LOD rule selection.
+- Playwright smoke on high-start-stack debug scenario ensuring responsive input path.
+- CI check confirming test suite stays deterministic with optimization toggles enabled.
+
+## Sequenced Execution Backlog (Post-V1)
+
+1. **V2.1** – Streak state model + combo HUD + test API state surface.
+2. **V2.2** – Recovery rewards (growth/slowdown) + debug controls + tests.
+3. **V2.3** – Audio/haptics manager + user-safe enablement + tests.
+4. **V3.1** – Distraction framework + deterministic trigger model.
+5. **V3.2** – Gorilla/UFO/cloud implementations + debug tuning + e2e checks.
+6. **V4.1** – CoM logic + instability telemetry + unit coverage.
+7. **V4.2** – Collapse presentation + camera/audio/haptics fail sequence.
+8. **V5.1** – Archival/LOD/perf controls + stress-oriented Playwright pass.
+
+## Exit Criteria for “V2 and Onwards Complete”
+
+The roadmap is considered complete when:
+- V2–V5 features above are implemented and documented.
+- Logic-layer unit coverage remains >= 90% throughout.
+- Playwright core-flow suite passes with new systems enabled.
+- Debug/test control surface remains deterministic and scriptable.
+- `README.md` + `docs/features.md` reflect the expanded feature set.
