@@ -16,6 +16,7 @@ This document tracks implemented gameplay features and notable behavior decision
 ## Visual and Camera Behavior
 
 - Camera follows tower height with configurable distance/lerp
+- Successful placements trigger a brief impact flash pulse
 - Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
 - Slab color palette varies by slab level (hue progression)
 - **Color stability rule:** a slab keeps its color when it transitions from active to landed (no post-placement recolor)

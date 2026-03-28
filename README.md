@@ -10,7 +10,7 @@ The repo now includes a playable early milestone:
 
 - Vite + TypeScript + Three.js application shell
 - Alternating X/Z stack placement with trim-or-miss gameplay
-- Upward camera follow, score/height HUD, and falling debris
+- Upward camera follow, score/height HUD, impact flash feedback, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
 - Playwright coverage for boot/start, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates

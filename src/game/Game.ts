@@ -106,6 +106,7 @@ export class Game {
   private gameState: GameState = "idle";
   private score = 0;
   private lastPlacementOutcome: TrimResult["outcome"] | null = null;
+  private impactPulseRemaining = 0;
   private statusMessage = "Line up the moving slab and keep the tower alive.";
 
   public constructor(container: HTMLDivElement) {
@@ -358,6 +359,7 @@ export class Game {
     if (!this.simulationPaused) {
       this.runSimulationStep(deltaSeconds);
     } else {
+      this.updateImpactPulse(deltaSeconds);
       this.updateCamera();
     }
 
@@ -368,6 +370,7 @@ export class Game {
   private runSimulationStep(deltaSeconds: number): void {
     this.updateActiveSlab(deltaSeconds);
     this.updateDebris(deltaSeconds);
+    this.updateImpactPulse(deltaSeconds);
     this.updateCamera();
   }
 
@@ -390,6 +393,8 @@ export class Game {
     this.lastFrameTime = 0;
     this.score = 0;
     this.lastPlacementOutcome = null;
+    this.impactPulseRemaining = 0;
+    this.shell.style.setProperty("--impact-alpha", "0");
     this.clearGroup(this.stackGroup);
     this.clearGroup(this.debrisGroup);
     this.debrisPieces = [];
@@ -459,6 +464,7 @@ export class Game {
     }
 
     this.lastPlacementOutcome = result.outcome;
+    this.triggerImpactPulse(result.outcome === "perfect" ? 0.25 : 0.18);
     this.landedSlabs.push(result.landedSlab);
     this.stackGroup.add(this.createSlabMesh(result.landedSlab, false));
     this.score += 1;
@@ -517,6 +523,21 @@ export class Game {
       }
       return stillVisible;
     });
+  }
+
+  private triggerImpactPulse(durationSeconds: number): void {
+    this.impactPulseRemaining = Math.max(this.impactPulseRemaining, durationSeconds);
+    this.shell.style.setProperty("--impact-alpha", "0.5");
+  }
+
+  private updateImpactPulse(deltaSeconds: number): void {
+    if (this.impactPulseRemaining <= 0) {
+      return;
+    }
+
+    this.impactPulseRemaining = Math.max(0, this.impactPulseRemaining - deltaSeconds);
+    const alpha = Math.min(0.5, this.impactPulseRemaining * 2.2);
+    this.shell.style.setProperty("--impact-alpha", alpha.toFixed(3));
   }
 
   private updateCamera(): void {

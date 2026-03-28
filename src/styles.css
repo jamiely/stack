@@ -23,9 +23,20 @@ body {
 }
 
 .game-shell {
+  --impact-alpha: 0;
   position: relative;
   min-height: 100vh;
   overflow: hidden;
+}
+
+.game-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--impact-alpha);
+  background: radial-gradient(circle at 50% 40%, rgba(255, 200, 103, 0.55), transparent 60%);
+  transition: opacity 40ms linear;
 }
 
 .game-canvas {
