@@ -8,6 +8,7 @@ Your primary goal is to COMPLETE the task end-to-end with minimal user interacti
 - Treat `plan.md` as the current implementation plan and default execution roadmap.
 - When implementing features, align decisions with those documents unless the user explicitly overrides them.
 - Maintain the documented testing requirements: Playwright coverage for core gameplay flows, a deterministic test mode with programmatic stepping, runtime debug controls for tuning, and at least 90% unit-test coverage for the logic layer.
+- When writing or extending gameplay code, explicitly consider whether the change should expose a new debug control for runtime tuning or test setup.
 - Commit after every completed repo change so work is captured incrementally.
 - Push after major changes or milestones so the remote stays current.
 - Run unit tests before every commit through local pre-commit hooks.
