@@ -13,6 +13,8 @@ import {
   WebGLRenderer,
 } from "three";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
+import { FeedbackManager } from "./FeedbackManager";
+import { getPlacementFeedbackPlan } from "./logic/feedback";
 import { advanceOscillation } from "./logic/oscillation";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
@@ -23,7 +25,8 @@ import type { ComboState } from "./logic/streak";
 import type { OscillationState } from "./logic/oscillation";
 import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
 
-type DebugNumberKey = Exclude<keyof DebugConfig, "gridVisible">;
+type DebugToggleKey = "gridVisible" | "feedbackAudioEnabled" | "feedbackHapticsEnabled";
+type DebugNumberKey = Exclude<keyof DebugConfig, DebugToggleKey>;
 
 interface DebrisPiece {
   mesh: Mesh;
@@ -54,6 +57,11 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
 
 const CAMERA_X = 8;
 const FIXED_STEP_DEFAULT_SECONDS = 1 / 60;
+const DEBUG_TOGGLE_META: Record<DebugToggleKey, { label: string }> = {
+  gridVisible: { label: "Grid Visible" },
+  feedbackAudioEnabled: { label: "Audio Feedback" },
+  feedbackHapticsEnabled: { label: "Haptics Feedback" },
+};
 
 declare global {
   interface Window {
@@ -107,6 +115,10 @@ export class Game {
   private readonly gridHelper = new GridHelper(28, 28, 0xd8b162, 0x28425f);
 
   private debugConfig: DebugConfig = defaultDebugConfig;
+  private readonly feedbackManager = new FeedbackManager({
+    audioEnabled: defaultDebugConfig.feedbackAudioEnabled,
+    hapticsEnabled: defaultDebugConfig.feedbackHapticsEnabled,
+  });
   private landedSlabs: SlabData[] = [];
   private activeSlab: SlabData | null = null;
   private activeMesh: Mesh | null = null;
@@ -306,27 +318,32 @@ export class Game {
       },
     );
 
-    const toggleLabel = document.createElement("label");
-    toggleLabel.textContent = "Grid Visible";
+    (Object.entries(DEBUG_TOGGLE_META) as [DebugToggleKey, { label: string }][]).forEach(([key, meta]) => {
+      const toggleLabel = document.createElement("label");
+      toggleLabel.textContent = meta.label;
 
-    const toggle = document.createElement("input");
-    toggle.type = "checkbox";
-    toggle.checked = this.debugConfig.gridVisible;
-    toggle.dataset.debugKey = "gridVisible";
-    toggle.addEventListener("change", () => {
-      this.applyDebugConfig({
-        ...this.debugConfig,
-        gridVisible: toggle.checked,
+      const toggle = document.createElement("input");
+      toggle.type = "checkbox";
+      toggle.checked = this.debugConfig[key];
+      toggle.dataset.debugKey = key;
+      toggle.addEventListener("change", () => {
+        this.applyDebugConfig({
+          ...this.debugConfig,
+          [key]: toggle.checked,
+        });
+        this.renderHud();
       });
-      this.renderHud();
+
+      toggleLabel.append(toggle);
+      fragment.append(toggleLabel);
     });
 
-    toggleLabel.append(toggle);
-    fragment.append(toggleLabel);
     return fragment;
   }
 
   private readonly handlePrimaryAction = (): void => {
+    this.feedbackManager.primeFromGesture();
+
     if (this.gameState === "playing") {
       this.returnToTitle();
       return;
@@ -352,6 +369,7 @@ export class Game {
     }
 
     event.preventDefault();
+    this.feedbackManager.primeFromGesture();
 
     if (this.gameState === "playing") {
       this.stopActiveSlab();
@@ -373,6 +391,7 @@ export class Game {
       return;
     }
 
+    this.feedbackManager.primeFromGesture();
     this.stopActiveSlab();
   };
 
@@ -493,6 +512,7 @@ export class Game {
       this.oscillation = null;
       this.lastPlacementOutcome = result.outcome;
       this.combo = updateComboState(this.combo, result.outcome);
+      this.feedbackManager.play(getPlacementFeedbackPlan(result.outcome));
       this.gameState = "game_over";
       this.statusMessage = "Missed the tower. Restart and try to recover your rhythm.";
       this.renderHud();
@@ -509,6 +529,7 @@ export class Game {
 
     this.lastPlacementOutcome = result.outcome;
     this.combo = updateComboState(this.combo, result.outcome);
+    this.feedbackManager.play(getPlacementFeedbackPlan(result.outcome));
     this.recovery = applyPlacementRecoveryTick(this.recovery);
 
     const recoveryResolution = resolveRecoveryReward(this.recovery, this.combo, result.landedSlab, {
@@ -632,6 +653,10 @@ export class Game {
     const previousConfig = this.debugConfig;
     this.debugConfig = clampDebugConfig(config);
     this.gridHelper.visible = this.debugConfig.gridVisible;
+    this.feedbackManager.updateConfig({
+      audioEnabled: this.debugConfig.feedbackAudioEnabled,
+      hapticsEnabled: this.debugConfig.feedbackHapticsEnabled,
+    });
 
     if (previousConfig.comboTarget !== this.debugConfig.comboTarget) {
       this.combo = {
@@ -648,7 +673,8 @@ export class Game {
       }
 
       if (input.type === "checkbox") {
-        input.checked = this.debugConfig.gridVisible;
+        const toggleKey = key as DebugToggleKey;
+        input.checked = this.debugConfig[toggleKey];
       } else {
         input.value = String(this.debugConfig[key] as number);
       }
@@ -764,6 +790,8 @@ export class Game {
   }
 
   private getPublicState(): PublicGameState {
+    const feedback = this.feedbackManager.getSnapshot();
+
     return {
       gameState: this.gameState,
       score: this.score,
@@ -790,6 +818,7 @@ export class Game {
         slowdownPlacementsRemaining: this.recovery.slowdownPlacementsRemaining,
         speedMultiplier: getRecoverySpeedMultiplier(this.recovery, this.debugConfig.recoverySlowdownFactor),
       },
+      feedback,
       debugConfig: { ...this.debugConfig },
       testMode: {
         enabled: this.testMode.enabled,

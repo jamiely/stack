@@ -44,6 +44,8 @@ export interface DebugConfig {
   recoveryGrowthMultiplier: number;
   recoverySlowdownFactor: number;
   recoverySlowdownPlacements: number;
+  feedbackAudioEnabled: boolean;
+  feedbackHapticsEnabled: boolean;
   prebuiltLevels: number;
   debrisLifetime: number;
   debrisTumbleSpeed: number;
@@ -76,6 +78,17 @@ export interface PublicGameState {
     rewardsEarned: number;
     slowdownPlacementsRemaining: number;
     speedMultiplier: number;
+  };
+  feedback: {
+    audioEnabled: boolean;
+    hapticsEnabled: boolean;
+    audioSupported: boolean;
+    hapticsSupported: boolean;
+    audioUnlocked: boolean;
+    eventsTriggered: number;
+    audioEventsPlayed: number;
+    hapticEventsPlayed: number;
+    lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | null;
   };
   debugConfig: DebugConfig;
   testMode: {

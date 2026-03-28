@@ -12,11 +12,12 @@ The repo now includes a playable early milestone:
 - Alternating X/Z stack placement with trim-or-miss gameplay
 - Combo streak tracking (default target: 8 perfect hits) with live HUD progress
 - Recovery rewards at combo milestones: capped slab-growth recovery plus temporary movement slowdown windows
+- Lightweight audio + haptics feedback manager (perfect/trim/miss cues) with safe browser capability gating
 - Upward camera follow, score/height HUD, impact flash feedback, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
 - Playwright coverage for boot/start, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
-- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, and recovery telemetry assertions
+- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, recovery telemetry, and feedback telemetry assertions
 - Git hooks for unit tests on commit and Playwright on commit/push
 
 ## Development
@@ -47,7 +48,7 @@ The dev server runs on `http://127.0.0.1:4173`.
 - Visit `/?debug` to expose the runtime tuning panel
 - In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
 - Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused; optional `&seed=<int>` drives deterministic seeded active-slab spawn states and is surfaced through test-state snapshots
-- Debug panel controls: tune camera, slab dimensions, movement speed/ramp, perfect tolerance, combo target, recovery growth/slowdown behavior, starting stack size, debris lifetime/tumble, and grid visibility
+- Debug panel controls: tune camera, slab dimensions, movement speed/ramp, perfect tolerance, combo target, recovery growth/slowdown behavior, audio/haptics enablement, starting stack size, debris lifetime/tumble, and grid visibility
 - HUD includes a combo card (`current/target`) so perfect streak progress is visible even outside debug mode
 
 ## Notes

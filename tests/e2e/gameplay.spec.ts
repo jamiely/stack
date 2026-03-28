@@ -21,6 +21,17 @@ interface E2EState {
     slowdownPlacementsRemaining: number;
     speedMultiplier: number;
   };
+  feedback: {
+    audioEnabled: boolean;
+    hapticsEnabled: boolean;
+    audioSupported: boolean;
+    hapticsSupported: boolean;
+    audioUnlocked: boolean;
+    eventsTriggered: number;
+    audioEventsPlayed: number;
+    hapticEventsPlayed: number;
+    lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | null;
+  };
   debugConfig: {
     motionSpeed: number;
     motionRange: number;
@@ -28,6 +39,8 @@ interface E2EState {
     recoveryGrowthMultiplier: number;
     recoverySlowdownFactor: number;
     recoverySlowdownPlacements: number;
+    feedbackAudioEnabled: boolean;
+    feedbackHapticsEnabled: boolean;
   };
   testMode: {
     enabled: boolean;
@@ -420,6 +433,106 @@ test("debug combo target + growth tuning changes recovery behavior", async ({ pa
   await expect.poll(async () => (await getTestState(page))?.recovery.rewardsEarned).toBe(1);
   await expect.poll(async () => (await getTestState(page))?.combo.target).toBe(2);
   await expect.poll(async () => (await getTestState(page))?.topDimensions?.width).toBe(4);
+});
+
+test("audio/haptics toggles gate runtime feedback emission", async ({ page }) => {
+  await page.addInitScript(() => {
+    class FakeAudioContext {
+      public state: AudioContextState = "running";
+      public currentTime = 0;
+      public destination = {} as AudioNode;
+
+      public resume(): Promise<void> {
+        this.state = "running";
+        return Promise.resolve();
+      }
+
+      public createOscillator() {
+        return {
+          type: "triangle",
+          frequency: { setValueAtTime: () => undefined },
+          connect: () => undefined,
+          start: () => undefined,
+          stop: () => undefined,
+        };
+      }
+
+      public createGain() {
+        return {
+          gain: {
+            setValueAtTime: () => undefined,
+            linearRampToValueAtTime: () => undefined,
+          },
+          connect: () => undefined,
+        };
+      }
+    }
+
+    Object.defineProperty(window, "AudioContext", {
+      value: FakeAudioContext,
+      configurable: true,
+    });
+
+    Object.defineProperty(navigator, "vibrate", {
+      value: () => true,
+      configurable: true,
+    });
+  });
+
+  await page.goto("/?debug&test&paused=0");
+  await expect(page.getByTestId("debug-panel")).toBeVisible();
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.startGame();
+    api.setPaused(true);
+    api.placeAtOffset(0);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.feedback.eventsTriggered).toBe(1);
+  await expect.poll(async () => (await getTestState(page))?.feedback.audioEventsPlayed).toBe(1);
+  await expect.poll(async () => (await getTestState(page))?.feedback.hapticEventsPlayed).toBe(1);
+  await expect.poll(async () => (await getTestState(page))?.feedback.lastEvent).toBe("placement_perfect");
+
+  await page.locator('input[data-debug-key="feedbackAudioEnabled"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.checked = false;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await page.locator('input[data-debug-key="feedbackHapticsEnabled"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.checked = false;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.debugConfig.feedbackAudioEnabled).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.debugConfig.feedbackHapticsEnabled).toBe(false);
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        placeAtOffset: (offset: number) => "landed" | "perfect" | "miss" | null;
+      };
+    }).__towerStackerTestApi;
+
+    api?.placeAtOffset(0.4);
+  });
+
+  await expect.poll(async () => (await getTestState(page))?.feedback.eventsTriggered).toBe(2);
+  await expect.poll(async () => (await getTestState(page))?.feedback.audioEventsPlayed).toBe(1);
+  await expect.poll(async () => (await getTestState(page))?.feedback.hapticEventsPlayed).toBe(1);
 });
 
 test.describe("mobile touch pass", () => {
