@@ -66,7 +66,11 @@ Runtime tuning panel includes:
 ## Automated Verification
 
 - Unit tests cover pure logic modules (trim, spawn, oscillation, config clamping)
-- Playwright smoke tests cover:
+- Playwright end-to-end tests cover:
   - Title boot and start flow
   - Debug-panel and status-surface query gating
+  - Test-mode API exposure and deterministic single-step advancement
+  - Keyboard and pointer stop input paths
+  - Miss transition to game over and restart reset behavior
+  - Runtime debug-speed tuning affecting active slab movement
 - Unit coverage threshold is enforced at 90% for the logic layer

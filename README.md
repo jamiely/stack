@@ -13,7 +13,7 @@ The repo now includes a playable early milestone:
 - Upward camera follow, score/height HUD, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
-- Playwright smoke coverage for boot, start flow, and debug gating
+- Playwright coverage for boot/start, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
 - Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping and scripted placement setup
 - Git hooks for unit tests on commit and Playwright on commit/push
 
