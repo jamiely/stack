@@ -1,7 +1,7 @@
 # TODO
 
-- [x] make windows more 3d, give them sills, and window frames that are bodies
-- [x] add another window style whose top ends in a point. randomly choose between window styles.
-- [x] when the game ends, the block that we have not placed should also explode into voxels
-- [x] increase ledge maximum width to 100% block length
-- [x] randomize the number of windows that appear on each side of the block
+- [x] on a single block, do not have different style windows
+- [x] add a rounded top, gothic style window
+- [x] add a window that has a window box with plants
+- [x] add a window style with shutters
+- [x] implement the tentacle distraction. They randomly bust through all the windows on one side of a block and extend out into the air (modeled as segmented boxes ending in a pyramid tip).

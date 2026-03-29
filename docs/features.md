@@ -20,7 +20,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - Runs start immediately on load; a brief `Tower stacker` title card appears at boot and eases out left
 - Restart-after-failure is handled by direct gameplay input (`Space`/`Enter` release, click, tap) from `game_over` without a dedicated restart button
 - V3 distraction framework runs as a deterministic side-channel (seeded + level-gated) without mutating trim/placement math
-- V3.2 actor layer now renders a gorilla that climbs around the tower perimeter with rhythmic slam pulses, a UFO that can complete a full tower orbit and then flies off-screen toward the player in Z instead of popping out when deactivating (with contrast-wash flashes), and persistent front-layer cloud cover (including mid-screen occluders) with distraction-driven intensity boosts
+- V3.3 actor layer now renders a gorilla that climbs around the tower perimeter with rhythmic slam pulses, a UFO that can complete a full tower orbit and then flies off-screen toward the player in Z instead of popping out when deactivating (with contrast-wash flashes), persistent front-layer cloud cover (including mid-screen occluders) with distraction-driven intensity boosts, and tentacle bursts that randomly select one slab side and punch through all windows on that side
 - UFO orbit altitude now tracks exactly one slab-height above the current tower top center
 - Structural integrity telemetry computes a deterministic tower center-of-mass approximation and classifies `stable`/`precarious`/`unstable` tiers against tunable thresholds
 - Collapse fail sequence triggers on hard misses, applying deterministic fallback toppling visuals, failure camera pullback, and collapse feedback cues
@@ -37,7 +37,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - Collapse now also spawns a deterministic voxelized explosion burst from tower slabs for game-over presentation, including the unplaced slab that caused a hard miss
 - Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
 - Debris pieces inherit the parent slab color, push away from the tower with deterministic lateral motion, and no longer use rotational tumble spin
-- Landed (non-active) slabs (including the prebuilt starting stack) add procedural 3D window facades with body-framed windows, protruding sills, deterministic per-side window-count variation, and mixed standard/storybook-gothic pointed-arch window styles while keeping windows vertically centered
+- Landed (non-active) slabs (including the prebuilt starting stack) add procedural 3D window facades with body-framed windows, protruding sills, deterministic per-side window-count variation, one deterministic style per slab (no mixed styles on a single block), and style variants for rectangular, pointed gothic, rounded gothic, planter-box, and shuttered windows while keeping windows vertically centered
 - Landed slabs can also render deterministic randomized scalloped eave trims near top edges for arcade-style architectural variation, with eave length driven by slab block length but capped to each face span so trims never overhang past corners
 - Landed slabs can render deterministic randomized bottom-half weathering overlays to add façade wear variation
 - Slab color palette varies by slab level (hue progression)

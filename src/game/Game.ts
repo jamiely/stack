@@ -3,6 +3,7 @@ import {
   BoxGeometry,
   CanvasTexture,
   Color,
+  CylinderGeometry,
   DirectionalLight,
   DoubleSide,
   GridHelper,
@@ -71,6 +72,15 @@ interface CollapseVoxel {
   velocity: { x: number; y: number; z: number };
   angularVelocity: { x: number; y: number; z: number };
   remainingLifetime: number;
+}
+
+type WindowStyle = "rectangular" | "pointedGothic" | "roundedGothic" | "planter" | "shuttered";
+
+interface WindowFaceDescriptor {
+  span: number;
+  createPosition: (offset: number, outDepth: number) => { x: number; y: number; z: number };
+  rotationY: number;
+  noiseSalt: number;
 }
 
 interface PerformanceSnapshot {
@@ -176,6 +186,8 @@ const PLACEMENT_SHAKE_DURATION_SECONDS = 0.16;
 const COLLAPSE_VOXEL_SIZE = 0.45;
 const COLLAPSE_VOXEL_LIFETIME_SECONDS = 2.2;
 const COLLAPSE_VOXEL_MAX_COUNT = 560;
+const TENTACLE_SIDE_SWITCH_SPEED = 0.75;
+const WINDOW_STYLES: WindowStyle[] = ["rectangular", "pointedGothic", "roundedGothic", "planter", "shuttered"];
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -254,6 +266,7 @@ export class Game {
   private readonly archivedGroup = new Group();
   private readonly debrisGroup = new Group();
   private readonly collapseVoxelGroup = new Group();
+  private readonly tentacleGroup = new Group();
   private readonly gridHelper = new GridHelper(28, 28, 0xd8b162, 0x28425f);
 
   private debugConfig: DebugConfig = defaultDebugConfig;
@@ -325,6 +338,7 @@ export class Game {
   private readonly weatheringTexture = this.createWeatheringTexture();
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudAnchorsInitialized = false;
+  private tentacleBurstKey: string | null = null;
 
   public constructor(container: HTMLDivElement) {
     this.container = container;
@@ -411,7 +425,7 @@ export class Game {
       this.debugConfig.cameraDistance,
     );
     this.gridHelper.position.y = -12;
-    this.scene.add(this.stackGroup, this.archivedGroup, this.debrisGroup, this.collapseVoxelGroup, this.gridHelper);
+    this.scene.add(this.stackGroup, this.archivedGroup, this.debrisGroup, this.collapseVoxelGroup, this.tentacleGroup, this.gridHelper);
 
     const ambientLight = new AmbientLight(0xffffff, 1.8);
     const directionalLight = new DirectionalLight(0xfff0c8, 2.2);
@@ -875,6 +889,7 @@ export class Game {
     this.clearGroup(this.archivedGroup, true);
     this.clearGroup(this.debrisGroup, true);
     this.clearGroup(this.collapseVoxelGroup, true);
+    this.clearGroup(this.tentacleGroup, true);
     this.slabMeshes = new Map<number, Mesh>();
     this.archivedLevelSet = new Set<number>();
     this.archivedChunkCount = 0;
@@ -889,6 +904,7 @@ export class Game {
     this.averageFrameTimeMs = 0;
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.cloudAnchorsInitialized = false;
+    this.tentacleBurstKey = null;
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
 
@@ -1314,6 +1330,8 @@ export class Game {
       this.tremorPulse.style.opacity = (tremorStrength * 0.75).toFixed(3);
       this.tremorPulse.style.transform = `scale(${(1 + tremorStrength * 0.4).toFixed(3)})`;
     }
+
+    this.updateTentacleBursts(snapshot);
   }
 
   private updateCloudLayer(snapshot: DistractionSnapshot): void {
@@ -1376,6 +1394,105 @@ export class Game {
     const cloudOpacity = baselineCloudOpacity + cloudSignalOpacity;
     this.cloudLayer.style.opacity = Math.min(0.92, cloudOpacity).toFixed(3);
     this.cloudLayer.style.transform = "translateX(0px)";
+  }
+
+  private updateTentacleBursts(snapshot: DistractionSnapshot): void {
+    const tentacleEnabled =
+      this.gameState === "playing" && this.debugConfig.distractionsEnabled && this.debugConfig.distractionTentacleEnabled;
+    if (!tentacleEnabled || !snapshot.active.tentacle) {
+      if (this.tentacleGroup.children.length > 0) {
+        this.clearGroup(this.tentacleGroup, true);
+      }
+      this.tentacleBurstKey = null;
+      return;
+    }
+
+    const slab = this.landedSlabs[this.landedSlabs.length - 1];
+    if (!slab || slab.dimensions.height < 0.9) {
+      this.clearGroup(this.tentacleGroup, true);
+      this.tentacleBurstKey = null;
+      return;
+    }
+
+    const cycle = Math.floor(this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * TENTACLE_SIDE_SWITCH_SPEED);
+    const sideNoise = this.sampleDecorNoise(slab.level * 0.43 + cycle * 0.67, 18.3);
+    const faceIndex = Math.min(3, Math.floor(sideNoise * 4));
+    const burstKey = `${slab.level}:${cycle}:${faceIndex}`;
+
+    if (burstKey !== this.tentacleBurstKey) {
+      this.rebuildTentacleBurstForFace(slab, faceIndex);
+      this.tentacleBurstKey = burstKey;
+    }
+
+    const signal = snapshot.signals.tentacle;
+    this.tentacleGroup.children.forEach((tentacle, index) => {
+      const phase = typeof tentacle.userData.phase === "number" ? tentacle.userData.phase : 0;
+      const wiggle = (Math.sin(this.distractionState.elapsedSeconds * 6.2 + phase) + 1) / 2;
+      const extension = 0.35 + signal * (0.7 + wiggle * 0.9);
+      tentacle.scale.z = extension;
+      tentacle.scale.x = 0.92 + signal * 0.22;
+      tentacle.scale.y = 0.92 + signal * 0.18;
+      tentacle.rotation.x = Math.sin(this.distractionState.elapsedSeconds * 4.7 + phase) * 0.13;
+      tentacle.rotation.y = Math.cos(this.distractionState.elapsedSeconds * 3.9 + phase + index * 0.4) * 0.08;
+    });
+  }
+
+  private rebuildTentacleBurstForFace(slab: SlabData, faceIndex: number): void {
+    this.clearGroup(this.tentacleGroup, true);
+
+    const faces = this.getWindowFaceDescriptors(slab);
+    const face = faces[faceIndex];
+    if (!face) {
+      return;
+    }
+
+    const windowCount = this.getWindowCountForFace(slab, face, faceIndex);
+    const offsets = this.getWindowHorizontalOffsets(face.span, windowCount);
+    const windowHeight = Math.max(0.5, Math.min(0.92, slab.dimensions.height * 0.36));
+    const windowWidth = Math.max(0.16, windowHeight * 0.42);
+    const frameDepth = Math.max(0.045, Math.min(0.08, windowWidth * 0.3));
+
+    const tentacleMaterial = new MeshStandardMaterial({
+      color: new Color("#5a7591"),
+      emissive: new Color("#152434"),
+      emissiveIntensity: 0.2,
+      metalness: 0.08,
+      roughness: 0.72,
+    });
+
+    offsets.forEach((localOffset, index) => {
+      const root = new Group();
+      const outDepth = frameDepth / 2 + 0.04;
+      const position = face.createPosition(localOffset, outDepth);
+      root.position.set(slab.position.x + position.x, slab.position.y + position.y, slab.position.z + position.z);
+      root.rotation.y = face.rotationY;
+      root.userData.phase = index * 0.83 + this.sampleDecorNoise(slab.level * 0.71 + index * 0.43, 10.22) * Math.PI * 2;
+
+      const segmentCount = 3 + Math.floor(this.sampleDecorNoise(slab.level * 0.97 + index * 0.77, 16.11) * 3);
+      let cursor = 0;
+      for (let segment = 0; segment < segmentCount; segment += 1) {
+        const segmentLength = Math.max(0.12, windowHeight * (0.18 - segment * 0.016));
+        const segmentWidth = Math.max(0.06, windowWidth * (0.34 - segment * 0.036));
+        const segmentHeight = segmentWidth;
+        const segmentMesh = new Mesh(new BoxGeometry(segmentWidth, segmentHeight, segmentLength), tentacleMaterial);
+        segmentMesh.position.set(
+          Math.sin(segment * 0.9 + index) * segmentWidth * 0.22,
+          Math.cos(segment * 0.8 + index * 0.4) * segmentHeight * 0.2,
+          cursor + segmentLength / 2,
+        );
+        cursor += segmentLength * 0.82;
+        root.add(segmentMesh);
+      }
+
+      const tipLength = Math.max(0.12, windowHeight * 0.2);
+      const tipRadius = Math.max(0.035, windowWidth * 0.14);
+      const tip = new Mesh(new CylinderGeometry(0, tipRadius, tipLength, 4, 1), tentacleMaterial);
+      tip.rotation.x = Math.PI / 2;
+      tip.position.z = cursor + tipLength / 2;
+      root.add(tip);
+
+      this.tentacleGroup.add(root);
+    });
   }
 
   private updateActiveSlab(deltaSeconds: number): void {
@@ -2094,12 +2211,48 @@ export class Game {
       roughness: 0.66,
     });
 
-    const faces: Array<{
-      span: number;
-      createPosition: (offset: number, outDepth: number) => { x: number; y: number; z: number };
-      rotationY: number;
-      noiseSalt: number;
-    }> = [
+    const windowStyle = this.getWindowStyleForSlab(slab);
+
+    this.getWindowFaceDescriptors(slab).forEach((face, faceIndex) => {
+      const windowCount = this.getWindowCountForFace(slab, face, faceIndex);
+      const offsets = this.getWindowHorizontalOffsets(face.span, windowCount);
+
+      offsets.forEach((localOffset) => {
+        const windowGroup = new Group();
+        const outerWidth = windowWidth + frameThickness * 2;
+        const outerHeight = windowHeight + frameThickness * 2;
+        const glassWidth = Math.max(0.08, windowWidth * 0.9);
+        const glassHeight = Math.max(0.14, windowHeight * 0.9);
+
+        const sillWidth = Math.min(face.span, Math.max(outerWidth * 1.3, 0.22));
+        const sill = new Mesh(new BoxGeometry(sillWidth, sillHeight, sillDepth), sillMaterial);
+        sill.position.y = -outerHeight / 2 - sillHeight * 0.55;
+        sill.position.z = sillDepth / 2 - frameDepth * 0.5;
+        windowGroup.add(sill);
+
+        this.buildWindowStyle(windowGroup, windowStyle, {
+          frameMaterial,
+          glassMaterial,
+          sillMaterial,
+          frameDepth,
+          frameThickness,
+          outerWidth,
+          outerHeight,
+          glassWidth,
+          glassHeight,
+        });
+
+        const outDepth = frameDepth / 2 + 0.02;
+        const position = face.createPosition(localOffset, outDepth);
+        windowGroup.position.set(position.x, position.y, position.z);
+        windowGroup.rotation.y = face.rotationY;
+        mesh.add(windowGroup);
+      });
+    });
+  }
+
+  private getWindowFaceDescriptors(slab: SlabData): WindowFaceDescriptor[] {
+    return [
       {
         span: slab.dimensions.depth,
         createPosition: (offset, outDepth) => ({ x: slab.dimensions.width / 2 + outDepth, y: 0, z: offset }),
@@ -2125,126 +2278,250 @@ export class Game {
         noiseSalt: 5.6,
       },
     ];
+  }
 
-    faces.forEach((face, faceIndex) => {
-      const maxCountBySpan = Math.max(1, Math.min(7, Math.floor(face.span / 0.8)));
-      const countNoise = this.sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + faceIndex * 0.73);
-      const windowCount = Math.max(1, Math.min(maxCountBySpan, 1 + Math.floor(countNoise * maxCountBySpan)));
-      const spacing = face.span / (windowCount + 1);
+  private getWindowCountForFace(slab: SlabData, face: WindowFaceDescriptor, faceIndex: number): number {
+    const maxCountBySpan = Math.max(1, Math.min(7, Math.floor(face.span / 0.8)));
+    const countNoise = this.sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + faceIndex * 0.73);
+    return Math.max(1, Math.min(maxCountBySpan, 1 + Math.floor(countNoise * maxCountBySpan)));
+  }
 
-      for (let index = 0; index < windowCount; index += 1) {
-        const localOffset = -face.span / 2 + spacing * (index + 1);
-        const styleNoise = this.sampleDecorNoise(slab.level * 1.27 + face.noiseSalt + index * 0.61, 8.17);
-        const pointedTop = styleNoise > 0.58;
+  private getWindowHorizontalOffsets(span: number, count: number): number[] {
+    const spacing = span / (count + 1);
+    return Array.from({ length: count }, (_, index) => -span / 2 + spacing * (index + 1));
+  }
 
-        const windowGroup = new Group();
-        const outerWidth = windowWidth + frameThickness * 2;
-        const outerHeight = windowHeight + frameThickness * 2;
-        const glassWidth = Math.max(0.08, windowWidth * 0.9);
-        const glassHeight = Math.max(0.14, windowHeight * 0.9);
+  private getWindowStyleForSlab(slab: SlabData): WindowStyle {
+    const styleNoise = this.sampleDecorNoise(slab.level * 1.27 + 8.17, 3.09);
+    const index = Math.min(WINDOW_STYLES.length - 1, Math.floor(styleNoise * WINDOW_STYLES.length));
+    return WINDOW_STYLES[index] ?? "rectangular";
+  }
 
-        const sillWidth = Math.min(face.span, Math.max(outerWidth * 1.3, 0.22));
-        const sill = new Mesh(new BoxGeometry(sillWidth, sillHeight, sillDepth), sillMaterial);
-        sill.position.y = -outerHeight / 2 - sillHeight * 0.55;
-        sill.position.z = sillDepth / 2 - frameDepth * 0.5;
-        windowGroup.add(sill);
+  private buildWindowStyle(
+    windowGroup: Group,
+    style: WindowStyle,
+    dimensions: {
+      frameMaterial: MeshStandardMaterial;
+      glassMaterial: MeshStandardMaterial;
+      sillMaterial: MeshStandardMaterial;
+      frameDepth: number;
+      frameThickness: number;
+      outerWidth: number;
+      outerHeight: number;
+      glassWidth: number;
+      glassHeight: number;
+    },
+  ): void {
+    const {
+      frameMaterial,
+      glassMaterial,
+      sillMaterial,
+      frameDepth,
+      frameThickness,
+      outerWidth,
+      outerHeight,
+      glassWidth,
+      glassHeight,
+    } = dimensions;
 
-        if (pointedTop) {
-          const jambHeight = outerHeight * 0.76;
-          const shoulderY = -outerHeight / 2 + jambHeight;
-          const gableRise = Math.max(frameThickness * 2.2, outerHeight * 0.42);
-          const gableRun = Math.max(frameThickness * 1.4, outerWidth / 2 - frameThickness * 0.45);
-          const gableLength = Math.sqrt(gableRun * gableRun + gableRise * gableRise);
+    this.addRectangularCore(windowGroup, frameMaterial, glassMaterial, frameDepth, frameThickness, outerWidth, outerHeight, glassWidth, glassHeight);
 
-          const jambGeometry = new BoxGeometry(frameThickness, jambHeight, frameDepth);
-          const leftJamb = new Mesh(jambGeometry, frameMaterial);
-          leftJamb.position.set(-outerWidth / 2 + frameThickness / 2, -outerHeight / 2 + jambHeight / 2, 0);
+    if (style === "pointedGothic") {
+      this.addPointedGothicTop(windowGroup, frameMaterial, glassMaterial, frameDepth, frameThickness, outerWidth, outerHeight);
+    } else if (style === "roundedGothic") {
+      this.addRoundedGothicTop(windowGroup, frameMaterial, glassMaterial, frameDepth, frameThickness, outerWidth, outerHeight, glassWidth);
+    } else if (style === "planter") {
+      this.addPlanterBox(windowGroup, sillMaterial, frameDepth, frameThickness, outerWidth, outerHeight);
+    } else if (style === "shuttered") {
+      this.addShutters(windowGroup, frameMaterial, frameDepth, frameThickness, outerWidth, outerHeight);
+    }
+  }
 
-          const rightJamb = new Mesh(jambGeometry, frameMaterial);
-          rightJamb.position.set(outerWidth / 2 - frameThickness / 2, -outerHeight / 2 + jambHeight / 2, 0);
+  private addRectangularCore(
+    windowGroup: Group,
+    frameMaterial: MeshStandardMaterial,
+    glassMaterial: MeshStandardMaterial,
+    frameDepth: number,
+    frameThickness: number,
+    outerWidth: number,
+    outerHeight: number,
+    glassWidth: number,
+    glassHeight: number,
+  ): void {
+    const sideFrameGeometry = new BoxGeometry(frameThickness, outerHeight, frameDepth);
+    const topBottomFrameGeometry = new BoxGeometry(outerWidth, frameThickness, frameDepth);
 
-          const bottomFrame = new Mesh(new BoxGeometry(outerWidth, frameThickness, frameDepth), frameMaterial);
-          bottomFrame.position.y = -outerHeight / 2 + frameThickness / 2;
+    const leftFrame = new Mesh(sideFrameGeometry, frameMaterial);
+    leftFrame.position.x = -outerWidth / 2 + frameThickness / 2;
+    const rightFrame = new Mesh(sideFrameGeometry, frameMaterial);
+    rightFrame.position.x = outerWidth / 2 - frameThickness / 2;
+    const topFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
+    topFrame.position.y = outerHeight / 2 - frameThickness / 2;
+    const bottomFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
+    bottomFrame.position.y = -outerHeight / 2 + frameThickness / 2;
 
-          const gableBeamGeometry = new BoxGeometry(gableLength, frameThickness, frameDepth);
-          const leftArch = new Mesh(gableBeamGeometry, frameMaterial);
-          leftArch.position.set(-gableRun / 2, shoulderY + gableRise / 2, 0);
-          leftArch.rotation.z = Math.atan2(gableRise, gableRun);
+    const glass = new Mesh(new BoxGeometry(glassWidth, glassHeight, frameDepth * 0.48), glassMaterial);
+    glass.position.z = -frameDepth * 0.16;
 
-          const rightArch = new Mesh(gableBeamGeometry, frameMaterial);
-          rightArch.position.set(gableRun / 2, shoulderY + gableRise / 2, 0);
-          rightArch.rotation.z = -Math.atan2(gableRise, gableRun);
+    windowGroup.add(leftFrame, rightFrame, topFrame, bottomFrame, glass);
+  }
 
-          const apexCap = new Mesh(new BoxGeometry(frameThickness, frameThickness * 1.15, frameDepth), frameMaterial);
-          apexCap.position.set(0, shoulderY + gableRise, 0);
+  private addPointedGothicTop(
+    windowGroup: Group,
+    frameMaterial: MeshStandardMaterial,
+    glassMaterial: MeshStandardMaterial,
+    frameDepth: number,
+    frameThickness: number,
+    outerWidth: number,
+    outerHeight: number,
+  ): void {
+    const shoulderY = outerHeight / 2 - frameThickness;
+    const gableRise = Math.max(frameThickness * 2, outerHeight * 0.32);
+    const gableRun = Math.max(frameThickness * 1.2, outerWidth / 2 - frameThickness * 0.35);
+    const gableLength = Math.sqrt(gableRun * gableRun + gableRise * gableRise);
+    const gableBeamGeometry = new BoxGeometry(gableLength, frameThickness, frameDepth);
 
-          const lowerGlassHeight = Math.max(0.16, jambHeight - frameThickness * 2.1);
-          const paneGap = frameThickness * 0.65;
-          const paneWidth = Math.max(0.06, (glassWidth - paneGap - frameThickness * 0.25) / 2);
-          const paneY = -outerHeight / 2 + frameThickness + lowerGlassHeight / 2;
-          const paneZ = -frameDepth * 0.18;
+    const leftArch = new Mesh(gableBeamGeometry, frameMaterial);
+    leftArch.position.set(-gableRun / 2, shoulderY + gableRise / 2, 0);
+    leftArch.rotation.z = Math.atan2(gableRise, gableRun);
 
-          const leftPane = new Mesh(new BoxGeometry(paneWidth, lowerGlassHeight, frameDepth * 0.42), glassMaterial);
-          leftPane.position.set(-(paneWidth / 2 + paneGap / 2), paneY, paneZ);
-          const rightPane = new Mesh(new BoxGeometry(paneWidth, lowerGlassHeight, frameDepth * 0.42), glassMaterial);
-          rightPane.position.set(paneWidth / 2 + paneGap / 2, paneY, paneZ);
+    const rightArch = new Mesh(gableBeamGeometry, frameMaterial);
+    rightArch.position.set(gableRun / 2, shoulderY + gableRise / 2, 0);
+    rightArch.rotation.z = -Math.atan2(gableRise, gableRun);
 
-          const mullionHeight = lowerGlassHeight + gableRise * 0.78;
-          const mullion = new Mesh(new BoxGeometry(frameThickness * 0.75, mullionHeight, frameDepth * 0.65), frameMaterial);
-          mullion.position.set(0, -outerHeight / 2 + frameThickness + mullionHeight / 2, -frameDepth * 0.04);
+    const apexCap = new Mesh(new BoxGeometry(frameThickness, frameThickness * 1.15, frameDepth), frameMaterial);
+    apexCap.position.set(0, shoulderY + gableRise, 0);
 
-          const archGlassRise = Math.max(frameThickness * 0.9, gableRise - frameThickness * 0.95);
-          const archGlassRun = Math.max(frameThickness * 0.7, gableRun - frameThickness * 0.9);
-          const archGlassLength = Math.sqrt(archGlassRun * archGlassRun + archGlassRise * archGlassRise);
-          const archGlassGeometry = new BoxGeometry(archGlassLength, frameThickness * 0.46, frameDepth * 0.38);
+    const archGlassRise = Math.max(frameThickness * 0.9, gableRise - frameThickness * 0.95);
+    const archGlassRun = Math.max(frameThickness * 0.7, gableRun - frameThickness * 0.9);
+    const archGlassLength = Math.sqrt(archGlassRun * archGlassRun + archGlassRise * archGlassRise);
+    const archGlassGeometry = new BoxGeometry(archGlassLength, frameThickness * 0.46, frameDepth * 0.38);
 
-          const leftArchGlass = new Mesh(archGlassGeometry, glassMaterial);
-          leftArchGlass.position.set(-archGlassRun / 2, shoulderY + archGlassRise / 2 - frameThickness * 0.1, paneZ);
-          leftArchGlass.rotation.z = Math.atan2(archGlassRise, archGlassRun);
+    const leftArchGlass = new Mesh(archGlassGeometry, glassMaterial);
+    leftArchGlass.position.set(-archGlassRun / 2, shoulderY + archGlassRise / 2 - frameThickness * 0.1, -frameDepth * 0.16);
+    leftArchGlass.rotation.z = Math.atan2(archGlassRise, archGlassRun);
 
-          const rightArchGlass = new Mesh(archGlassGeometry, glassMaterial);
-          rightArchGlass.position.set(archGlassRun / 2, shoulderY + archGlassRise / 2 - frameThickness * 0.1, paneZ);
-          rightArchGlass.rotation.z = -Math.atan2(archGlassRise, archGlassRun);
+    const rightArchGlass = new Mesh(archGlassGeometry, glassMaterial);
+    rightArchGlass.position.set(archGlassRun / 2, shoulderY + archGlassRise / 2 - frameThickness * 0.1, -frameDepth * 0.16);
+    rightArchGlass.rotation.z = -Math.atan2(archGlassRise, archGlassRun);
 
-          windowGroup.add(
-            leftJamb,
-            rightJamb,
-            bottomFrame,
-            leftArch,
-            rightArch,
-            apexCap,
-            leftPane,
-            rightPane,
-            mullion,
-            leftArchGlass,
-            rightArchGlass,
-          );
-        } else {
-          const sideFrameGeometry = new BoxGeometry(frameThickness, outerHeight, frameDepth);
-          const topBottomFrameGeometry = new BoxGeometry(outerWidth, frameThickness, frameDepth);
+    windowGroup.add(leftArch, rightArch, apexCap, leftArchGlass, rightArchGlass);
+  }
 
-          const leftFrame = new Mesh(sideFrameGeometry, frameMaterial);
-          leftFrame.position.x = -outerWidth / 2 + frameThickness / 2;
-          const rightFrame = new Mesh(sideFrameGeometry, frameMaterial);
-          rightFrame.position.x = outerWidth / 2 - frameThickness / 2;
-          const topFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
-          topFrame.position.y = outerHeight / 2 - frameThickness / 2;
-          const bottomFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
-          bottomFrame.position.y = -outerHeight / 2 + frameThickness / 2;
+  private addRoundedGothicTop(
+    windowGroup: Group,
+    frameMaterial: MeshStandardMaterial,
+    glassMaterial: MeshStandardMaterial,
+    frameDepth: number,
+    frameThickness: number,
+    outerWidth: number,
+    outerHeight: number,
+    glassWidth: number,
+  ): void {
+    const archBaseY = outerHeight / 2 - frameThickness * 0.95;
+    const archRise = Math.max(frameThickness * 1.5, outerHeight * 0.24);
+    const segments = 5;
 
-          const glass = new Mesh(new BoxGeometry(glassWidth, glassHeight, frameDepth * 0.48), glassMaterial);
-          glass.position.z = -frameDepth * 0.16;
+    for (let segment = 0; segment < segments; segment += 1) {
+      const t0 = segment / segments;
+      const t1 = (segment + 1) / segments;
+      const a0 = Math.PI - Math.PI * t0;
+      const a1 = Math.PI - Math.PI * t1;
+      const x0 = Math.cos(a0) * (outerWidth / 2 - frameThickness * 0.5);
+      const y0 = Math.sin(a0) * archRise;
+      const x1 = Math.cos(a1) * (outerWidth / 2 - frameThickness * 0.5);
+      const y1 = Math.sin(a1) * archRise;
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const length = Math.max(frameThickness, Math.sqrt(dx * dx + dy * dy));
 
-          windowGroup.add(leftFrame, rightFrame, topFrame, bottomFrame, glass);
-        }
+      const frameSegment = new Mesh(new BoxGeometry(length, frameThickness, frameDepth), frameMaterial);
+      frameSegment.position.set((x0 + x1) / 2, archBaseY + (y0 + y1) / 2, 0);
+      frameSegment.rotation.z = Math.atan2(dy, dx);
+      windowGroup.add(frameSegment);
 
-        const outDepth = frameDepth / 2 + 0.02;
-        const position = face.createPosition(localOffset, outDepth);
-        windowGroup.position.set(position.x, position.y, position.z);
-        windowGroup.rotation.y = face.rotationY;
-        mesh.add(windowGroup);
-      }
+      const glassSegment = new Mesh(new BoxGeometry(length * 0.78, frameThickness * 0.42, frameDepth * 0.38), glassMaterial);
+      glassSegment.position.set((x0 + x1) / 2, archBaseY + (y0 + y1) / 2 - frameThickness * 0.12, -frameDepth * 0.16);
+      glassSegment.rotation.z = Math.atan2(dy, dx);
+      windowGroup.add(glassSegment);
+    }
+
+    const centerMullion = new Mesh(new BoxGeometry(frameThickness * 0.72, Math.max(0.14, archRise), frameDepth * 0.62), frameMaterial);
+    centerMullion.position.set(0, archBaseY - archRise * 0.45, -frameDepth * 0.02);
+    windowGroup.add(centerMullion);
+
+    const rose = new Mesh(new BoxGeometry(Math.max(0.05, glassWidth * 0.16), Math.max(0.05, glassWidth * 0.16), frameDepth * 0.35), glassMaterial);
+    rose.position.set(0, archBaseY + archRise * 0.44, -frameDepth * 0.12);
+    windowGroup.add(rose);
+  }
+
+  private addPlanterBox(
+    windowGroup: Group,
+    sillMaterial: MeshStandardMaterial,
+    frameDepth: number,
+    frameThickness: number,
+    outerWidth: number,
+    outerHeight: number,
+  ): void {
+    const planterWidth = outerWidth * 0.9;
+    const planterHeight = Math.max(0.06, frameThickness * 1.2);
+    const planterDepth = frameDepth * 1.6;
+
+    const planter = new Mesh(new BoxGeometry(planterWidth, planterHeight, planterDepth), sillMaterial);
+    planter.position.set(0, -outerHeight / 2 - planterHeight * 1.2, planterDepth / 2 - frameDepth * 0.4);
+    windowGroup.add(planter);
+
+    const stemMaterial = new MeshStandardMaterial({
+      color: new Color("#6d9a5f"),
+      emissive: new Color("#1d311f"),
+      emissiveIntensity: 0.09,
+      metalness: 0.03,
+      roughness: 0.77,
     });
+
+    for (let index = 0; index < 3; index += 1) {
+      const stemHeight = outerHeight * (0.18 + index * 0.04);
+      const stem = new Mesh(new BoxGeometry(frameThickness * 0.3, stemHeight, frameThickness * 0.3), stemMaterial);
+      stem.position.set(-planterWidth * 0.24 + index * planterWidth * 0.24, planter.position.y + stemHeight / 2, planter.position.z - frameDepth * 0.3);
+
+      const leaf = new Mesh(new BoxGeometry(frameThickness * 0.85, frameThickness * 0.42, frameThickness * 0.55), stemMaterial);
+      leaf.position.set(stem.position.x + frameThickness * (index % 2 === 0 ? 0.35 : -0.35), stem.position.y + stemHeight * 0.25, stem.position.z);
+      leaf.rotation.z = index % 2 === 0 ? 0.4 : -0.4;
+
+      windowGroup.add(stem, leaf);
+    }
+  }
+
+  private addShutters(
+    windowGroup: Group,
+    frameMaterial: MeshStandardMaterial,
+    frameDepth: number,
+    frameThickness: number,
+    outerWidth: number,
+    outerHeight: number,
+  ): void {
+    const shutterWidth = Math.max(frameThickness * 1.8, outerWidth * 0.22);
+    const shutterHeight = outerHeight * 0.92;
+    const shutterDepth = frameDepth * 0.52;
+    const offsetX = outerWidth / 2 + shutterWidth * 0.5;
+
+    const shutterMaterial = new MeshStandardMaterial({
+      color: new Color("#d8e2f2"),
+      emissive: new Color("#1d2938"),
+      emissiveIntensity: 0.08,
+      metalness: 0.05,
+      roughness: 0.68,
+    });
+
+    const leftShutter = new Mesh(new BoxGeometry(shutterWidth, shutterHeight, shutterDepth), shutterMaterial);
+    leftShutter.position.set(-offsetX, 0, -frameDepth * 0.08);
+    const rightShutter = new Mesh(new BoxGeometry(shutterWidth, shutterHeight, shutterDepth), shutterMaterial);
+    rightShutter.position.set(offsetX, 0, -frameDepth * 0.08);
+
+    const latch = new Mesh(new BoxGeometry(frameThickness * 0.34, frameThickness * 0.34, shutterDepth * 1.3), frameMaterial);
+    latch.position.set(0, 0, -frameDepth * 0.08);
+
+    windowGroup.add(leftShutter, rightShutter, latch);
   }
 
   private createWeatheringTexture(): CanvasTexture {
