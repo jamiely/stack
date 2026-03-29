@@ -24,6 +24,7 @@ import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedba
 import { advanceOscillation } from "./logic/oscillation";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
 import { advanceCollapseSequence, createCollapseSequence, sampleCollapseFrame } from "./logic/collapse";
+import { createCollapseVoxelSeeds, isProjectedSlabNearViewport } from "./logic/collapseVoxels";
 import {
   collectArchivableLevels,
   getQualityScalars,
@@ -3000,19 +3001,14 @@ export class Game {
 
     const center = new Vector3(slab.position.x, slab.position.y, slab.position.z).project(this.camera);
     const top = new Vector3(slab.position.x, slab.position.y + slab.dimensions.height, slab.position.z).project(this.camera);
-    const projectedHeightPx = Math.max(1, Math.abs((top.y - center.y) * 0.5 * height) * 2);
-    const marginPx = Math.max(90, projectedHeightPx * outsideBlocks);
 
-    const screenX = (center.x * 0.5 + 0.5) * width;
-    const screenY = (-center.y * 0.5 + 0.5) * height;
-    const nearDepth = center.z > -1.5 && center.z < 1.5;
-
-    return (
-      nearDepth &&
-      screenX >= -marginPx &&
-      screenX <= width + marginPx &&
-      screenY >= -marginPx &&
-      screenY <= height + marginPx
+    return isProjectedSlabNearViewport(
+      {
+        center: { x: center.x, y: center.y, z: center.z },
+        topY: top.y,
+      },
+      { width, height },
+      outsideBlocks,
     );
   }
 
@@ -3034,79 +3030,43 @@ export class Game {
     const topSlab = burstSlabs[0] ?? this.landedSlabs[this.landedSlabs.length - 1];
     const topCenter = topSlab?.position ?? { x: 0, y: 0, z: 0 };
 
-    let remainingBudget = COLLAPSE_VOXEL_MAX_COUNT;
+    const voxelSeeds = createCollapseVoxelSeeds(burstSlabs, COLLAPSE_VOXEL_MAX_COUNT, COLLAPSE_VOXEL_SIZE);
 
-    for (let slabIndex = 0; slabIndex < burstSlabs.length; slabIndex += 1) {
-      if (remainingBudget <= 0) {
-        break;
+    voxelSeeds.forEach((seed) => {
+      const mesh = new Mesh(
+        new BoxGeometry(seed.edge, seed.edge, seed.edge),
+        new MeshStandardMaterial({
+          color: this.getSlabColor(seed.level),
+          emissive: this.getSlabEmissive(seed.level),
+          metalness: 0.08,
+          roughness: 0.86,
+        }),
+      );
+      mesh.position.set(seed.center.x, seed.center.y, seed.center.z);
+      this.collapseVoxelGroup.add(mesh);
+
+      const burstDirection = new Vector3(seed.center.x - topCenter.x, seed.center.y - topCenter.y, seed.center.z - topCenter.z);
+      if (burstDirection.lengthSq() < 1e-6) {
+        burstDirection.set((random() - 0.5) * 0.2, 1, (random() - 0.5) * 0.2);
       }
+      burstDirection.normalize();
+      const speed = 3.8 + random() * 3.1;
 
-      const slab = burstSlabs[slabIndex]!;
-      const slabsRemaining = Math.max(1, burstSlabs.length - slabIndex);
-      const slabBudget = Math.max(1, Math.floor(remainingBudget / slabsRemaining));
-      let slabVoxelCount = 0;
-
-      const maxDimension = Math.max(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
-      const dominantAxisCount = Math.max(1, Math.min(8, Math.ceil(maxDimension / COLLAPSE_VOXEL_SIZE)));
-      const cubeEdge = maxDimension / dominantAxisCount;
-      const xCount = Math.max(1, Math.min(8, Math.round(slab.dimensions.width / cubeEdge)));
-      const yCount = Math.max(1, Math.min(8, Math.round(slab.dimensions.height / cubeEdge)));
-      const zCount = Math.max(1, Math.min(8, Math.round(slab.dimensions.depth / cubeEdge)));
-      const cellWidth = slab.dimensions.width / xCount;
-      const cellHeight = slab.dimensions.height / yCount;
-      const cellDepth = slab.dimensions.depth / zCount;
-      const voxelEdge = Math.max(0.14, Math.min(cellWidth, cellHeight, cellDepth) * 0.98);
-
-      slabLoop: for (let xIndex = 0; xIndex < xCount; xIndex += 1) {
-        for (let yIndex = 0; yIndex < yCount; yIndex += 1) {
-          for (let zIndex = 0; zIndex < zCount; zIndex += 1) {
-            if (slabVoxelCount >= slabBudget || remainingBudget <= 0) {
-              break slabLoop;
-            }
-
-            const centerX = slab.position.x - slab.dimensions.width / 2 + cellWidth * (xIndex + 0.5);
-            const centerY = slab.position.y - slab.dimensions.height / 2 + cellHeight * (yIndex + 0.5);
-            const centerZ = slab.position.z - slab.dimensions.depth / 2 + cellDepth * (zIndex + 0.5);
-            const mesh = new Mesh(
-              new BoxGeometry(voxelEdge, voxelEdge, voxelEdge),
-              new MeshStandardMaterial({
-                color: this.getSlabColor(slab.level),
-                emissive: this.getSlabEmissive(slab.level),
-                metalness: 0.08,
-                roughness: 0.86,
-              }),
-            );
-            mesh.position.set(centerX, centerY, centerZ);
-            this.collapseVoxelGroup.add(mesh);
-
-            const burstDirection = new Vector3(centerX - topCenter.x, centerY - topCenter.y, centerZ - topCenter.z);
-            if (burstDirection.lengthSq() < 1e-6) {
-              burstDirection.set((random() - 0.5) * 0.2, 1, (random() - 0.5) * 0.2);
-            }
-            burstDirection.normalize();
-            const speed = 3.8 + random() * 3.1;
-
-            this.collapseVoxels.push({
-              mesh,
-              velocity: {
-                x: burstDirection.x * speed,
-                y: Math.max(2.8, burstDirection.y * speed + 2.6),
-                z: burstDirection.z * speed,
-              },
-              angularVelocity: {
-                x: (random() - 0.5) * 7,
-                y: (random() - 0.5) * 7,
-                z: (random() - 0.5) * 7,
-              },
-              remainingLifetime: COLLAPSE_VOXEL_LIFETIME_SECONDS,
-            });
-
-            slabVoxelCount += 1;
-            remainingBudget -= 1;
-          }
-        }
-      }
-    }
+      this.collapseVoxels.push({
+        mesh,
+        velocity: {
+          x: burstDirection.x * speed,
+          y: Math.max(2.8, burstDirection.y * speed + 2.6),
+          z: burstDirection.z * speed,
+        },
+        angularVelocity: {
+          x: (random() - 0.5) * 7,
+          y: (random() - 0.5) * 7,
+          z: (random() - 0.5) * 7,
+        },
+        remainingLifetime: COLLAPSE_VOXEL_LIFETIME_SECONDS,
+      });
+    });
   }
 
   private spawnDebris(slab: SlabData, axis: SlabData["axis"], fullMiss: boolean): void {
