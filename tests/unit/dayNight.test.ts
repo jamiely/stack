@@ -31,4 +31,17 @@ describe("dayNight", () => {
     expect(jumpIntoBoundary).toBeLessThan(0.08);
     expect(jumpOutBoundary).toBeLessThan(0.08);
   });
+
+  it("makes stars most visible at night and fades them through the day", () => {
+    const cycleBlocks = 60;
+    const night = sampleDayNightFrame(0, cycleBlocks);
+    const dawn = sampleDayNightFrame(10, cycleBlocks);
+    const noon = sampleDayNightFrame(30, cycleBlocks);
+    const sunset = sampleDayNightFrame(50, cycleBlocks);
+
+    expect(night.starVisibility).toBeGreaterThan(dawn.starVisibility);
+    expect(dawn.starVisibility).toBeGreaterThan(noon.starVisibility);
+    expect(sunset.starVisibility).toBeGreaterThan(noon.starVisibility);
+    expect(noon.starVisibility).toBeLessThanOrEqual(0.02);
+  });
 });

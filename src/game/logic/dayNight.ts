@@ -6,6 +6,7 @@ export interface DayNightFrame {
   ambientIntensity: number;
   directionalIntensity: number;
   phase: DayNightPhase;
+  starVisibility: number;
 }
 
 interface DayNightStop {
@@ -15,11 +16,28 @@ interface DayNightStop {
   skyBottom: string;
   ambientIntensity: number;
   directionalIntensity: number;
+  starVisibility: number;
 }
 
 const DAY_NIGHT_STOPS: DayNightStop[] = [
-  { t: 0, phase: "night", skyTop: "#0b1324", skyBottom: "#03060f", ambientIntensity: 0.8, directionalIntensity: 0.9 },
-  { t: 1 / 6, phase: "dawn", skyTop: "#2d3f6f", skyBottom: "#8a5b6d", ambientIntensity: 1.0, directionalIntensity: 1.2 },
+  {
+    t: 0,
+    phase: "night",
+    skyTop: "#0b1324",
+    skyBottom: "#03060f",
+    ambientIntensity: 0.8,
+    directionalIntensity: 0.9,
+    starVisibility: 0.85,
+  },
+  {
+    t: 1 / 6,
+    phase: "dawn",
+    skyTop: "#2d3f6f",
+    skyBottom: "#8a5b6d",
+    ambientIntensity: 1.0,
+    directionalIntensity: 1.2,
+    starVisibility: 0.4,
+  },
   {
     t: 2 / 6,
     phase: "earlyMorning",
@@ -27,11 +45,44 @@ const DAY_NIGHT_STOPS: DayNightStop[] = [
     skyBottom: "#f2ae7c",
     ambientIntensity: 1.25,
     directionalIntensity: 1.6,
+    starVisibility: 0.08,
   },
-  { t: 3 / 6, phase: "noon", skyTop: "#7ec3ff", skyBottom: "#d9f1ff", ambientIntensity: 1.9, directionalIntensity: 2.4 },
-  { t: 4 / 6, phase: "evening", skyTop: "#5c84c9", skyBottom: "#f2b07a", ambientIntensity: 1.35, directionalIntensity: 1.75 },
-  { t: 5 / 6, phase: "sunset", skyTop: "#2a2959", skyBottom: "#cf5f4d", ambientIntensity: 1.05, directionalIntensity: 1.25 },
-  { t: 1, phase: "night", skyTop: "#0b1324", skyBottom: "#03060f", ambientIntensity: 0.8, directionalIntensity: 0.9 },
+  {
+    t: 3 / 6,
+    phase: "noon",
+    skyTop: "#7ec3ff",
+    skyBottom: "#d9f1ff",
+    ambientIntensity: 1.9,
+    directionalIntensity: 2.4,
+    starVisibility: 0,
+  },
+  {
+    t: 4 / 6,
+    phase: "evening",
+    skyTop: "#5c84c9",
+    skyBottom: "#f2b07a",
+    ambientIntensity: 1.35,
+    directionalIntensity: 1.75,
+    starVisibility: 0.1,
+  },
+  {
+    t: 5 / 6,
+    phase: "sunset",
+    skyTop: "#2a2959",
+    skyBottom: "#cf5f4d",
+    ambientIntensity: 1.05,
+    directionalIntensity: 1.25,
+    starVisibility: 0.45,
+  },
+  {
+    t: 1,
+    phase: "night",
+    skyTop: "#0b1324",
+    skyBottom: "#03060f",
+    ambientIntensity: 0.8,
+    directionalIntensity: 0.9,
+    starVisibility: 0.85,
+  },
 ];
 
 export function sampleDayNightFrame(stackHeight: number, blocksPerCycle: number): DayNightFrame {
@@ -52,6 +103,7 @@ export function sampleDayNightFrame(stackHeight: number, blocksPerCycle: number)
     skyBottom: lerpHex(currentStop.skyBottom, nextStop.skyBottom, easedT),
     ambientIntensity: lerp(currentStop.ambientIntensity, nextStop.ambientIntensity, easedT),
     directionalIntensity: lerp(currentStop.directionalIntensity, nextStop.directionalIntensity, easedT),
+    starVisibility: lerp(currentStop.starVisibility, nextStop.starVisibility, easedT),
     phase: currentStop.phase,
   };
 }

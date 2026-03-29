@@ -1,19 +1,23 @@
 import {
   AmbientLight,
   BoxGeometry,
+  BufferGeometry,
   CanvasTexture,
   Color,
   CylinderGeometry,
   DirectionalLight,
   DoubleSide,
+  Float32BufferAttribute,
   GridHelper,
   Group,
   Mesh,
   MeshStandardMaterial,
+  Object3D,
   PerspectiveCamera,
   PlaneGeometry,
+  Points,
+  PointsMaterial,
   RepeatWrapping,
-  Object3D,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -239,6 +243,8 @@ const CLOUD_SWAY_DISTANCE_PX = 120;
 const STACK_LOOK_AHEAD_Y = 1.05;
 const STARTUP_CAMERA_LIFT = 2.2;
 const DAY_NIGHT_COLOR_LERP_SPEED = 3.2;
+const DAY_NIGHT_STAR_LERP_SPEED = 2.4;
+const DAY_NIGHT_STAR_MAX_OPACITY = 0.6;
 const STARTUP_CAMERA_LIFT_FADE_FLOORS = 10;
 const PLACEMENT_SHAKE_DURATION_SECONDS = 0.16;
 const COLLAPSE_VOXEL_SIZE = 0.38;
@@ -360,6 +366,15 @@ export class Game {
     defaultDebugConfig.cameraDistance,
   );
   private readonly dayNightTargetSkyColor = new Color("#07101c");
+  private readonly dayNightStarMaterial = new PointsMaterial({
+    color: "#f4f8ff",
+    transparent: true,
+    opacity: 0,
+    size: 1.3,
+    sizeAttenuation: false,
+    depthWrite: false,
+  });
+  private readonly starField = this.createStarField(180);
   private activeQualityPreset: QualityPreset = toQualityPreset(defaultDebugConfig.performanceQualityPreset);
   private archivedLevelSet = new Set<number>();
   private archivedChunkCount = 0;
@@ -468,7 +483,15 @@ export class Game {
       this.debugConfig.cameraDistance,
     );
     this.gridHelper.position.y = -12;
-    this.scene.add(this.stackGroup, this.archivedGroup, this.debrisGroup, this.collapseVoxelGroup, this.tentacleGroup, this.gridHelper);
+    this.scene.add(
+      this.starField,
+      this.stackGroup,
+      this.archivedGroup,
+      this.debrisGroup,
+      this.collapseVoxelGroup,
+      this.tentacleGroup,
+      this.gridHelper,
+    );
 
     this.directionalLight.position.set(10, 18, 12);
     this.scene.add(this.ambientLight, this.directionalLight);
@@ -1193,6 +1216,11 @@ export class Game {
 
     this.ambientLight.intensity += (frame.ambientIntensity - this.ambientLight.intensity) * blend;
     this.directionalLight.intensity += (frame.directionalIntensity - this.directionalLight.intensity) * blend;
+
+    const starBlend = 1 - Math.exp(-Math.max(0, Math.min(0.2, deltaSeconds)) * DAY_NIGHT_STAR_LERP_SPEED);
+    const targetStarOpacity = frame.starVisibility * DAY_NIGHT_STAR_MAX_OPACITY;
+    this.dayNightStarMaterial.opacity += (targetStarOpacity - this.dayNightStarMaterial.opacity) * starBlend;
+    this.starField.visible = this.dayNightStarMaterial.opacity > 0.01;
   }
 
   private updateDistractions(deltaSeconds: number): void {
@@ -3349,6 +3377,29 @@ export class Game {
         node.material.dispose();
       }
     }
+  }
+
+  private createStarField(starCount: number): Points {
+    const positions: number[] = [];
+    const radius = 70;
+
+    for (let index = 0; index < starCount; index += 1) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 0.42 + Math.PI * 0.06;
+      const x = Math.cos(theta) * Math.sin(phi) * radius;
+      const y = Math.cos(phi) * radius + 16;
+      const z = Math.sin(theta) * Math.sin(phi) * radius - 20;
+      positions.push(x, y, z);
+    }
+
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+
+    const stars = new Points(geometry, this.dayNightStarMaterial);
+    stars.frustumCulled = false;
+    stars.renderOrder = -2;
+    stars.visible = false;
+    return stars;
   }
 
   private createRenderer(): WebGLRenderer | null {
