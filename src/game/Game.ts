@@ -37,6 +37,14 @@ import {
 import { resolveIntegrityTelemetry } from "./logic/integrity";
 import { LEDGE_ANIMATION_DURATION_SECONDS, resolveLedgeDimensions, resolveLedgeFaceIndex, sampleLedgeAnimationScaleX } from "./logic/ledges";
 import { getWindowHorizontalOffsets, resolveWindowCountForFace, resolveWindowStyle, shouldRenderWindowsForFace } from "./logic/windows";
+import {
+  UFO_ORBIT_ANGULAR_SPEED,
+  canForceDistractionChannel,
+  createDistractionTimerRecord,
+  getUfoOrbitDurationSeconds,
+  readTestModeOptions,
+  tickDistractionTimerRecord,
+} from "./logic/runtime";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
@@ -158,7 +166,6 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
 };
 
 const CAMERA_X = 8;
-const FIXED_STEP_DEFAULT_SECONDS = 1 / 60;
 const DEBUG_TOGGLE_META: Record<DebugToggleKey, { label: string }> = {
   gridVisible: { label: "Grid Visible" },
   feedbackAudioEnabled: { label: "Audio Feedback" },
@@ -182,7 +189,6 @@ const DEBUG_DISTRACTION_CHANNELS: DistractionChannel[] = [
   "clouds",
 ];
 const DEBUG_DISTRACTION_LAUNCH_DURATION_SECONDS = 6;
-const UFO_ORBIT_ANGULAR_SPEED = 0.95;
 const UFO_EXIT_DURATION_SECONDS = 1.15;
 const UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND = 6.8;
 const GORILLA_CLIMB_SPEED = 0.7;
@@ -215,36 +221,6 @@ declare global {
   interface Window {
     __towerStackerTestApi?: TestApi;
   }
-}
-
-function createDistractionTimerRecord(value: number): Record<DistractionChannel, number> {
-  return {
-    tentacle: value,
-    gorilla: value,
-    tremor: value,
-    ufo: value,
-    contrastWash: value,
-    clouds: value,
-  };
-}
-
-function readTestModeOptions(search: string): TestModeOptions {
-  const params = new URLSearchParams(search);
-  const enabled = params.has("test") || params.has("testMode");
-  const startPaused = enabled && params.get("paused") !== "0";
-  const stepParam = Number(params.get("step"));
-  const fixedStepSeconds =
-    Number.isFinite(stepParam) && stepParam > 0 && stepParam <= 0.25 ? stepParam : FIXED_STEP_DEFAULT_SECONDS;
-
-  const seedParam = Number(params.get("seed"));
-  const seed = Number.isFinite(seedParam) ? Math.trunc(seedParam) : null;
-
-  return {
-    enabled,
-    startPaused,
-    fixedStepSeconds,
-    seed,
-  };
 }
 
 export class Game {
@@ -1108,46 +1084,15 @@ export class Game {
   }
 
   private getUfoOrbitDurationSeconds(): number {
-    const speed = Math.max(0.2, this.debugConfig.distractionMotionSpeed);
-    return (Math.PI * 2) / (UFO_ORBIT_ANGULAR_SPEED * speed);
+    return getUfoOrbitDurationSeconds(this.debugConfig.distractionMotionSpeed);
   }
 
   private canForceDistractionChannel(channel: DistractionChannel): boolean {
-    if (!this.debugConfig.distractionsEnabled) {
-      return false;
-    }
-
-    switch (channel) {
-      case "tentacle":
-        return this.debugConfig.distractionTentacleEnabled;
-      case "gorilla":
-        return this.debugConfig.distractionGorillaEnabled;
-      case "tremor":
-        return this.debugConfig.distractionTremorEnabled;
-      case "ufo":
-        return this.debugConfig.distractionUfoEnabled;
-      case "contrastWash":
-        return this.debugConfig.distractionContrastEnabled;
-      case "clouds":
-        return this.debugConfig.distractionCloudEnabled;
-      default:
-        return false;
-    }
+    return canForceDistractionChannel(channel, this.debugConfig);
   }
 
   private tickForcedDistractionTimers(deltaSeconds: number): void {
-    if (deltaSeconds <= 0) {
-      return;
-    }
-
-    DEBUG_DISTRACTION_CHANNELS.forEach((channel) => {
-      const remaining = this.forcedDistractionTimers[channel];
-      if (remaining <= 0) {
-        return;
-      }
-
-      this.forcedDistractionTimers[channel] = Math.max(0, remaining - deltaSeconds);
-    });
+    tickDistractionTimerRecord(this.forcedDistractionTimers, DEBUG_DISTRACTION_CHANNELS, deltaSeconds);
   }
 
   private tickGorillaSlam(deltaSeconds: number): void {
