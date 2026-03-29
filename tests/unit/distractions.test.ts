@@ -11,6 +11,8 @@ const config = {
   distractionTremorEnabled: true,
   distractionUfoEnabled: true,
   distractionUfoStartLevel: 14,
+  distractionBatEnabled: true,
+  distractionBatStartLevel: 11,
   distractionContrastEnabled: true,
   distractionCloudEnabled: true,
   distractionCloudStartLevel: 20,
@@ -28,6 +30,7 @@ describe("distraction logic", () => {
       gorilla: false,
       tremor: false,
       ufo: false,
+      bat: false,
       contrastWash: false,
       clouds: false,
       fireworks: false,
@@ -38,6 +41,7 @@ describe("distraction logic", () => {
     expect(mid.snapshot.active.gorilla).toBe(true);
     expect(mid.snapshot.active.tremor).toBe(true);
     expect(mid.snapshot.active.ufo).toBe(false);
+    expect(mid.snapshot.active.bat).toBe(false);
     expect(mid.snapshot.active.contrastWash).toBe(false);
     expect(mid.snapshot.active.clouds).toBe(false);
 
@@ -47,6 +51,7 @@ describe("distraction logic", () => {
       gorilla: true,
       tremor: true,
       ufo: true,
+      bat: true,
       contrastWash: true,
       clouds: true,
       fireworks: true,

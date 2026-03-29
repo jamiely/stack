@@ -57,12 +57,14 @@ export interface DebugConfig {
   distractionTremorEnabled: boolean;
   distractionUfoEnabled: boolean;
   distractionUfoStartLevel: number;
+  distractionBatEnabled: boolean;
+  distractionBatStartLevel: number;
   distractionContrastEnabled: boolean;
   distractionCloudEnabled: boolean;
   distractionCloudStartLevel: number;
   distractionFireworksEnabled: boolean;
   distractionFireworksStartLevel: number;
-  dayNightCycleDurationSeconds: number;
+  dayNightCycleBlocks: number;
   integrityPrecariousThreshold: number;
   integrityUnstableThreshold: number;
   integrityWobbleStrength: number;
@@ -83,6 +85,7 @@ export interface DebugConfig {
   debrisLifetime: number;
   debrisTumbleSpeed: number;
   placementShakeAmount: number;
+  tremorShakeAmount: number;
   gridVisible: boolean;
 }
 
@@ -132,6 +135,7 @@ export interface PublicGameState {
       gorilla: boolean;
       tremor: boolean;
       ufo: boolean;
+      bat: boolean;
       contrastWash: boolean;
       clouds: boolean;
       fireworks: boolean;
@@ -141,6 +145,7 @@ export interface PublicGameState {
       gorilla: number;
       tremor: number;
       ufo: number;
+      bat: number;
       contrastWash: number;
       clouds: number;
       fireworks: number;
@@ -148,6 +153,7 @@ export interface PublicGameState {
     visuals: {
       gorillaOpacity: number;
       ufoOpacity: number;
+      batOpacity: number;
       cloudOpacity: number;
       contrastOpacity: number;
       tremorStrength: number;
@@ -194,6 +200,7 @@ export interface PublicGameState {
     distractionLod: {
       gorilla: "high" | "medium" | "low";
       ufo: "high" | "medium" | "low";
+      bat: "high" | "medium" | "low";
       clouds: "high" | "medium" | "low";
       tremor: "high" | "medium" | "low";
     };

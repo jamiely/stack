@@ -1,12 +1,16 @@
-export function sampleTremorCameraShake(elapsedSeconds: number, tremorStrength: number): { x: number; y: number } {
-  if (tremorStrength <= 0) {
+export function sampleTremorCameraShake(
+  elapsedSeconds: number,
+  tremorStrength: number,
+  verticalMagnitude = 1,
+): { x: number; y: number } {
+  if (tremorStrength <= 0 || verticalMagnitude <= 0) {
     return { x: 0, y: 0 };
   }
 
   const shakePhase = elapsedSeconds * 58;
   return {
     x: Math.sin(shakePhase) * 0.03 * tremorStrength,
-    y: Math.cos(shakePhase * 0.9) * 0.04 * tremorStrength,
+    y: Math.cos(shakePhase * 0.9) * 0.06 * tremorStrength * verticalMagnitude,
   };
 }
 

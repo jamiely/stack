@@ -1,6 +1,14 @@
 import { createSeededRandom } from "./random";
 
-export type DistractionChannel = "tentacle" | "gorilla" | "tremor" | "ufo" | "contrastWash" | "clouds" | "fireworks";
+export type DistractionChannel =
+  | "tentacle"
+  | "gorilla"
+  | "tremor"
+  | "ufo"
+  | "bat"
+  | "contrastWash"
+  | "clouds"
+  | "fireworks";
 
 export interface DistractionConfig {
   distractionsEnabled: boolean;
@@ -12,6 +20,8 @@ export interface DistractionConfig {
   distractionTremorEnabled: boolean;
   distractionUfoEnabled: boolean;
   distractionUfoStartLevel: number;
+  distractionBatEnabled: boolean;
+  distractionBatStartLevel: number;
   distractionContrastEnabled: boolean;
   distractionCloudEnabled: boolean;
   distractionCloudStartLevel: number;
@@ -32,12 +42,22 @@ export interface DistractionState {
   snapshot: DistractionSnapshot;
 }
 
-const CHANNELS: DistractionChannel[] = ["tentacle", "gorilla", "tremor", "ufo", "contrastWash", "clouds", "fireworks"];
+const CHANNELS: DistractionChannel[] = [
+  "tentacle",
+  "gorilla",
+  "tremor",
+  "ufo",
+  "bat",
+  "contrastWash",
+  "clouds",
+  "fireworks",
+];
 const FREQUENCIES: Record<DistractionChannel, number> = {
   tentacle: 0.75,
   gorilla: 0.42,
   tremor: 1.5,
   ufo: 0.33,
+  bat: 0.66,
   contrastWash: 0.56,
   clouds: 0.12,
   fireworks: 0.28,
@@ -53,6 +73,7 @@ export function createDistractionState(seed: number): DistractionState {
     gorilla: 0,
     tremor: 0,
     ufo: 0,
+    bat: 0,
     contrastWash: 0,
     clouds: 0,
     fireworks: 0,
@@ -95,6 +116,10 @@ export function updateDistractionState(
       config.distractionsEnabled &&
       config.distractionUfoEnabled &&
       level >= config.distractionUfoStartLevel,
+    bat:
+      config.distractionsEnabled &&
+      config.distractionBatEnabled &&
+      level >= config.distractionBatStartLevel,
     contrastWash:
       config.distractionsEnabled &&
       config.distractionContrastEnabled &&
@@ -127,6 +152,7 @@ export function updateDistractionState(
     gorilla: active.gorilla ? baseSignals.gorilla : 0,
     tremor: tremorPulse,
     ufo: active.ufo ? baseSignals.ufo : 0,
+    bat: active.bat ? baseSignals.bat : 0,
     contrastWash: active.contrastWash ? baseSignals.contrastWash : 0,
     clouds: active.clouds ? baseSignals.clouds : 0,
     fireworks: active.fireworks ? pulseSignal(elapsedSeconds * 0.72, state.phases.fireworks, config.distractionMotionSpeed) : 0,
@@ -150,6 +176,7 @@ function createInactiveRecord<T>(value: T): Record<DistractionChannel, T> {
     gorilla: value,
     tremor: value,
     ufo: value,
+    bat: value,
     contrastWash: value,
     clouds: value,
     fireworks: value,

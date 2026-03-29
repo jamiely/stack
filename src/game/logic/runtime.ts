@@ -30,6 +30,7 @@ export function createDistractionTimerRecord(value: number): Record<DistractionC
     gorilla: value,
     tremor: value,
     ufo: value,
+    bat: value,
     contrastWash: value,
     clouds: value,
     fireworks: value,
@@ -69,6 +70,8 @@ export function canForceDistractionChannel(channel: DistractionChannel, config: 
       return config.distractionTremorEnabled;
     case "ufo":
       return config.distractionUfoEnabled;
+    case "bat":
+      return config.distractionBatEnabled;
     case "contrastWash":
       return config.distractionContrastEnabled;
     case "clouds":

@@ -28,12 +28,14 @@ export const defaultDebugConfig: DebugConfig = {
   distractionTremorEnabled: true,
   distractionUfoEnabled: true,
   distractionUfoStartLevel: 14,
+  distractionBatEnabled: true,
+  distractionBatStartLevel: 16,
   distractionContrastEnabled: true,
   distractionCloudEnabled: true,
   distractionCloudStartLevel: 32,
   distractionFireworksEnabled: true,
   distractionFireworksStartLevel: 18,
-  dayNightCycleDurationSeconds: 96,
+  dayNightCycleBlocks: 20,
   integrityPrecariousThreshold: 0.55,
   integrityUnstableThreshold: 0.9,
   integrityWobbleStrength: 0.22,
@@ -54,6 +56,7 @@ export const defaultDebugConfig: DebugConfig = {
   debrisLifetime: 1.35,
   debrisTumbleSpeed: 1,
   placementShakeAmount: 0.22,
+  tremorShakeAmount: 1,
   gridVisible: false,
 };
 
@@ -86,12 +89,14 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     distractionTremorEnabled: config.distractionTremorEnabled,
     distractionUfoEnabled: config.distractionUfoEnabled,
     distractionUfoStartLevel: Math.round(clamp(config.distractionUfoStartLevel, 0, 100)),
+    distractionBatEnabled: config.distractionBatEnabled,
+    distractionBatStartLevel: Math.round(clamp(config.distractionBatStartLevel, 0, 120)),
     distractionContrastEnabled: config.distractionContrastEnabled,
     distractionCloudEnabled: config.distractionCloudEnabled,
     distractionCloudStartLevel: Math.round(clamp(config.distractionCloudStartLevel, 0, 120)),
     distractionFireworksEnabled: config.distractionFireworksEnabled,
     distractionFireworksStartLevel: Math.round(clamp(config.distractionFireworksStartLevel, 0, 120)),
-    dayNightCycleDurationSeconds: clamp(config.dayNightCycleDurationSeconds, 20, 240),
+    dayNightCycleBlocks: Math.round(clamp(config.dayNightCycleBlocks, 4, 80)),
     integrityPrecariousThreshold: clamp(config.integrityPrecariousThreshold, 0.35, 0.85),
     integrityUnstableThreshold: clamp(
       config.integrityUnstableThreshold,
@@ -118,6 +123,7 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     debrisLifetime: clamp(config.debrisLifetime, 0.4, 4),
     debrisTumbleSpeed: clamp(config.debrisTumbleSpeed, 0.2, 3),
     placementShakeAmount: clamp(config.placementShakeAmount, 0, 1.5),
+    tremorShakeAmount: clamp(config.tremorShakeAmount, 0, 3),
     gridVisible: config.gridVisible,
   };
 }
