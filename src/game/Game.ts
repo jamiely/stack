@@ -2999,12 +2999,24 @@ export class Game {
     this.collapseVoxels = [];
 
     const random = this.seededRandom ?? Math.random;
-    const burstSlabs = [...additionalBurstSlabs, ...this.landedSlabs];
+    const burstSlabs = [...additionalBurstSlabs, ...this.landedSlabs]
+      .slice()
+      .sort((a, b) => b.position.y - a.position.y || b.level - a.level);
     const topSlab = burstSlabs[0] ?? this.landedSlabs[this.landedSlabs.length - 1];
     const topCenter = topSlab?.position ?? { x: 0, y: 0, z: 0 };
 
+    let remainingBudget = COLLAPSE_VOXEL_MAX_COUNT;
+
     for (let slabIndex = 0; slabIndex < burstSlabs.length; slabIndex += 1) {
+      if (remainingBudget <= 0) {
+        break;
+      }
+
       const slab = burstSlabs[slabIndex]!;
+      const slabsRemaining = Math.max(1, burstSlabs.length - slabIndex);
+      const slabBudget = Math.max(1, Math.floor(remainingBudget / slabsRemaining));
+      let slabVoxelCount = 0;
+
       const maxDimension = Math.max(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
       const dominantAxisCount = Math.max(1, Math.min(8, Math.ceil(maxDimension / COLLAPSE_VOXEL_SIZE)));
       const cubeEdge = maxDimension / dominantAxisCount;
@@ -3016,11 +3028,11 @@ export class Game {
       const cellDepth = slab.dimensions.depth / zCount;
       const voxelEdge = Math.max(0.14, Math.min(cellWidth, cellHeight, cellDepth) * 0.98);
 
-      for (let xIndex = 0; xIndex < xCount; xIndex += 1) {
+      slabLoop: for (let xIndex = 0; xIndex < xCount; xIndex += 1) {
         for (let yIndex = 0; yIndex < yCount; yIndex += 1) {
           for (let zIndex = 0; zIndex < zCount; zIndex += 1) {
-            if (this.collapseVoxels.length >= COLLAPSE_VOXEL_MAX_COUNT) {
-              return;
+            if (slabVoxelCount >= slabBudget || remainingBudget <= 0) {
+              break slabLoop;
             }
 
             const centerX = slab.position.x - slab.dimensions.width / 2 + cellWidth * (xIndex + 0.5);
@@ -3059,6 +3071,9 @@ export class Game {
               },
               remainingLifetime: COLLAPSE_VOXEL_LIFETIME_SECONDS,
             });
+
+            slabVoxelCount += 1;
+            remainingBudget -= 1;
           }
         }
       }
