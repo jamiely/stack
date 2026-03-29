@@ -37,7 +37,8 @@ This document tracks implemented gameplay features and notable behavior decision
 - Collapse now also spawns a deterministic voxelized explosion burst from tower slabs for game-over presentation
 - Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
 - Debris pieces inherit the parent slab color, push away from the tower with deterministic lateral motion, and no longer use rotational tumble spin
-- Landed (non-active) slabs add procedural side-window facade overlays so each placed floor reads like a tower story segment
+- Landed (non-active) slabs (including the prebuilt starting stack) add procedural slit-window facades so each floor reads like a tower segment
+- Landed slabs can also render deterministic randomized scalloped eave trims near top edges for arcade-style architectural variation
 - Slab color palette varies by slab level (hue progression)
 - **Color stability rule:** a slab keeps its color when it transitions from active to landed (no post-placement recolor)
 

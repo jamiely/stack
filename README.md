@@ -17,7 +17,7 @@ The repo now includes a playable early milestone:
 - V4.1 structural integrity telemetry with deterministic center-of-mass approximation, `stable/precarious/unstable` tiering, and precarious camera wobble feedback
 - V4.2 collapse fail sequence: hard misses trigger a deterministic tower-topple presentation with failure camera pullback, voxelized tower explosion burst, and collapse feedback cues
 - V5.1 performance/scalability pass: distant slab archival into static chunk proxies, distraction LOD throttling, strict debris pooling/caps, and runtime perf diagnostics
-- Upward camera follow with frame-rate-independent smoothing + eased look-target tracking + tunable framing offset/direct Y offset, score/player-built-height HUD (excluding prebuilt starter slabs), impact flash + configurable placement shake feedback, slab-window facade dressing on placed slabs, and falling debris
+- Upward camera follow with frame-rate-independent smoothing + eased look-target tracking + tunable framing offset/direct Y offset, score/player-built-height HUD (excluding prebuilt starter slabs), impact flash + configurable placement shake feedback, slit-window facade dressing plus randomized scalloped eave trims on landed slabs (including prebuilt starters), and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
 - Playwright coverage for autostart boot flow, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates

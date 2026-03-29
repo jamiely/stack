@@ -11,6 +11,7 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   PlaneGeometry,
+  RepeatWrapping,
   Object3D,
   Scene,
   Vector3,
@@ -320,6 +321,7 @@ export class Game {
   private introExitTimeoutId: number | null = null;
   private introHideTimeoutId: number | null = null;
   private readonly windowTexture = this.createWindowTexture();
+  private readonly eavesTexture = this.createEavesTexture();
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudAnchorsInitialized = false;
 
@@ -1970,6 +1972,7 @@ export class Game {
 
     if (!isTop) {
       this.decorateSlabWithWindows(mesh, slab);
+      this.decorateSlabWithEaves(mesh, slab);
     }
 
     return mesh;
@@ -1997,6 +2000,43 @@ export class Game {
     context.fillRect(16, 11, 5, 106);
 
     const texture = new CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private createEavesTexture(): CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 96;
+    canvas.height = 24;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      const fallbackTexture = new CanvasTexture(canvas);
+      fallbackTexture.needsUpdate = true;
+      return fallbackTexture;
+    }
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "rgba(20, 132, 58, 0.96)";
+    context.fillRect(0, 1, canvas.width, 6);
+
+    context.fillStyle = "rgba(16, 114, 49, 0.98)";
+    for (let x = -6; x <= canvas.width + 12; x += 14) {
+      context.beginPath();
+      context.arc(x + 7, 7, 6.2, 0, Math.PI, false);
+      context.fill();
+    }
+
+    context.strokeStyle = "rgba(12, 95, 42, 0.9)";
+    context.lineWidth = 1.4;
+    for (let x = -6; x <= canvas.width + 12; x += 14) {
+      context.beginPath();
+      context.arc(x + 7, 7, 6.2, 0.1, Math.PI - 0.1, false);
+      context.stroke();
+    }
+
+    const texture = new CanvasTexture(canvas);
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
     texture.needsUpdate = true;
     return texture;
   }
@@ -2062,6 +2102,80 @@ export class Game {
         mesh.add(windowMesh);
       }
     });
+  }
+
+  private decorateSlabWithEaves(mesh: Mesh, slab: SlabData): void {
+    if (slab.dimensions.height < 0.9 || !this.shouldRenderEavesForSlab(slab.level)) {
+      return;
+    }
+
+    const eaveHeight = Math.max(0.14, Math.min(0.26, slab.dimensions.height * 0.1));
+    const elevationY = slab.dimensions.height / 2 - eaveHeight * 0.48;
+
+    const faces: Array<{
+      span: number;
+      createPosition: () => { x: number; y: number; z: number };
+      rotationY: number;
+      faceIndex: number;
+    }> = [
+      {
+        span: slab.dimensions.depth,
+        createPosition: () => ({ x: slab.dimensions.width / 2 + 0.028, y: elevationY, z: 0 }),
+        rotationY: -Math.PI / 2,
+        faceIndex: 0,
+      },
+      {
+        span: slab.dimensions.depth,
+        createPosition: () => ({ x: -(slab.dimensions.width / 2 + 0.028), y: elevationY, z: 0 }),
+        rotationY: Math.PI / 2,
+        faceIndex: 1,
+      },
+      {
+        span: slab.dimensions.width,
+        createPosition: () => ({ x: 0, y: elevationY, z: slab.dimensions.depth / 2 + 0.028 }),
+        rotationY: 0,
+        faceIndex: 2,
+      },
+      {
+        span: slab.dimensions.width,
+        createPosition: () => ({ x: 0, y: elevationY, z: -(slab.dimensions.depth / 2 + 0.028) }),
+        rotationY: Math.PI,
+        faceIndex: 3,
+      },
+    ];
+
+    const chosenFaces = faces.filter((face) => this.sampleDecorNoise(slab.level, face.faceIndex + 0.91) > 0.42);
+    const finalFaces = chosenFaces.length > 0 ? chosenFaces : [faces[Math.floor(this.sampleDecorNoise(slab.level, 8.14) * faces.length)]!];
+
+    finalFaces.forEach((face) => {
+      const material = new MeshStandardMaterial({
+        color: new Color("#2bd45d"),
+        emissive: new Color("#0f7d32"),
+        emissiveIntensity: 0.18,
+        metalness: 0.02,
+        roughness: 0.74,
+        map: this.eavesTexture,
+        transparent: true,
+        opacity: 0.92,
+        side: DoubleSide,
+        depthWrite: false,
+      });
+
+      const eave = new Mesh(new PlaneGeometry(Math.max(0.5, face.span * 0.98), eaveHeight), material);
+      const position = face.createPosition();
+      eave.position.set(position.x, position.y, position.z);
+      eave.rotation.y = face.rotationY;
+      mesh.add(eave);
+    });
+  }
+
+  private shouldRenderEavesForSlab(level: number): boolean {
+    return this.sampleDecorNoise(level, 0.17) > 0.36;
+  }
+
+  private sampleDecorNoise(level: number, salt: number): number {
+    const value = Math.sin(level * 12.9898 + salt * 78.233) * 43758.5453123;
+    return value - Math.floor(value);
   }
 
   private getSlabColor(level: number): string {
