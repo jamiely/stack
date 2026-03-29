@@ -2335,7 +2335,7 @@ export class Game {
     const eaveColor = slabBaseColor.clone().offsetHSL(0, -0.08, -0.06);
     const eaveEmissive = new Color(this.getSlabEmissive(slab.level)).multiplyScalar(0.72);
 
-    finalFaces.forEach((face, faceIndex) => {
+    finalFaces.forEach((face) => {
       const material = new MeshStandardMaterial({
         color: eaveColor,
         emissive: eaveEmissive,
@@ -2349,18 +2349,9 @@ export class Game {
         depthWrite: false,
       });
 
-      const widthRatio = 0.45 + this.sampleDecorNoise(slab.level * 1.11 + faceIndex * 0.77, 2.41) * 0.55;
-      const eaveWidth = Math.max(0.4, Math.min(face.span, face.span * widthRatio));
-      const maxOffset = Math.max(0, (face.span - eaveWidth) / 2);
-      const centeredOffset = (this.sampleDecorNoise(slab.level * 1.37 + faceIndex * 1.19, 9.53) - 0.5) * 2 * maxOffset;
-
+      const eaveWidth = Math.max(0.4, slab.dimensions.depth);
       const eave = new Mesh(new PlaneGeometry(eaveWidth, eaveHeight), material);
       const position = face.createPosition();
-      if (Math.abs(face.rotationY) < 0.001 || Math.abs(Math.abs(face.rotationY) - Math.PI) < 0.001) {
-        position.x += centeredOffset;
-      } else {
-        position.z += centeredOffset;
-      }
       eave.position.set(position.x, position.y, position.z);
       eave.rotation.y = face.rotationY;
       mesh.add(eave);
