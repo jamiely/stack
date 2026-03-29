@@ -171,7 +171,7 @@ const DEBUG_DISTRACTION_CHANNELS: DistractionChannel[] = [
   "contrastWash",
   "clouds",
 ];
-const DEBUG_DISTRACTION_LAUNCH_DURATION_SECONDS = 2.5;
+const DEBUG_DISTRACTION_LAUNCH_DURATION_SECONDS = 6;
 const UFO_ORBIT_ANGULAR_SPEED = 0.95;
 const UFO_EXIT_DURATION_SECONDS = 1.15;
 const UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND = 6.8;
@@ -188,6 +188,7 @@ const COLLAPSE_VOXEL_LIFETIME_SECONDS = 2.2;
 const COLLAPSE_VOXEL_MAX_COUNT = 560;
 const TENTACLE_SIDE_SWITCH_SPEED = 0.75;
 const TENTACLE_BURST_CHANCE = 0.5;
+const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const WINDOW_STYLES: WindowStyle[] = ["rectangular", "pointedGothic", "roundedGothic", "planter", "shuttered"];
 const WINDOW_MIN_FACE_SPAN = 0.86;
 const SHUTTER_WINDOW_MIN_FACE_SPAN = 1.02;
@@ -759,9 +760,6 @@ export class Game {
     this.lastFrameTime = timestamp;
     this.updatePerformanceFrameTimes(deltaSeconds);
 
-    this.tickForcedDistractionTimers(deltaSeconds);
-    this.tickGorillaSlam(deltaSeconds);
-
     if (!this.simulationPaused) {
       this.runSimulationStep(deltaSeconds);
     } else {
@@ -777,6 +775,8 @@ export class Game {
   private runSimulationStep(deltaSeconds: number): void {
     this.simulationElapsedSeconds += deltaSeconds;
     this.frameCounter += 1;
+    this.tickForcedDistractionTimers(deltaSeconds);
+    this.tickGorillaSlam(deltaSeconds);
     this.refreshQualityPreset();
     this.updateDistractions(deltaSeconds);
     this.updateDistractionActors();
@@ -1442,7 +1442,7 @@ export class Game {
       const phase = typeof tentacle.userData.phase === "number" ? tentacle.userData.phase : 0;
       const baseRotationY = typeof tentacle.userData.baseRotationY === "number" ? tentacle.userData.baseRotationY : 0;
       const wiggle = (Math.sin(this.distractionState.elapsedSeconds * 6.2 + phase) + 1) / 2;
-      const extension = 0.35 + signal * (0.7 + wiggle * 0.9);
+      const extension = (0.35 + signal * (0.7 + wiggle * 0.9)) * TENTACLE_EXTENSION_MULTIPLIER;
       tentacle.scale.z = extension;
       tentacle.scale.x = 0.92 + signal * 0.22;
       tentacle.scale.y = 0.92 + signal * 0.18;
@@ -2323,9 +2323,8 @@ export class Game {
     frameThickness: number,
   ): number {
     const outerWidth = windowWidth + frameThickness * 2;
-    const windowFootprintWidth = this.getWindowFootprintWidth(style, outerWidth, frameThickness);
     const maxCountBySpan = Math.max(0, Math.min(7, Math.floor(face.span / 0.8)));
-    const maxCountByFootprint = Math.max(0, Math.min(7, Math.floor(face.span / windowFootprintWidth) - 1));
+    const maxCountByFootprint = this.getMaxWindowCountByFootprint(face.span, style, outerWidth, frameThickness);
     const maxCount = Math.min(maxCountBySpan, maxCountByFootprint);
     if (maxCount < 1) {
       return 0;
@@ -2343,7 +2342,7 @@ export class Game {
   ): boolean {
     const outerWidth = windowWidth + frameThickness * 2;
     const minimumSpan = style === "shuttered" ? SHUTTER_WINDOW_MIN_FACE_SPAN : WINDOW_MIN_FACE_SPAN;
-    const minimumFootprint = this.getWindowFootprintWidth(style, outerWidth, frameThickness) * 2;
+    const minimumFootprint = this.getWindowFootprintWidth(style, outerWidth, frameThickness);
     return span >= Math.max(minimumSpan, minimumFootprint);
   }
 
@@ -2354,6 +2353,25 @@ export class Game {
 
     const shutterWidth = Math.max(frameThickness * 1.8, outerWidth * 0.22);
     return outerWidth + shutterWidth * 2;
+  }
+
+  private getMaxWindowCountByFootprint(
+    span: number,
+    style: WindowStyle,
+    outerWidth: number,
+    frameThickness: number,
+  ): number {
+    const footprint = this.getWindowFootprintWidth(style, outerWidth, frameThickness);
+    for (let count = 7; count >= 1; count -= 1) {
+      const spacing = span / (count + 1);
+      const hasEdgeClearance = spacing >= footprint * 0.5;
+      const hasPairClearance = count <= 1 || spacing >= footprint;
+      if (hasEdgeClearance && hasPairClearance) {
+        return count;
+      }
+    }
+
+    return 0;
   }
 
   private getWindowHorizontalOffsets(span: number, count: number): number[] {
@@ -2750,7 +2768,7 @@ export class Game {
         depthWrite: false,
       });
 
-      const eaveWidth = Math.max(0.4, Math.min(face.span, slab.dimensions.depth));
+      const eaveWidth = Math.max(0.4, face.span * 0.96);
       const eave = new Mesh(new PlaneGeometry(eaveWidth, eaveHeight), material);
       const position = face.createPosition();
       eave.position.set(position.x, position.y, position.z);

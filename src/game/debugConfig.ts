@@ -27,7 +27,7 @@ export const defaultDebugConfig: DebugConfig = {
   distractionGorillaStartLevel: 12,
   distractionTremorEnabled: true,
   distractionUfoEnabled: true,
-  distractionUfoStartLevel: 22,
+  distractionUfoStartLevel: 14,
   distractionContrastEnabled: true,
   distractionCloudEnabled: true,
   distractionCloudStartLevel: 32,
