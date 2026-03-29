@@ -1598,7 +1598,7 @@ export class Game {
       const projected = worldPoint.project(this.camera);
 
       const offBottom = projected.y > 1.25;
-      const tooFarSide = Math.abs(projected.x) > 1.7;
+      const tooFarSide = Math.abs(projected.x) > 2.35;
       const behindCamera = projected.z > 1.1;
       if (offBottom || tooFarSide || behindCamera || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
         const respawnAnchor = this.createCloudAnchor(topSlab, index, this.frameCounter + index * 37, true);
@@ -1615,7 +1615,13 @@ export class Game {
       const stableProjected = stablePoint.project(this.camera);
       const screenX = (stableProjected.x * 0.5 + 0.5) * width;
       const screenY = (-stableProjected.y * 0.5 + 0.5) * height;
-      cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%)`;
+      const depthFromStack = new Vector3().subVectors(stableAnchor, new Vector3(topSlab.position.x, topSlab.position.y, topSlab.position.z));
+      const towardCamera = new Vector3(this.camera.position.x - topSlab.position.x, 0, this.camera.position.z - topSlab.position.z).normalize();
+      const frontBack = depthFromStack.dot(towardCamera);
+      const sizeNoise = sampleDecorNoise(index * 0.77 + topSlab.level * 0.31 + this.frameCounter * 0.001, 71.3);
+      const depthScale = frontBack >= 0 ? 1.05 : 0.72;
+      const scale = (0.78 + sizeNoise * 0.48) * depthScale;
+      cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
 
       const enteringFromTop = this.cloudSpawnFromTop[index] === true;
       if (!enteringFromTop) {
@@ -1652,14 +1658,15 @@ export class Game {
     const lateralNoise = sampleDecorNoise(topSlab.level * 0.53 + salt * 0.17 + index * 0.83, 41.2);
     const heightNoise = sampleDecorNoise(topSlab.level * 0.29 + salt * 0.21 + index * 0.59, 63.7);
 
-    const frontSign = sideNoise > 0.5 ? 1 : -1;
-    const depthDistance = spawnFromTop ? 1.2 + depthNoise * 2.2 : 1.6 + depthNoise * 3.6;
+    const alternatingSign = (index + Math.floor(Math.abs(salt) * 0.5)) % 2 === 0 ? 1 : -1;
+    const frontSign = sideNoise > 0.65 ? 1 : sideNoise < 0.35 ? -1 : alternatingSign;
+    const depthDistance = spawnFromTop ? 1.6 + depthNoise * 3.2 : 2.2 + depthNoise * 5.4;
     const lateralDistance = spawnFromTop
-      ? (lateralNoise * 2 - 1) * (1.4 + depthNoise * 1.4)
-      : (lateralNoise * 2 - 1) * (2.6 + depthNoise * 2.4);
+      ? (lateralNoise * 2 - 1) * (4.2 + depthNoise * 4.6)
+      : (lateralNoise * 2 - 1) * (5.8 + depthNoise * 7.2);
     const baseY = spawnFromTop
-      ? topSlab.position.y + this.debugConfig.cameraHeight * (1.4 + heightNoise * 0.55)
-      : topSlab.position.y + slabHeight * (1 + heightNoise * 2.6 + index * 0.22);
+      ? topSlab.position.y + this.debugConfig.cameraHeight * (1.45 + heightNoise * 0.55)
+      : topSlab.position.y + slabHeight * (1 + heightNoise * 2.8 + index * 0.25);
 
     return new Vector3(
       topCenter.x + toCamera.x * depthDistance * frontSign + lateral.x * lateralDistance,
