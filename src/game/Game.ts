@@ -2002,7 +2002,7 @@ export class Game {
   }
 
   private decorateSlabWithWindows(mesh: Mesh, slab: SlabData): void {
-    if (slab.level < this.startingStackLevels || slab.dimensions.height < 0.9) {
+    if (slab.dimensions.height < 0.9) {
       return;
     }
 
