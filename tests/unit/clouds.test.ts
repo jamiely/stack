@@ -26,17 +26,18 @@ describe("cloud logic", () => {
     expect(resolveCloudSpawnNdcX(9)).toBeCloseTo(0.95, 6);
   });
 
-  it("returns a downward drift velocity for persistent clouds", () => {
+  it("keeps persistent clouds stationary in world Y", () => {
     const slow = resolveCloudVerticalVelocity(0, false);
     const fast = resolveCloudVerticalVelocity(1, false);
-    expect(slow).toBeLessThan(0);
-    expect(fast).toBeLessThan(slow);
+    expect(slow).toBe(0);
+    expect(fast).toBe(0);
   });
 
-  it("uses stronger downward drift for top-spawn clouds", () => {
-    const regular = resolveCloudVerticalVelocity(0.5, false);
-    const topSpawn = resolveCloudVerticalVelocity(0.5, true);
-    expect(topSpawn).toBeLessThan(regular);
+  it("gives top-spawn clouds a positive entry drift", () => {
+    const low = resolveCloudVerticalVelocity(0, true);
+    const high = resolveCloudVerticalVelocity(1, true);
+    expect(low).toBeGreaterThan(0);
+    expect(high).toBeGreaterThan(low);
   });
 
   it("clamps vertical drift noise input", () => {

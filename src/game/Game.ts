@@ -1644,6 +1644,7 @@ export class Game {
         cloudNode.style.opacity = entryAlpha.toFixed(3);
         if (entryAlpha >= 0.995) {
           this.cloudSpawnFromTop[index] = false;
+          this.cloudVerticalVelocity[index] = 0;
         }
       }
     });
