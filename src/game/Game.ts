@@ -2143,45 +2143,99 @@ export class Game {
         const glassWidth = Math.max(0.08, windowWidth * 0.9);
         const glassHeight = Math.max(0.14, windowHeight * 0.9);
 
-        const sideFrameGeometry = new BoxGeometry(frameThickness, outerHeight, frameDepth);
-        const topBottomFrameGeometry = new BoxGeometry(outerWidth, frameThickness, frameDepth);
-
-        const leftFrame = new Mesh(sideFrameGeometry, frameMaterial);
-        leftFrame.position.x = -outerWidth / 2 + frameThickness / 2;
-        const rightFrame = new Mesh(sideFrameGeometry, frameMaterial);
-        rightFrame.position.x = outerWidth / 2 - frameThickness / 2;
-        const topFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
-        topFrame.position.y = outerHeight / 2 - frameThickness / 2;
-        const bottomFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
-        bottomFrame.position.y = -outerHeight / 2 + frameThickness / 2;
-
-        const glass = new Mesh(new BoxGeometry(glassWidth, glassHeight, frameDepth * 0.48), glassMaterial);
-        glass.position.z = -frameDepth * 0.16;
-
         const sillWidth = Math.min(face.span, Math.max(outerWidth * 1.3, 0.22));
         const sill = new Mesh(new BoxGeometry(sillWidth, sillHeight, sillDepth), sillMaterial);
         sill.position.y = -outerHeight / 2 - sillHeight * 0.55;
         sill.position.z = sillDepth / 2 - frameDepth * 0.5;
-
-        windowGroup.add(leftFrame, rightFrame, topFrame, bottomFrame, glass, sill);
+        windowGroup.add(sill);
 
         if (pointedTop) {
-          const gableRise = Math.max(frameThickness * 1.2, outerHeight * 0.2);
-          const gableRun = outerWidth / 2;
+          const jambHeight = outerHeight * 0.76;
+          const shoulderY = -outerHeight / 2 + jambHeight;
+          const gableRise = Math.max(frameThickness * 2.2, outerHeight * 0.42);
+          const gableRun = Math.max(frameThickness * 1.4, outerWidth / 2 - frameThickness * 0.45);
           const gableLength = Math.sqrt(gableRun * gableRun + gableRise * gableRise);
-          const gableBeamGeometry = new BoxGeometry(gableLength, frameThickness * 0.9, frameDepth);
 
-          const leftGable = new Mesh(gableBeamGeometry, frameMaterial);
-          leftGable.position.set(-gableRun / 2, outerHeight / 2 + gableRise / 2, 0);
-          leftGable.rotation.z = Math.atan2(gableRise, gableRun);
+          const jambGeometry = new BoxGeometry(frameThickness, jambHeight, frameDepth);
+          const leftJamb = new Mesh(jambGeometry, frameMaterial);
+          leftJamb.position.set(-outerWidth / 2 + frameThickness / 2, -outerHeight / 2 + jambHeight / 2, 0);
 
-          const rightGable = new Mesh(gableBeamGeometry, frameMaterial);
-          rightGable.position.set(gableRun / 2, outerHeight / 2 + gableRise / 2, 0);
-          rightGable.rotation.z = -Math.atan2(gableRise, gableRun);
+          const rightJamb = new Mesh(jambGeometry, frameMaterial);
+          rightJamb.position.set(outerWidth / 2 - frameThickness / 2, -outerHeight / 2 + jambHeight / 2, 0);
 
-          const cap = new Mesh(new BoxGeometry(frameThickness, frameThickness * 1.1, frameDepth), frameMaterial);
-          cap.position.set(0, outerHeight / 2 + gableRise, 0);
-          windowGroup.add(leftGable, rightGable, cap);
+          const bottomFrame = new Mesh(new BoxGeometry(outerWidth, frameThickness, frameDepth), frameMaterial);
+          bottomFrame.position.y = -outerHeight / 2 + frameThickness / 2;
+
+          const gableBeamGeometry = new BoxGeometry(gableLength, frameThickness, frameDepth);
+          const leftArch = new Mesh(gableBeamGeometry, frameMaterial);
+          leftArch.position.set(-gableRun / 2, shoulderY + gableRise / 2, 0);
+          leftArch.rotation.z = Math.atan2(gableRise, gableRun);
+
+          const rightArch = new Mesh(gableBeamGeometry, frameMaterial);
+          rightArch.position.set(gableRun / 2, shoulderY + gableRise / 2, 0);
+          rightArch.rotation.z = -Math.atan2(gableRise, gableRun);
+
+          const apexCap = new Mesh(new BoxGeometry(frameThickness, frameThickness * 1.15, frameDepth), frameMaterial);
+          apexCap.position.set(0, shoulderY + gableRise, 0);
+
+          const lowerGlassHeight = Math.max(0.16, jambHeight - frameThickness * 2.1);
+          const paneGap = frameThickness * 0.65;
+          const paneWidth = Math.max(0.06, (glassWidth - paneGap - frameThickness * 0.25) / 2);
+          const paneY = -outerHeight / 2 + frameThickness + lowerGlassHeight / 2;
+          const paneZ = -frameDepth * 0.18;
+
+          const leftPane = new Mesh(new BoxGeometry(paneWidth, lowerGlassHeight, frameDepth * 0.42), glassMaterial);
+          leftPane.position.set(-(paneWidth / 2 + paneGap / 2), paneY, paneZ);
+          const rightPane = new Mesh(new BoxGeometry(paneWidth, lowerGlassHeight, frameDepth * 0.42), glassMaterial);
+          rightPane.position.set(paneWidth / 2 + paneGap / 2, paneY, paneZ);
+
+          const mullionHeight = lowerGlassHeight + gableRise * 0.78;
+          const mullion = new Mesh(new BoxGeometry(frameThickness * 0.75, mullionHeight, frameDepth * 0.65), frameMaterial);
+          mullion.position.set(0, -outerHeight / 2 + frameThickness + mullionHeight / 2, -frameDepth * 0.04);
+
+          const archGlassRise = Math.max(frameThickness * 0.9, gableRise - frameThickness * 0.95);
+          const archGlassRun = Math.max(frameThickness * 0.7, gableRun - frameThickness * 0.9);
+          const archGlassLength = Math.sqrt(archGlassRun * archGlassRun + archGlassRise * archGlassRise);
+          const archGlassGeometry = new BoxGeometry(archGlassLength, frameThickness * 0.46, frameDepth * 0.38);
+
+          const leftArchGlass = new Mesh(archGlassGeometry, glassMaterial);
+          leftArchGlass.position.set(-archGlassRun / 2, shoulderY + archGlassRise / 2 - frameThickness * 0.1, paneZ);
+          leftArchGlass.rotation.z = Math.atan2(archGlassRise, archGlassRun);
+
+          const rightArchGlass = new Mesh(archGlassGeometry, glassMaterial);
+          rightArchGlass.position.set(archGlassRun / 2, shoulderY + archGlassRise / 2 - frameThickness * 0.1, paneZ);
+          rightArchGlass.rotation.z = -Math.atan2(archGlassRise, archGlassRun);
+
+          windowGroup.add(
+            leftJamb,
+            rightJamb,
+            bottomFrame,
+            leftArch,
+            rightArch,
+            apexCap,
+            leftPane,
+            rightPane,
+            mullion,
+            leftArchGlass,
+            rightArchGlass,
+          );
+        } else {
+          const sideFrameGeometry = new BoxGeometry(frameThickness, outerHeight, frameDepth);
+          const topBottomFrameGeometry = new BoxGeometry(outerWidth, frameThickness, frameDepth);
+
+          const leftFrame = new Mesh(sideFrameGeometry, frameMaterial);
+          leftFrame.position.x = -outerWidth / 2 + frameThickness / 2;
+          const rightFrame = new Mesh(sideFrameGeometry, frameMaterial);
+          rightFrame.position.x = outerWidth / 2 - frameThickness / 2;
+          const topFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
+          topFrame.position.y = outerHeight / 2 - frameThickness / 2;
+          const bottomFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
+          bottomFrame.position.y = -outerHeight / 2 + frameThickness / 2;
+
+          const glass = new Mesh(new BoxGeometry(glassWidth, glassHeight, frameDepth * 0.48), glassMaterial);
+          glass.position.z = -frameDepth * 0.16;
+
+          windowGroup.add(leftFrame, rightFrame, topFrame, bottomFrame, glass);
         }
 
         const outDepth = frameDepth / 2 + 0.02;
