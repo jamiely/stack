@@ -24,7 +24,8 @@ export const FACE_ROTATION = {
 } as const;
 
 const EAVE_MIN_WIDTH = 0.36;
-const EAVE_CORNER_OVERLAP = 0.03;
+const EAVE_CORNER_SEAL_SIZE_MIN = 0.006;
+const EAVE_CORNER_SEAL_SIZE_MAX = 0.014;
 
 export function sampleDecorNoise(level: number, salt: number): number {
   const value = Math.sin(level * 12.9898 + salt * 78.233) * 43758.5453123;
@@ -76,7 +77,11 @@ export function shouldUseDarkWindowTrim(level: number): boolean {
 }
 
 export function resolveEaveWidth(span: number): number {
-  return Math.max(EAVE_MIN_WIDTH, span + EAVE_CORNER_OVERLAP);
+  return Math.max(EAVE_MIN_WIDTH, span);
+}
+
+export function resolveEaveCornerSealSize(eaveHeight: number): number {
+  return Math.max(EAVE_CORNER_SEAL_SIZE_MIN, Math.min(EAVE_CORNER_SEAL_SIZE_MAX, eaveHeight * 0.018));
 }
 
 export function resolveWindowCountNoise(level: number, faceNoiseSalt: number): number {

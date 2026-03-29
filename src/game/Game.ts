@@ -24,6 +24,7 @@ import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedba
 import {
   FACE_ROTATION,
   filterFacesByVisibility,
+  resolveEaveCornerSealSize,
   resolveEaveWidth,
   resolveSlabHue,
   resolveTentacleSegmentOffset,
@@ -2847,26 +2848,31 @@ export class Game {
     const elevationY = slab.dimensions.height / 2 - eaveHeight * 0.42;
 
     const faces: Array<{
+      id: "posX" | "negX" | "posZ" | "negZ";
       span: number;
       createPosition: () => { x: number; y: number; z: number };
       rotationY: number;
     }> = [
       {
+        id: "posX",
         span: slab.dimensions.depth,
         createPosition: () => ({ x: slab.dimensions.width / 2 + 0.028, y: elevationY, z: 0 }),
         rotationY: FACE_ROTATION.posX,
       },
       {
+        id: "negX",
         span: slab.dimensions.depth,
         createPosition: () => ({ x: -(slab.dimensions.width / 2 + 0.028), y: elevationY, z: 0 }),
         rotationY: FACE_ROTATION.negX,
       },
       {
+        id: "posZ",
         span: slab.dimensions.width,
         createPosition: () => ({ x: 0, y: elevationY, z: slab.dimensions.depth / 2 + 0.028 }),
         rotationY: FACE_ROTATION.posZ,
       },
       {
+        id: "negZ",
         span: slab.dimensions.width,
         createPosition: () => ({ x: 0, y: elevationY, z: -(slab.dimensions.depth / 2 + 0.028) }),
         rotationY: FACE_ROTATION.negZ,
@@ -2883,27 +2889,62 @@ export class Game {
     const slabBaseColor = new Color(this.getSlabColor(slab.level));
     const eaveColor = slabBaseColor.clone().offsetHSL(0, -0.08, -0.06);
     const eaveEmissive = new Color(this.getSlabEmissive(slab.level)).multiplyScalar(0.72);
+    const eaveMaterial = new MeshStandardMaterial({
+      color: eaveColor,
+      emissive: eaveEmissive,
+      emissiveIntensity: 0.16,
+      metalness: 0.02,
+      roughness: 0.74,
+      map: this.eavesTexture,
+      transparent: true,
+      opacity: 0.93,
+      side: DoubleSide,
+      depthWrite: false,
+    });
 
     finalFaces.forEach((face) => {
-      const material = new MeshStandardMaterial({
-        color: eaveColor,
-        emissive: eaveEmissive,
-        emissiveIntensity: 0.16,
-        metalness: 0.02,
-        roughness: 0.74,
-        map: this.eavesTexture,
-        transparent: true,
-        opacity: 0.93,
-        side: DoubleSide,
-        depthWrite: false,
-      });
-
       const eaveWidth = resolveEaveWidth(face.span);
-      const eave = new Mesh(new PlaneGeometry(eaveWidth, eaveHeight), material);
+      const eave = new Mesh(new PlaneGeometry(eaveWidth, eaveHeight), eaveMaterial);
       const position = face.createPosition();
       eave.position.set(position.x, position.y, position.z);
       eave.rotation.y = face.rotationY;
       mesh.add(eave);
+    });
+
+    const visibleFaceIds = new Set(finalFaces.map((face) => face.id));
+    const sealSize = resolveEaveCornerSealSize(eaveHeight);
+    const cornerSealMaterial = new MeshStandardMaterial({
+      color: eaveColor,
+      emissive: eaveEmissive,
+      emissiveIntensity: 0.16,
+      metalness: 0.02,
+      roughness: 0.74,
+      transparent: true,
+      opacity: 0.9,
+      side: DoubleSide,
+      depthWrite: false,
+    });
+
+    const cornerSeals = [
+      { requires: ["posX", "posZ"] as const, xSign: 1, zSign: 1 },
+      { requires: ["posX", "negZ"] as const, xSign: 1, zSign: -1 },
+      { requires: ["negX", "posZ"] as const, xSign: -1, zSign: 1 },
+      { requires: ["negX", "negZ"] as const, xSign: -1, zSign: -1 },
+    ];
+
+    cornerSeals.forEach((corner) => {
+      if (!corner.requires.every((faceId) => visibleFaceIds.has(faceId))) {
+        return;
+      }
+
+      const seal = new Mesh(new PlaneGeometry(sealSize, eaveHeight * 0.96), cornerSealMaterial);
+      seal.position.set(
+        corner.xSign * (slab.dimensions.width / 2 + 0.028),
+        elevationY,
+        corner.zSign * (slab.dimensions.depth / 2 + 0.028),
+      );
+      seal.rotation.y = corner.xSign === corner.zSign ? Math.PI / 4 : -Math.PI / 4;
+      mesh.add(seal);
     });
   }
 

@@ -3,6 +3,7 @@ import {
   FACE_ROTATION,
   filterFacesByVisibility,
   isFaceHiddenFromCamera,
+  resolveEaveCornerSealSize,
   resolveEaveWidth,
   resolveSlabHue,
   resolveTentacleSegmentOffset,
@@ -108,13 +109,19 @@ describe("tentacle segment offsets", () => {
 });
 
 describe("eave helpers", () => {
-  it("adds a small corner overlap to close visible seams", () => {
-    expect(resolveEaveWidth(1.2)).toBeCloseTo(1.23, 6);
-    expect(resolveEaveWidth(2.4) - 2.4).toBeLessThanOrEqual(0.04);
+  it("keeps eave width flush with the slab span", () => {
+    expect(resolveEaveWidth(1.2)).toBeCloseTo(1.2, 6);
+    expect(resolveEaveWidth(2.4)).toBeCloseTo(2.4, 6);
   });
 
   it("respects a minimum renderable eave width", () => {
     expect(resolveEaveWidth(0.08)).toBeCloseTo(0.36, 6);
+  });
+
+  it("resolves bounded corner-seal size", () => {
+    expect(resolveEaveCornerSealSize(0.44)).toBeCloseTo(0.00792, 6);
+    expect(resolveEaveCornerSealSize(0.2)).toBeCloseTo(0.006, 6);
+    expect(resolveEaveCornerSealSize(1.2)).toBeCloseTo(0.014, 6);
   });
 });
 
