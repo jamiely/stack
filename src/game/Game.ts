@@ -190,9 +190,9 @@ const STACK_LOOK_AHEAD_Y = 1.05;
 const STARTUP_CAMERA_LIFT = 2.2;
 const STARTUP_CAMERA_LIFT_FADE_FLOORS = 10;
 const PLACEMENT_SHAKE_DURATION_SECONDS = 0.16;
-const COLLAPSE_VOXEL_SIZE = 0.45;
+const COLLAPSE_VOXEL_SIZE = 0.38;
 const COLLAPSE_VOXEL_LIFETIME_SECONDS = 2.2;
-const COLLAPSE_VOXEL_MAX_COUNT = 560;
+const COLLAPSE_VOXEL_MAX_COUNT = 2200;
 const TENTACLE_SIDE_SWITCH_SPEED = 0.75;
 const TENTACLE_BURST_CHANCE = 0.5;
 const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
@@ -3005,12 +3005,16 @@ export class Game {
 
     for (let slabIndex = 0; slabIndex < burstSlabs.length; slabIndex += 1) {
       const slab = burstSlabs[slabIndex]!;
-      const xCount = Math.max(1, Math.min(5, Math.round(slab.dimensions.width / COLLAPSE_VOXEL_SIZE)));
-      const yCount = Math.max(1, Math.min(2, Math.round(slab.dimensions.height / COLLAPSE_VOXEL_SIZE)));
-      const zCount = Math.max(1, Math.min(5, Math.round(slab.dimensions.depth / COLLAPSE_VOXEL_SIZE)));
+      const maxDimension = Math.max(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
+      const dominantAxisCount = Math.max(1, Math.min(8, Math.ceil(maxDimension / COLLAPSE_VOXEL_SIZE)));
+      const cubeEdge = maxDimension / dominantAxisCount;
+      const xCount = Math.max(1, Math.min(8, Math.round(slab.dimensions.width / cubeEdge)));
+      const yCount = Math.max(1, Math.min(8, Math.round(slab.dimensions.height / cubeEdge)));
+      const zCount = Math.max(1, Math.min(8, Math.round(slab.dimensions.depth / cubeEdge)));
       const cellWidth = slab.dimensions.width / xCount;
       const cellHeight = slab.dimensions.height / yCount;
       const cellDepth = slab.dimensions.depth / zCount;
+      const voxelEdge = Math.max(0.14, Math.min(cellWidth, cellHeight, cellDepth) * 0.98);
 
       for (let xIndex = 0; xIndex < xCount; xIndex += 1) {
         for (let yIndex = 0; yIndex < yCount; yIndex += 1) {
@@ -3023,7 +3027,7 @@ export class Game {
             const centerY = slab.position.y - slab.dimensions.height / 2 + cellHeight * (yIndex + 0.5);
             const centerZ = slab.position.z - slab.dimensions.depth / 2 + cellDepth * (zIndex + 0.5);
             const mesh = new Mesh(
-              new BoxGeometry(Math.max(0.12, cellWidth * 0.92), Math.max(0.12, cellHeight * 0.92), Math.max(0.12, cellDepth * 0.92)),
+              new BoxGeometry(voxelEdge, voxelEdge, voxelEdge),
               new MeshStandardMaterial({
                 color: this.getSlabColor(slab.level),
                 emissive: this.getSlabEmissive(slab.level),
