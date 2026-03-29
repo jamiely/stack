@@ -322,6 +322,7 @@ export class Game {
   private introHideTimeoutId: number | null = null;
   private readonly windowTexture = this.createWindowTexture();
   private readonly eavesTexture = this.createEavesTexture();
+  private readonly weatheringTexture = this.createWeatheringTexture();
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudAnchorsInitialized = false;
 
@@ -1971,6 +1972,7 @@ export class Game {
     mesh.position.set(slab.position.x, slab.position.y, slab.position.z);
 
     if (!isTop) {
+      this.decorateSlabWithWeathering(mesh, slab);
       this.decorateSlabWithWindows(mesh, slab);
       this.decorateSlabWithEaves(mesh, slab);
     }
@@ -2054,7 +2056,7 @@ export class Game {
 
     const windowHeight = Math.max(0.48, Math.min(0.86, slab.dimensions.height * 0.32));
     const windowWidth = Math.max(0.13, windowHeight * 0.34);
-    const elevationY = Math.min(slab.dimensions.height * 0.18, slab.dimensions.height / 2 - windowHeight / 2 - 0.04);
+    const elevationY = 0;
     const windowMaterial = new MeshStandardMaterial({
       color: new Color("#dce4f2"),
       emissive: new Color("#38506a"),
@@ -2107,6 +2109,99 @@ export class Game {
         windowMesh.rotation.y = face.rotationY;
         mesh.add(windowMesh);
       }
+    });
+  }
+
+  private createWeatheringTexture(): CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 96;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      const fallbackTexture = new CanvasTexture(canvas);
+      fallbackTexture.needsUpdate = true;
+      return fallbackTexture;
+    }
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, "rgba(255, 255, 255, 0)");
+    gradient.addColorStop(0.35, "rgba(255, 255, 255, 0.18)");
+    gradient.addColorStop(1, "rgba(255, 255, 255, 0.92)");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    context.fillStyle = "rgba(255, 255, 255, 0.22)";
+    for (let index = 0; index < 28; index += 1) {
+      const x = Math.random() * canvas.width;
+      const y = canvas.height * 0.45 + Math.random() * canvas.height * 0.5;
+      const width = 8 + Math.random() * 24;
+      const height = 1 + Math.random() * 2;
+      context.fillRect(x, y, width, height);
+    }
+
+    const texture = new CanvasTexture(canvas);
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private decorateSlabWithWeathering(mesh: Mesh, slab: SlabData): void {
+    if (slab.dimensions.height < 0.9 || !this.shouldRenderWeatheringForSlab(slab.level)) {
+      return;
+    }
+
+    const weatheringHeight = Math.max(0.46, slab.dimensions.height * 0.54);
+    const elevationY = -slab.dimensions.height / 2 + weatheringHeight / 2;
+    const weatheringColor = new Color(this.getSlabColor(slab.level)).offsetHSL(0, -0.12, -0.16);
+
+    const faces: Array<{
+      span: number;
+      createPosition: () => { x: number; y: number; z: number };
+      rotationY: number;
+    }> = [
+      {
+        span: slab.dimensions.depth,
+        createPosition: () => ({ x: slab.dimensions.width / 2 + 0.022, y: elevationY, z: 0 }),
+        rotationY: -Math.PI / 2,
+      },
+      {
+        span: slab.dimensions.depth,
+        createPosition: () => ({ x: -(slab.dimensions.width / 2 + 0.022), y: elevationY, z: 0 }),
+        rotationY: Math.PI / 2,
+      },
+      {
+        span: slab.dimensions.width,
+        createPosition: () => ({ x: 0, y: elevationY, z: slab.dimensions.depth / 2 + 0.022 }),
+        rotationY: 0,
+      },
+      {
+        span: slab.dimensions.width,
+        createPosition: () => ({ x: 0, y: elevationY, z: -(slab.dimensions.depth / 2 + 0.022) }),
+        rotationY: Math.PI,
+      },
+    ];
+
+    faces.forEach((face) => {
+      const material = new MeshStandardMaterial({
+        color: weatheringColor,
+        emissive: new Color("#0f1117"),
+        emissiveIntensity: 0.04,
+        metalness: 0.01,
+        roughness: 0.9,
+        map: this.weatheringTexture,
+        transparent: true,
+        opacity: 0.22,
+        side: DoubleSide,
+        depthWrite: false,
+      });
+
+      const weathering = new Mesh(new PlaneGeometry(Math.max(0.4, face.span * 0.96), weatheringHeight), material);
+      const position = face.createPosition();
+      weathering.position.set(position.x, position.y, position.z);
+      weathering.rotation.y = face.rotationY;
+      mesh.add(weathering);
     });
   }
 
@@ -2175,6 +2270,10 @@ export class Game {
 
   private shouldRenderEavesForSlab(level: number): boolean {
     return this.sampleDecorNoise(level, 0.17) > 0.36;
+  }
+
+  private shouldRenderWeatheringForSlab(level: number): boolean {
+    return this.sampleDecorNoise(level, 4.61) > 0.42;
   }
 
   private sampleDecorNoise(level: number, salt: number): number {
