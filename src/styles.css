@@ -115,6 +115,32 @@ body {
   will-change: transform;
 }
 
+.distraction-fireworks {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  transition: opacity 100ms linear;
+}
+
+.distraction-fireworks__burst {
+  display: block;
+  width: 8.5rem;
+  height: 8.5rem;
+  border-radius: 999px;
+  background:
+    repeating-conic-gradient(
+      from 0deg,
+      rgba(255, 227, 131, 0.9) 0deg 8deg,
+      rgba(255, 123, 188, 0.86) 8deg 16deg,
+      rgba(142, 255, 182, 0.86) 16deg 24deg,
+      rgba(126, 186, 255, 0.82) 24deg 32deg
+    );
+  mask: radial-gradient(circle, transparent 0 22%, #000 24% 100%);
+  filter: drop-shadow(0 0 0.8rem rgba(255, 220, 122, 0.66));
+  opacity: 0;
+}
+
 .distraction-tremor {
   position: absolute;
   left: 50%;

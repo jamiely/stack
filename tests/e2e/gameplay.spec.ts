@@ -263,7 +263,8 @@ test("seeded startup produces stable active-slab spawn states", async ({ page })
   expect(firstSeedRunA?.seed).toBe(42);
   expect(otherSeedRun?.seed).toBe(7);
 
-  expect(firstSeedRunA?.activePosition).not.toEqual(otherSeedRun?.activePosition);
+  // Spawn position is now deterministic from slab geometry (seed-independent).
+  expect(firstSeedRunA?.activePosition).toEqual(otherSeedRun?.activePosition);
 });
 
 test("scripted placement sequence is deterministic across runs", async ({ page }) => {

@@ -1,6 +1,6 @@
 import { createSeededRandom } from "./random";
 
-export type DistractionChannel = "tentacle" | "gorilla" | "tremor" | "ufo" | "contrastWash" | "clouds";
+export type DistractionChannel = "tentacle" | "gorilla" | "tremor" | "ufo" | "contrastWash" | "clouds" | "fireworks";
 
 export interface DistractionConfig {
   distractionsEnabled: boolean;
@@ -15,6 +15,8 @@ export interface DistractionConfig {
   distractionContrastEnabled: boolean;
   distractionCloudEnabled: boolean;
   distractionCloudStartLevel: number;
+  distractionFireworksEnabled: boolean;
+  distractionFireworksStartLevel: number;
 }
 
 export interface DistractionSnapshot {
@@ -30,7 +32,7 @@ export interface DistractionState {
   snapshot: DistractionSnapshot;
 }
 
-const CHANNELS: DistractionChannel[] = ["tentacle", "gorilla", "tremor", "ufo", "contrastWash", "clouds"];
+const CHANNELS: DistractionChannel[] = ["tentacle", "gorilla", "tremor", "ufo", "contrastWash", "clouds", "fireworks"];
 const FREQUENCIES: Record<DistractionChannel, number> = {
   tentacle: 0.75,
   gorilla: 0.42,
@@ -38,6 +40,7 @@ const FREQUENCIES: Record<DistractionChannel, number> = {
   ufo: 0.33,
   contrastWash: 0.56,
   clouds: 0.12,
+  fireworks: 0.28,
 };
 
 export function createDistractionState(seed: number): DistractionState {
@@ -52,6 +55,7 @@ export function createDistractionState(seed: number): DistractionState {
     ufo: 0,
     contrastWash: 0,
     clouds: 0,
+    fireworks: 0,
   });
 
   return {
@@ -100,6 +104,10 @@ export function updateDistractionState(
       config.distractionsEnabled &&
       config.distractionCloudEnabled &&
       level >= config.distractionCloudStartLevel,
+    fireworks:
+      config.distractionsEnabled &&
+      config.distractionFireworksEnabled &&
+      level >= config.distractionFireworksStartLevel,
   } satisfies Record<DistractionChannel, boolean>;
 
   const baseSignals = CHANNELS.reduce<Record<DistractionChannel, number>>((result, channel) => {
@@ -121,6 +129,7 @@ export function updateDistractionState(
     ufo: active.ufo ? baseSignals.ufo : 0,
     contrastWash: active.contrastWash ? baseSignals.contrastWash : 0,
     clouds: active.clouds ? baseSignals.clouds : 0,
+    fireworks: active.fireworks ? pulseSignal(elapsedSeconds * 0.72, state.phases.fireworks, config.distractionMotionSpeed) : 0,
   };
 
   return {
@@ -143,6 +152,7 @@ function createInactiveRecord<T>(value: T): Record<DistractionChannel, T> {
     ufo: value,
     contrastWash: value,
     clouds: value,
+    fireworks: value,
   };
 }
 

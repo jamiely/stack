@@ -60,6 +60,9 @@ export interface DebugConfig {
   distractionContrastEnabled: boolean;
   distractionCloudEnabled: boolean;
   distractionCloudStartLevel: number;
+  distractionFireworksEnabled: boolean;
+  distractionFireworksStartLevel: number;
+  dayNightCycleDurationSeconds: number;
   integrityPrecariousThreshold: number;
   integrityUnstableThreshold: number;
   integrityWobbleStrength: number;
@@ -131,6 +134,7 @@ export interface PublicGameState {
       ufo: boolean;
       contrastWash: boolean;
       clouds: boolean;
+      fireworks: boolean;
     };
     signals: {
       tentacle: number;
@@ -139,6 +143,7 @@ export interface PublicGameState {
       ufo: number;
       contrastWash: number;
       clouds: number;
+      fireworks: number;
     };
     visuals: {
       gorillaOpacity: number;
@@ -146,6 +151,7 @@ export interface PublicGameState {
       cloudOpacity: number;
       contrastOpacity: number;
       tremorStrength: number;
+      fireworksOpacity: number;
     };
   };
   integrity: {

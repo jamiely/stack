@@ -28,17 +28,26 @@ export function getTravelSpeed(level: number, config: DebugConfig): number {
   return config.motionSpeed + Math.max(0, level - 1) * config.speedRamp;
 }
 
+const MIN_SPAWN_CLEARANCE = 1.2;
+
+export function resolveSpawnOffsetDistance(targetSpan: number, minimumClearance = MIN_SPAWN_CLEARANCE): number {
+  const overlapStartDistance = Math.max(0.4, targetSpan * 0.5);
+  return Math.max(overlapStartDistance, minimumClearance);
+}
+
 export function spawnActiveSlab(target: SlabData, config: DebugConfig): SlabData {
   const nextLevel = target.level + 1;
   const axis = getAxisForLevel(nextLevel);
+  const targetSpan = axis === "x" ? target.dimensions.width : target.dimensions.depth;
+  const spawnDistance = resolveSpawnOffsetDistance(targetSpan);
 
   return {
     level: nextLevel,
     axis,
     position: {
-      x: axis === "x" ? target.position.x - config.motionRange : target.position.x,
+      x: axis === "x" ? target.position.x - spawnDistance : target.position.x,
       y: target.position.y + config.slabHeight,
-      z: axis === "z" ? target.position.z - config.motionRange : target.position.z,
+      z: axis === "z" ? target.position.z - spawnDistance : target.position.z,
     },
     dimensions: {
       width: target.dimensions.width,

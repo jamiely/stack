@@ -27,6 +27,7 @@ import {
   resolveEaveCornerSealSize,
   resolveEaveWidth,
   resolveSlabHue,
+  resolveTentaclePalette,
   resolveTentacleSegmentOffset,
   resolveWindowCountNoise,
   resolveWindowMetrics,
@@ -36,6 +37,8 @@ import {
   shouldUseDarkWindowTrim,
 } from "./logic/decor";
 import { advanceOscillation } from "./logic/oscillation";
+import { samplePlacementCameraShake, sampleTremorCameraShake } from "./logic/cameraEffects";
+import { sampleDayNightFrame } from "./logic/dayNight";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
 import {
   advanceCollapseSequence,
@@ -70,6 +73,8 @@ import {
   readTestModeOptions,
   tickDistractionTimerRecord,
 } from "./logic/runtime";
+import { resolveFacadeStyle } from "./logic/facade";
+import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
@@ -95,6 +100,7 @@ type DebugToggleKey =
   | "distractionUfoEnabled"
   | "distractionContrastEnabled"
   | "distractionCloudEnabled"
+  | "distractionFireworksEnabled"
   | "performanceAutoQualityEnabled";
 type DebugNumberKey = Exclude<keyof DebugConfig, DebugToggleKey>;
 
@@ -169,6 +175,8 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   distractionGorillaStartLevel: { min: 0, max: 80, step: 1, label: "Gorilla Start" },
   distractionUfoStartLevel: { min: 0, max: 100, step: 1, label: "UFO Start" },
   distractionCloudStartLevel: { min: 0, max: 120, step: 1, label: "Cloud Start" },
+  distractionFireworksStartLevel: { min: 0, max: 120, step: 1, label: "Fireworks Start" },
+  dayNightCycleDurationSeconds: { min: 20, max: 240, step: 1, label: "Day/Night Cycle" },
   integrityPrecariousThreshold: { min: 0.35, max: 0.85, step: 0.01, label: "Precarious Threshold" },
   integrityUnstableThreshold: { min: 0.45, max: 1.2, step: 0.01, label: "Unstable Threshold" },
   integrityWobbleStrength: { min: 0, max: 1.5, step: 0.01, label: "Integrity Wobble" },
@@ -202,6 +210,7 @@ const DEBUG_TOGGLE_META: Record<DebugToggleKey, { label: string }> = {
   distractionUfoEnabled: { label: "UFO Layer" },
   distractionContrastEnabled: { label: "Contrast Wash" },
   distractionCloudEnabled: { label: "Cloud Occlusion" },
+  distractionFireworksEnabled: { label: "Fireworks" },
   performanceAutoQualityEnabled: { label: "Auto Quality" },
 };
 
@@ -212,6 +221,7 @@ const DEBUG_DISTRACTION_CHANNELS: DistractionChannel[] = [
   "ufo",
   "contrastWash",
   "clouds",
+  "fireworks",
 ];
 const DEBUG_DISTRACTION_LAUNCH_DURATION_SECONDS = 6;
 const UFO_EXIT_DURATION_SECONDS = 1.15;
@@ -239,6 +249,7 @@ const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string 
   ufo: { label: "UFO" },
   contrastWash: { label: "Contrast" },
   clouds: { label: "Clouds" },
+  fireworks: { label: "Fireworks" },
 };
 
 declare global {
@@ -271,6 +282,7 @@ export class Game {
   private readonly gorillaActor: HTMLDivElement;
   private readonly ufoActor: HTMLDivElement;
   private readonly cloudLayer: HTMLDivElement;
+  private readonly fireworksActor: HTMLDivElement;
   private readonly tremorPulse: HTMLDivElement;
 
   private readonly scene = new Scene();
@@ -282,6 +294,8 @@ export class Game {
   private readonly collapseVoxelGroup = new Group();
   private readonly tentacleGroup = new Group();
   private readonly gridHelper = new GridHelper(28, 28, 0xd8b162, 0x28425f);
+  private readonly ambientLight = new AmbientLight(0xffffff, 1.8);
+  private readonly directionalLight = new DirectionalLight(0xfff0c8, 2.2);
 
   private debugConfig: DebugConfig = defaultDebugConfig;
   private readonly feedbackManager = new FeedbackManager({
@@ -351,6 +365,8 @@ export class Game {
   private readonly windowTexture = this.createWindowTexture();
   private readonly eavesTexture = this.createEavesTexture();
   private readonly weatheringTexture = this.createWeatheringTexture();
+  private readonly brickTexture = this.createBrickTexture();
+  private readonly sidingTexture = this.createSidingTexture();
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudAnchorsInitialized = false;
   private tentacleBurstKeys: string[] = [];
@@ -406,8 +422,8 @@ export class Game {
     this.gorillaActor = document.createElement("div");
     this.ufoActor = document.createElement("div");
     this.cloudLayer = document.createElement("div");
+    this.fireworksActor = document.createElement("div");
     this.tremorPulse = document.createElement("div");
-
     this.renderer = this.createRenderer();
 
     this.scene.background = new Color("#07101c");
@@ -442,10 +458,8 @@ export class Game {
     this.gridHelper.position.y = -12;
     this.scene.add(this.stackGroup, this.archivedGroup, this.debrisGroup, this.collapseVoxelGroup, this.tentacleGroup, this.gridHelper);
 
-    const ambientLight = new AmbientLight(0xffffff, 1.8);
-    const directionalLight = new DirectionalLight(0xfff0c8, 2.2);
-    directionalLight.position.set(10, 18, 12);
-    this.scene.add(ambientLight, directionalLight);
+    this.directionalLight.position.set(10, 18, 12);
+    this.scene.add(this.ambientLight, this.directionalLight);
   }
 
   private buildHud(): void {
@@ -541,10 +555,14 @@ export class Game {
       this.cloudLayer.append(cloud);
     }
 
+    this.fireworksActor.className = "distraction-fireworks";
+    this.fireworksActor.dataset.testid = "actor-fireworks";
+    this.fireworksActor.innerHTML = "<span class=\"distraction-fireworks__burst\"></span>";
+
     this.tremorPulse.className = "distraction-tremor";
     this.tremorPulse.dataset.testid = "actor-tremor";
 
-    this.distractionLayer.append(this.gorillaActor, this.ufoActor, this.cloudLayer, this.tremorPulse);
+    this.distractionLayer.append(this.gorillaActor, this.ufoActor, this.cloudLayer, this.fireworksActor, this.tremorPulse);
   }
 
   private createDebugControls(): DocumentFragment {
@@ -585,6 +603,8 @@ export class Game {
             "lodFarDistance",
             "maxActiveDebris",
             "debrisPoolLimit",
+            "distractionFireworksStartLevel",
+            "dayNightCycleDurationSeconds",
           ];
           const rawValue = Number(input.value);
           const nextConfig = {
@@ -791,6 +811,7 @@ export class Game {
     this.refreshQualityPreset();
     this.updateDistractions(deltaSeconds);
     this.updateDistractionActors();
+    this.updateDayNightCycle();
     this.updateActiveSlab(deltaSeconds);
     this.updateDebris(deltaSeconds);
     this.updateCollapseVoxels(deltaSeconds);
@@ -956,23 +977,14 @@ export class Game {
     this.activeSlab = activeSlab;
 
     const targetAxisPosition = activeSlab.axis === "x" ? target.position.x : target.position.z;
-    const spawnSide = -1 as 1 | -1;
-    const seededBehindFactor = this.seededRandom ? 0.72 + this.seededRandom() * 0.28 : 1;
-    const spawnOffset = targetAxisPosition + spawnSide * this.debugConfig.motionRange * seededBehindFactor;
-    const spawnDirection = (spawnSide * -1) as 1 | -1;
+    const spawnOffset = activeSlab.axis === "x" ? activeSlab.position.x : activeSlab.position.z;
 
     this.oscillation = {
       axis: activeSlab.axis,
       center: targetAxisPosition,
       offset: spawnOffset,
-      direction: spawnDirection,
+      direction: activeSlab.direction,
     };
-
-    if (activeSlab.axis === "x") {
-      activeSlab.position.x = spawnOffset;
-    } else {
-      activeSlab.position.z = spawnOffset;
-    }
 
     if (this.activeMesh) {
       this.scene.remove(this.activeMesh);
@@ -1151,6 +1163,13 @@ export class Game {
     };
   }
 
+  private updateDayNightCycle(): void {
+    const frame = sampleDayNightFrame(this.simulationElapsedSeconds, this.debugConfig.dayNightCycleDurationSeconds);
+    this.scene.background = new Color(frame.skyTop);
+    this.ambientLight.intensity = frame.ambientIntensity;
+    this.directionalLight.intensity = frame.directionalIntensity;
+  }
+
   private updateDistractions(deltaSeconds: number): void {
     const scalars = getQualityScalars(this.activeQualityPreset);
     const shouldUpdate = this.frameCounter % Math.max(1, scalars.distractionUpdateStride) === 0;
@@ -1188,17 +1207,19 @@ export class Game {
       const height = this.container.clientHeight || window.innerHeight;
       const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
       const topPosition = topSlab?.position ?? { x: 0, y: 0, z: 0 };
-      const orbitPhase = this.distractionState.elapsedSeconds * GORILLA_CLIMB_SPEED * this.debugConfig.distractionMotionSpeed;
-      const aroundAngle = orbitPhase * 0.9;
-      const climbWave = (Math.sin(orbitPhase * Math.PI * 2) + 1) / 2;
-      const verticalRange = Math.max(2.6, Math.min(8.5, (this.landedSlabs.length - 1) * 0.33 + 2.1));
       const orbitRadius = Math.max(this.debugConfig.baseWidth, this.debugConfig.baseDepth) * 0.55 + 1.35;
+      const climbPoint = sampleGorillaClimbPosition({
+        topX: topPosition.x,
+        topY: topPosition.y,
+        topZ: topPosition.z,
+        topHeight: topSlab?.dimensions.height ?? this.debugConfig.slabHeight,
+        towerLevels: Math.max(1, this.landedSlabs.length - this.startingStackLevels),
+        elapsedSeconds: this.distractionState.elapsedSeconds * GORILLA_CLIMB_SPEED,
+        motionSpeed: this.debugConfig.distractionMotionSpeed,
+        baseRadius: orbitRadius,
+      });
 
-      const worldPoint = new Vector3(
-        topPosition.x + Math.cos(aroundAngle) * orbitRadius,
-        topPosition.y - verticalRange * 0.35 + climbWave * verticalRange,
-        topPosition.z + Math.sin(aroundAngle) * orbitRadius,
-      );
+      const worldPoint = new Vector3(climbPoint.x, climbPoint.y, climbPoint.z);
       const projected = worldPoint.clone().project(this.camera);
       const screenX = (projected.x * 0.5 + 0.5) * width;
       const screenY = (-projected.y * 0.5 + 0.5) * height;
@@ -1312,6 +1333,22 @@ export class Game {
 
     if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {
       this.updateCloudLayer(snapshot);
+    }
+
+    if (snapshot.active.fireworks) {
+      const burst = this.fireworksActor.querySelector<HTMLElement>(".distraction-fireworks__burst");
+      const burstScale = 0.7 + snapshot.signals.fireworks * 0.9;
+      const burstOpacity = 0.16 + snapshot.signals.fireworks * 0.72;
+      const xPercent = 18 + ((this.distractionState.elapsedSeconds * 23.5) % 64);
+      const yPercent = 22 + ((this.distractionState.elapsedSeconds * 17.25) % 48);
+      this.fireworksActor.style.opacity = burstOpacity.toFixed(3);
+      this.fireworksActor.style.transform = `translate(${xPercent.toFixed(1)}%, ${yPercent.toFixed(1)}%) translate(-50%, -50%)`;
+      if (burst) {
+        burst.style.transform = `scale(${burstScale.toFixed(3)})`;
+        burst.style.opacity = Math.min(1, 0.35 + snapshot.signals.fireworks * 0.75).toFixed(3);
+      }
+    } else {
+      this.fireworksActor.style.opacity = "0";
     }
 
     const contrastOpacity = snapshot.active.contrastWash ? snapshot.signals.contrastWash * 0.35 : 0;
@@ -1492,9 +1529,17 @@ export class Game {
 
     const offsets = getWindowHorizontalOffsets(face.span, windowCount, windowStyle, windowWidth, frameThickness);
 
+    const tentaclePalette = resolveTentaclePalette(slab.level, face.noiseSalt);
+    const tentacleTone =
+      tentaclePalette === "green"
+        ? { color: "#47d17e", emissive: "#0b5f37" }
+        : tentaclePalette === "pink"
+          ? { color: "#ff79d8", emissive: "#7a1a5b" }
+          : { color: "#b436ff", emissive: "#4e06a1" };
+
     const tentacleMaterial = new MeshStandardMaterial({
-      color: new Color("#b436ff"),
-      emissive: new Color("#4e06a1"),
+      color: new Color(tentacleTone.color),
+      emissive: new Color(tentacleTone.emissive),
       emissiveIntensity: 0.5,
       metalness: 0.08,
       roughness: 0.62,
@@ -1716,11 +1761,9 @@ export class Game {
 
     const distractionSnapshot = this.getEffectiveDistractionSnapshot();
     const tremorStrength = distractionSnapshot.active.tremor ? distractionSnapshot.signals.tremor : 0;
-    if (tremorStrength > 0) {
-      const shakePhase = this.distractionState.elapsedSeconds * 58;
-      this.camera.position.x += Math.sin(shakePhase) * 0.03 * tremorStrength;
-      this.camera.position.y += Math.cos(shakePhase * 0.9) * 0.04 * tremorStrength;
-    }
+    const tremorShake = sampleTremorCameraShake(this.distractionState.elapsedSeconds, tremorStrength);
+    this.camera.position.x += tremorShake.x;
+    this.camera.position.y += tremorShake.y;
 
     if (this.gorillaSlamRemaining > 0) {
       const slamStrength = this.gorillaSlamRemaining / GORILLA_SLAM_DURATION_SECONDS;
@@ -1731,12 +1774,15 @@ export class Game {
 
     if (this.placementShakeRemaining > 0 && this.debugConfig.placementShakeAmount > 0) {
       this.placementShakeRemaining = Math.max(0, this.placementShakeRemaining - safeDeltaSeconds);
-      const shakeStrength =
-        (this.placementShakeRemaining / PLACEMENT_SHAKE_DURATION_SECONDS) * this.debugConfig.placementShakeAmount;
-      const shakePhase = this.simulationElapsedSeconds * 78;
-      this.camera.position.x += Math.sin(shakePhase) * 0.08 * shakeStrength;
-      this.camera.position.y += Math.cos(shakePhase * 1.1) * 0.06 * shakeStrength;
-      this.camera.position.z += Math.sin(shakePhase * 0.9) * 0.04 * shakeStrength;
+      const placementShake = samplePlacementCameraShake(
+        this.simulationElapsedSeconds,
+        this.placementShakeRemaining,
+        PLACEMENT_SHAKE_DURATION_SECONDS,
+        this.debugConfig.placementShakeAmount,
+      );
+      this.camera.position.x += placementShake.x;
+      this.camera.position.y += placementShake.y;
+      this.camera.position.z += placementShake.z;
     }
 
     if (this.integrityTelemetry.tier === "precarious") {
@@ -2008,6 +2054,8 @@ export class Game {
         "lodFarDistance",
         "maxActiveDebris",
         "debrisPoolLimit",
+        "distractionFireworksStartLevel",
+        "dayNightCycleDurationSeconds",
       ];
 
       node.textContent = integerKeys.includes(key)
@@ -2112,6 +2160,7 @@ export class Game {
           cloudOpacity: Number(this.cloudLayer.style.opacity || 0),
           contrastOpacity: Number(this.shell.style.getPropertyValue("--contrast-alpha") || 0),
           tremorStrength: distractionSnapshot.active.tremor ? distractionSnapshot.signals.tremor : 0,
+          fireworksOpacity: Number(this.fireworksActor.style.opacity || 0),
         },
       },
       integrity: {
@@ -2153,11 +2202,13 @@ export class Game {
 
   private createSlabMesh(slab: SlabData, isTop: boolean): Mesh {
     const geometry = new BoxGeometry(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
+    const facadeStyle = resolveFacadeStyle(slab.level);
     const material = new MeshStandardMaterial({
       color: this.getSlabColor(slab.level),
       emissive: this.getSlabEmissive(slab.level),
-      metalness: 0.12,
-      roughness: 0.82,
+      metalness: facadeStyle === "smooth" ? 0.12 : 0.08,
+      roughness: facadeStyle === "brick" ? 0.9 : facadeStyle === "siding" ? 0.76 : 0.82,
+      map: facadeStyle === "brick" ? this.brickTexture : facadeStyle === "siding" ? this.sidingTexture : null,
     });
 
     const mesh = new Mesh(geometry, material);
@@ -2233,6 +2284,75 @@ export class Game {
       context.beginPath();
       context.ellipse(centerX, centerY, radiusX, radiusY, 0, 0.04, Math.PI - 0.04, false);
       context.stroke();
+    }
+
+    const texture = new CanvasTexture(canvas);
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private createBrickTexture(): CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      const fallbackTexture = new CanvasTexture(canvas);
+      fallbackTexture.needsUpdate = true;
+      return fallbackTexture;
+    }
+
+    context.fillStyle = "#b36f57";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = "rgba(243, 216, 189, 0.45)";
+    context.lineWidth = 3;
+
+    const rowHeight = 16;
+    const brickWidth = 32;
+    for (let row = 0; row < canvas.height / rowHeight; row += 1) {
+      const y = row * rowHeight;
+      const offset = row % 2 === 0 ? 0 : brickWidth / 2;
+      context.beginPath();
+      context.moveTo(0, y);
+      context.lineTo(canvas.width, y);
+      context.stroke();
+
+      for (let x = offset; x < canvas.width; x += brickWidth) {
+        context.beginPath();
+        context.moveTo(x, y);
+        context.lineTo(x, y + rowHeight);
+        context.stroke();
+      }
+    }
+
+    const texture = new CanvasTexture(canvas);
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private createSidingTexture(): CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 128;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      const fallbackTexture = new CanvasTexture(canvas);
+      fallbackTexture.needsUpdate = true;
+      return fallbackTexture;
+    }
+
+    context.fillStyle = "#9eb4c4";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let y = 6; y < canvas.height; y += 11) {
+      context.fillStyle = "rgba(244, 250, 255, 0.35)";
+      context.fillRect(0, y, canvas.width, 2);
+      context.fillStyle = "rgba(69, 93, 116, 0.3)";
+      context.fillRect(0, y + 2, canvas.width, 1);
     }
 
     const texture = new CanvasTexture(canvas);

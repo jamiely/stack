@@ -14,6 +14,8 @@ const config = {
   distractionContrastEnabled: true,
   distractionCloudEnabled: true,
   distractionCloudStartLevel: 20,
+  distractionFireworksEnabled: true,
+  distractionFireworksStartLevel: 16,
 };
 
 describe("distraction logic", () => {
@@ -28,6 +30,7 @@ describe("distraction logic", () => {
       ufo: false,
       contrastWash: false,
       clouds: false,
+      fireworks: false,
     });
 
     const mid = updateDistractionState(early, 1 / 60, 9, config);
@@ -46,6 +49,7 @@ describe("distraction logic", () => {
       ufo: true,
       contrastWash: true,
       clouds: true,
+      fireworks: true,
     });
   });
 
@@ -86,5 +90,12 @@ describe("distraction logic", () => {
 
     expect(ufoOff.snapshot.active.ufo).toBe(false);
     expect(ufoOff.snapshot.active.contrastWash).toBe(false);
+
+    const fireworksOff = updateDistractionState(baseState, 1, 40, {
+      ...config,
+      distractionFireworksEnabled: false,
+    });
+
+    expect(fireworksOff.snapshot.active.fireworks).toBe(false);
   });
 });

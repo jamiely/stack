@@ -7,6 +7,7 @@ const SHUTTER_WINDOW_MIN_FACE_SPAN = 1.02;
 const BAY_WINDOW_MIN_FACE_SPAN = 1.18;
 const WINDOW_EDGE_PADDING_MULTIPLIER = 0.72;
 const WINDOW_MIN_EDGE_CLEARANCE = 0.12;
+const WINDOW_EDGE_PADDING_MIN_HALF_WINDOW = 0.5;
 const WINDOW_PAIR_GAP_MULTIPLIER = 1.18;
 const WINDOW_MAX_PAIR_GAP_MULTIPLIER = 2.05;
 
@@ -64,7 +65,7 @@ export function getWindowHorizontalOffsets(
 ): number[] {
   const outerWidth = windowWidth + frameThickness * 2;
   const footprint = getWindowFootprintWidth(style, outerWidth, frameThickness);
-  const edgePadding = Math.max(footprint * WINDOW_EDGE_PADDING_MULTIPLIER, footprint / 2 + WINDOW_MIN_EDGE_CLEARANCE);
+  const edgePadding = resolveWindowEdgePadding(style, windowWidth, frameThickness);
   if (count === 1) {
     return [0];
   }
@@ -83,6 +84,13 @@ export function resolveWindowOutDepth(frameDepth: number): number {
 
 export function resolveTentacleOutDepth(frameDepth: number): number {
   return resolveWindowOutDepth(frameDepth) + Math.max(0.03, frameDepth * 0.6);
+}
+
+export function resolveWindowEdgePadding(style: WindowStyle, windowWidth: number, frameThickness: number): number {
+  const outerWidth = windowWidth + frameThickness * 2;
+  const footprint = getWindowFootprintWidth(style, outerWidth, frameThickness);
+  const halfWindowPadding = outerWidth * WINDOW_EDGE_PADDING_MIN_HALF_WINDOW;
+  return Math.max(footprint * WINDOW_EDGE_PADDING_MULTIPLIER, footprint / 2 + WINDOW_MIN_EDGE_CLEARANCE, halfWindowPadding);
 }
 
 function getWindowFootprintWidth(style: WindowStyle, outerWidth: number, frameThickness: number): number {
@@ -106,7 +114,7 @@ function getMaxWindowCountByFootprint(
   frameThickness: number,
 ): number {
   const footprint = getWindowFootprintWidth(style, outerWidth, frameThickness);
-  const edgePadding = Math.max(footprint * WINDOW_EDGE_PADDING_MULTIPLIER, footprint / 2 + WINDOW_MIN_EDGE_CLEARANCE);
+  const edgePadding = resolveWindowEdgePadding(style, outerWidth - frameThickness * 2, frameThickness);
   const minimumPairGap = footprint * WINDOW_PAIR_GAP_MULTIPLIER;
 
   for (let count = 7; count >= 1; count -= 1) {

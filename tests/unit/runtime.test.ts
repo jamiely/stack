@@ -41,15 +41,18 @@ describe("distraction timer helpers", () => {
     const record = createDistractionTimerRecord(2);
     expect(record.tentacle).toBe(2);
     expect(record.clouds).toBe(2);
+    expect(record.fireworks).toBe(2);
 
-    tickDistractionTimerRecord(record, ["tentacle", "ufo"], 0.5);
+    tickDistractionTimerRecord(record, ["tentacle", "ufo", "fireworks"], 0.5);
     expect(record.tentacle).toBe(1.5);
     expect(record.ufo).toBe(1.5);
+    expect(record.fireworks).toBe(1.5);
     expect(record.gorilla).toBe(2);
 
-    tickDistractionTimerRecord(record, ["tentacle", "ufo"], 8);
+    tickDistractionTimerRecord(record, ["tentacle", "ufo", "fireworks"], 8);
     expect(record.tentacle).toBe(0);
     expect(record.ufo).toBe(0);
+    expect(record.fireworks).toBe(0);
 
     tickDistractionTimerRecord(record, ["tentacle", "ufo"], 1);
     expect(record.tentacle).toBe(0);
@@ -69,6 +72,7 @@ describe("distraction forcing + ufo orbit helpers", () => {
     expect(canForceDistractionChannel("ufo", config)).toBe(true);
     expect(canForceDistractionChannel("contrastWash", config)).toBe(true);
     expect(canForceDistractionChannel("clouds", config)).toBe(true);
+    expect(canForceDistractionChannel("fireworks", config)).toBe(true);
 
     expect(canForceDistractionChannel("gorilla", { ...config, distractionsEnabled: false })).toBe(false);
     expect(canForceDistractionChannel("ufo", { ...config, distractionUfoEnabled: false })).toBe(false);
@@ -77,6 +81,7 @@ describe("distraction forcing + ufo orbit helpers", () => {
     expect(canForceDistractionChannel("tremor", { ...config, distractionTremorEnabled: false })).toBe(false);
     expect(canForceDistractionChannel("contrastWash", { ...config, distractionContrastEnabled: false })).toBe(false);
     expect(canForceDistractionChannel("clouds", { ...config, distractionCloudEnabled: false })).toBe(false);
+    expect(canForceDistractionChannel("fireworks", { ...config, distractionFireworksEnabled: false })).toBe(false);
   });
 
   it("computes orbit duration with speed floor", () => {

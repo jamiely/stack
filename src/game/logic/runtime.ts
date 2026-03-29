@@ -32,6 +32,7 @@ export function createDistractionTimerRecord(value: number): Record<DistractionC
     ufo: value,
     contrastWash: value,
     clouds: value,
+    fireworks: value,
   };
 }
 
@@ -72,6 +73,8 @@ export function canForceDistractionChannel(channel: DistractionChannel, config: 
       return config.distractionContrastEnabled;
     case "clouds":
       return config.distractionCloudEnabled;
+    case "fireworks":
+      return config.distractionFireworksEnabled;
     default:
       return false;
   }

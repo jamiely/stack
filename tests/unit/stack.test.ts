@@ -5,6 +5,7 @@ import {
   getAxisForLevel,
   getTravelSpeed,
   resolvePlacement,
+  resolveSpawnOffsetDistance,
   spawnActiveSlab,
 } from "../../src/game/logic/stack";
 import type { SlabData } from "../../src/game/types";
@@ -67,12 +68,12 @@ describe("stack logic", () => {
     expect(next.position).toEqual({
       x: 0,
       y: 1 + defaultDebugConfig.slabHeight,
-      z: -defaultDebugConfig.motionRange,
+      z: -2,
     });
     expect(next.dimensions).toEqual({ width: 4, depth: 4, height: defaultDebugConfig.slabHeight });
   });
 
-  it("spawns x-axis movement from negative motion range on odd levels", () => {
+  it("spawns x-axis movement over the previous slab when the target is wide", () => {
     const next = spawnActiveSlab(
       makeSlab({
         level: 2,
@@ -84,10 +85,15 @@ describe("stack logic", () => {
 
     expect(next.axis).toBe("x");
     expect(next.position).toEqual({
-      x: 1.25 - defaultDebugConfig.motionRange,
+      x: 1.25 - 2,
       y: 2 + defaultDebugConfig.slabHeight,
       z: -0.5,
     });
+  });
+
+  it("uses minimum spawn clearance when the top slab becomes very thin", () => {
+    expect(resolveSpawnOffsetDistance(0.6)).toBe(1.2);
+    expect(resolveSpawnOffsetDistance(4)).toBe(2);
   });
 
   it("ramps travel speed by level", () => {

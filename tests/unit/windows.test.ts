@@ -4,6 +4,7 @@ import {
   getWindowHorizontalOffsets,
   resolveTentacleOutDepth,
   resolveWindowCountForFace,
+  resolveWindowEdgePadding,
   resolveWindowOutDepth,
   resolveWindowStyle,
   shouldRenderWindowsForFace,
@@ -97,5 +98,13 @@ describe("getWindowHorizontalOffsets", () => {
     const edgeClearance = span / 2 - maxOffset - footprint / 2;
 
     expect(edgeClearance).toBeGreaterThanOrEqual(0.12);
+  });
+
+  it("keeps at least half-window edge padding", () => {
+    const windowWidth = 0.26;
+    const frameThickness = 0.05;
+    const edgePadding = resolveWindowEdgePadding("rectangular", windowWidth, frameThickness);
+
+    expect(edgePadding).toBeGreaterThanOrEqual((windowWidth + frameThickness * 2) * 0.5);
   });
 });

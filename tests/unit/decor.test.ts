@@ -6,6 +6,7 @@ import {
   resolveEaveCornerSealSize,
   resolveEaveWidth,
   resolveSlabHue,
+  resolveTentaclePalette,
   resolveTentacleSegmentOffset,
   resolveWindowCountNoise,
   resolveWindowMetrics,
@@ -96,7 +97,14 @@ describe("isFaceHiddenFromCamera", () => {
   });
 });
 
-describe("tentacle segment offsets", () => {
+describe("tentacle styling and segment offsets", () => {
+  it("alternates deterministic tentacle palettes including green and pink", () => {
+    const palettes = Array.from({ length: 24 }, (_, level) => resolveTentaclePalette(level, 1.7));
+    expect(palettes).toContain("green");
+    expect(palettes).toContain("pink");
+    expect(palettes).toContain("purple");
+  });
+
   it("anchors the base segment at the window center", () => {
     expect(resolveTentacleSegmentOffset(0, 3, 0.2, 0.2)).toEqual({ x: 0, y: 0 });
   });

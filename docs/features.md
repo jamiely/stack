@@ -5,7 +5,7 @@ This document tracks implemented gameplay features and notable behavior decision
 ## Core Gameplay
 
 - Alternating slab movement axes by level (`X` then `Z` then `X`...)
-- New active slabs now spawn from behind the tower (camera-opposite side) and move toward the building first, increasing front-face visibility during play
+- New active slabs now spawn closer to the top slab footprint: they begin sliding over the previous block when it is wide enough, but still enforce a minimum spawn clearance when the tower top gets thin so timing remains readable
 - Stop-and-trim placement logic with three outcomes:
   - `perfect` (within tolerance, preserves target footprint)
   - `landed` (partial overlap, trims active slab)
@@ -21,7 +21,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - Runs start immediately on load; a brief `Tower stacker` title card appears at boot and eases out left
 - Restart-after-failure is handled by direct gameplay input (`Space`/`Enter` release, click, tap) from `game_over` without a dedicated restart button
 - V3 distraction framework runs as a deterministic side-channel (seeded + level-gated) without mutating trim/placement math
-- V3.3 actor layer now renders a gorilla that climbs around the tower perimeter with rhythmic slam pulses, a UFO that can complete a full tower orbit and then flies off-screen toward the player in Z instead of popping out when deactivating (with contrast-wash flashes), persistent front-layer cloud cover (including mid-screen occluders) with distraction-driven intensity boosts, and intermittent bright-purple tentacle bursts that now persist on previously affected slabs instead of being replaced on each new placement
+- V3.3 actor layer now renders a gorilla that follows a deterministic tower-climb path around the building with rhythmic slam pulses, a UFO that can complete a full tower orbit and then flies off-screen toward the player in Z instead of popping out when deactivating (with contrast-wash flashes), persistent front-layer cloud cover (including mid-screen occluders) with distraction-driven intensity boosts, intermittent tentacle bursts (now with deterministic purple/green/pink palettes) that persist on previously affected slabs instead of being replaced on each new placement, and periodic chrysanthemum-style fireworks starbursts
 - Tentacle bursts now spawn only on camera-visible slab faces and animate with stronger vertical wave undulation as they extend
 - UFO orbit altitude now tracks exactly one slab-height above the current tower top center; UFO visual size is projected from world scale so it reads approximately one slab tall on screen, and default UFO start-level tuning is lower so it appears earlier in normal runs
 - Structural integrity telemetry computes a deterministic tower center-of-mass approximation and classifies `stable`/`precarious`/`unstable` tiers against tunable thresholds
@@ -31,20 +31,21 @@ This document tracks implemented gameplay features and notable behavior decision
 ## Visual and Camera Behavior
 
 - Camera follows landed tower height (instead of the just-spawned active slab) with configurable distance/lerp plus a tunable framing offset, frame-rate-independent damping, and a smoothed look target so post-placement climbs feel fluid even during frame-time spikes; startup framing applies a short-lived lift so the initial stack starts lower in the viewport and then eases toward normal framing as floors are added, and `Camera Height` now adjusts eye elevation independently from the focal-point `Camera Y` offset
-- Successful placements trigger a brief impact flash pulse plus a configurable camera shake burst (`Placement Shake` debug control)
-- Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer), contrast wash intensity, and camera tremor pulse effects; cloud rendering is world-projected so vertical cloud position tracks world space instead of appearing pinned to screen coordinates
+- Successful placements trigger a brief impact flash pulse plus a configurable camera shake burst (`Placement Shake` debug control); tremor pulses include a subtle vertical camera component
+- Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer, fireworks), contrast wash intensity, and camera tremor pulse effects; cloud rendering is world-projected so vertical cloud position tracks world space instead of appearing pinned to screen coordinates
 - Cloud layer keeps at least one cloud visible on screen while enabled and no longer hard-disappears when cloud distraction activity drops
 - Precarious integrity tier introduces deterministic camera wobble scaled by configurable instability strength
 - Active collapse sequence applies deterministic tower tilt/drop presentation and camera pullback progression
 - Collapse now also spawns a deterministic voxelized explosion burst from landed tower slabs for game-over presentation plus any still-visible trimmed debris pieces from earlier cuts (excluding the final unplaced missed slab); voxels are generated with more even cube-like sizing, distributed across slab heights so upper blocks remain represented, and capped to slabs within roughly two block-heights outside the current screen bounds
 - Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
 - Debris pieces inherit the parent slab color, push away from the tower with deterministic lateral motion, and no longer use rotational tumble spin
-- Landed (non-active) slabs (including the prebuilt starting stack) add procedural 3D window facades with body-framed windows and protruding sills, deterministic per-side window-count variation, one deterministic style per slab (no mixed styles on a single block), and style variants for rectangular, pointed gothic, rounded gothic, planter-box, shuttered, and bay windows while keeping windows vertically centered; window generation skips too-narrow faces, enforces stronger edge clearance (including a minimum edge distance) so windows stay away from block edges, clamps pair spacing to avoid excessive gaps while keeping the set horizontally centered, enforces shutter spacing so shutters never overlap, varies shutter colors per slab, and occasionally switches trim/sill palettes to darker slab-hue accents
+- Landed (non-active) slabs (including the prebuilt starting stack) add procedural 3D window facades with body-framed windows and protruding sills, deterministic per-side window-count variation, one deterministic style per slab (no mixed styles on a single block), and style variants for rectangular, pointed gothic, rounded gothic, planter-box, shuttered, and bay windows while keeping windows vertically centered; window generation skips too-narrow faces, enforces stronger edge clearance (including a minimum edge distance and a half-window edge padding guard) so windows stay away from block edges, clamps pair spacing to avoid excessive gaps while keeping the set horizontally centered, enforces shutter spacing so shutters never overlap, varies shutter colors per slab, and occasionally switches trim/sill palettes to darker slab-hue accents
 - Newly landed slabs now also spawn a dedicated lower ledge/balcony strip on a visible face; ledges animate in from narrow to full configured size and deterministically vary from 25% to 100% of the face span so future character placement has stable geometry to target
 - Decorative windows/eaves/weathering and tentacle bursts are all limited to camera-facing sides
 - Landed slabs can also render scalloped eave trims near top edges for arcade-style architectural variation, on all visible sides, with flush edge spans plus tiny corner seal pieces to close seam gaps while avoiding sharp corner spikes
 - Landed slabs can render deterministic randomized bottom-half weathering overlays to add façade wear variation
-- Slab color palette varies by slab level (hue progression)
+- Slab color palette varies by slab level (hue progression), and slab facade finish now deterministically alternates between smooth, brick, and siding variants
+- A continuous day/night lighting cycle modulates sky/ambient/directional lighting over time
 - **Color stability rule:** a slab keeps its color when it transitions from active to landed (no post-placement recolor)
 
 ## Input
@@ -70,11 +71,12 @@ Runtime tuning panel includes:
 - Placement: perfect tolerance, combo target length
 - Recovery rewards: growth multiplier, slowdown factor, slowdown floors
 - Feedback: audio enable toggle, haptics enable toggle
-- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud), deterministic motion speed, level-start thresholds for tentacle/gorilla/ufo/cloud gating, and on-demand launch buttons for each distraction channel
+- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud/fireworks), deterministic motion speed, level-start thresholds for tentacle/gorilla/ufo/cloud/fireworks gating, and on-demand launch buttons for each distraction channel
 - Integrity: precarious threshold, unstable threshold, and camera wobble strength
 - Collapse: fail-sequence duration, tilt strength, camera pullback distance, and drop distance
 - Performance: quality preset (`0` low / `1` medium / `2` high), auto-quality toggle, frame-budget target, archival keep-level/chunk sizing, distraction LOD near/far distances, active debris cap, and debris pool limit
 - Setup: prebuilt starting levels (default raised so the base extends below the bottom screen edge) plus `Normalize W/L/H` quick action to unify block width/length/height
+- Atmosphere: configurable day/night cycle duration
 - Effects: debris lifetime and placement camera shake amount
 - Scene: grid visibility (off by default)
 

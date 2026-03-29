@@ -102,6 +102,19 @@ export function resolveWindowShutterPalette(level: number): "slate" | "teal" | "
   return "sand";
 }
 
+export function resolveTentaclePalette(level: number, salt: number): "purple" | "green" | "pink" {
+  const noise = sampleDecorNoise(level * 1.11 + salt, 18.07 + salt * 0.4);
+  if (noise < 0.33) {
+    return "green";
+  }
+
+  if (noise < 0.66) {
+    return "pink";
+  }
+
+  return "purple";
+}
+
 export function resolveTentacleSegmentOffset(
   segmentIndex: number,
   tentacleIndex: number,
