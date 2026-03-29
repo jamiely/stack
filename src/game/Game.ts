@@ -2403,7 +2403,7 @@ export class Game {
         depthWrite: false,
       });
 
-      const eaveWidth = Math.max(0.4, slab.dimensions.depth);
+      const eaveWidth = Math.max(0.4, Math.min(face.span, slab.dimensions.depth));
       const eave = new Mesh(new PlaneGeometry(eaveWidth, eaveHeight), material);
       const position = face.createPosition();
       eave.position.set(position.x, position.y, position.z);

@@ -38,7 +38,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
 - Debris pieces inherit the parent slab color, push away from the tower with deterministic lateral motion, and no longer use rotational tumble spin
 - Landed (non-active) slabs (including the prebuilt starting stack) add procedural 3D window facades with body-framed windows, protruding sills, deterministic per-side window-count variation, and mixed standard/storybook-gothic pointed-arch window styles while keeping windows vertically centered
-- Landed slabs can also render deterministic randomized scalloped eave trims near top edges for arcade-style architectural variation, with eave length locked to the slab block-length dimension
+- Landed slabs can also render deterministic randomized scalloped eave trims near top edges for arcade-style architectural variation, with eave length driven by slab block length but capped to each face span so trims never overhang past corners
 - Landed slabs can render deterministic randomized bottom-half weathering overlays to add façade wear variation
 - Slab color palette varies by slab level (hue progression)
 - **Color stability rule:** a slab keeps its color when it transitions from active to landed (no post-placement recolor)
