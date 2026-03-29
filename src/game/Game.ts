@@ -4,13 +4,13 @@ import {
   CanvasTexture,
   Color,
   DirectionalLight,
+  DoubleSide,
   GridHelper,
   Group,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
   PlaneGeometry,
-  RepeatWrapping,
   Object3D,
   Scene,
   Vector3,
@@ -1977,7 +1977,7 @@ export class Game {
 
   private createWindowTexture(): CanvasTexture {
     const canvas = document.createElement("canvas");
-    canvas.width = 128;
+    canvas.width = 64;
     canvas.height = 128;
     const context = canvas.getContext("2d");
     if (!context) {
@@ -1986,23 +1986,17 @@ export class Game {
       return fallbackTexture;
     }
 
-    context.fillStyle = "rgba(18, 26, 38, 0.84)";
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#cfd9e8";
+    context.fillRect(5, 2, 54, 124);
 
-    for (let row = 0; row < 6; row += 1) {
-      for (let column = 0; column < 6; column += 1) {
-        const offsetX = 10 + column * 19;
-        const offsetY = 10 + row * 19;
-        const lit = (row + column) % 3 !== 0;
-        context.fillStyle = lit ? "rgba(255, 227, 152, 0.86)" : "rgba(104, 122, 154, 0.42)";
-        context.fillRect(offsetX, offsetY, 10, 12);
-      }
-    }
+    context.fillStyle = "#24384f";
+    context.fillRect(12, 8, 40, 112);
+
+    context.fillStyle = "rgba(182, 206, 228, 0.52)";
+    context.fillRect(16, 11, 5, 106);
 
     const texture = new CanvasTexture(canvas);
-    texture.wrapS = RepeatWrapping;
-    texture.wrapT = RepeatWrapping;
-    texture.repeat.set(1.6, 1.6);
     texture.needsUpdate = true;
     return texture;
   }
@@ -2012,35 +2006,62 @@ export class Game {
       return;
     }
 
-    const sideMaterial = new MeshStandardMaterial({
-      color: new Color("#f3d28e"),
-      emissive: new Color("#5a4523"),
-      metalness: 0.02,
-      roughness: 0.85,
+    const windowHeight = Math.max(0.48, Math.min(0.86, slab.dimensions.height * 0.32));
+    const windowWidth = Math.max(0.13, windowHeight * 0.34);
+    const elevationY = Math.min(slab.dimensions.height * 0.18, slab.dimensions.height / 2 - windowHeight / 2 - 0.04);
+    const windowMaterial = new MeshStandardMaterial({
+      color: new Color("#dce4f2"),
+      emissive: new Color("#38506a"),
+      emissiveIntensity: 0.22,
+      metalness: 0.03,
+      roughness: 0.72,
       map: this.windowTexture,
       transparent: true,
-      opacity: 0.84,
+      opacity: 0.96,
+      side: DoubleSide,
+      depthWrite: false,
     });
 
-    const xFacade = new Mesh(new PlaneGeometry(Math.max(0.4, slab.dimensions.depth * 0.92), Math.max(0.4, slab.dimensions.height * 0.86)), sideMaterial);
-    xFacade.position.set(slab.dimensions.width / 2 + 0.01, 0, 0);
-    xFacade.rotation.y = -Math.PI / 2;
-    mesh.add(xFacade);
+    const faces: Array<{
+      span: number;
+      createPosition: (offset: number) => { x: number; y: number; z: number };
+      rotationY: number;
+    }> = [
+      {
+        span: slab.dimensions.depth,
+        createPosition: (offset) => ({ x: slab.dimensions.width / 2 + 0.025, y: elevationY, z: offset }),
+        rotationY: -Math.PI / 2,
+      },
+      {
+        span: slab.dimensions.depth,
+        createPosition: (offset) => ({ x: -(slab.dimensions.width / 2 + 0.025), y: elevationY, z: offset }),
+        rotationY: Math.PI / 2,
+      },
+      {
+        span: slab.dimensions.width,
+        createPosition: (offset) => ({ x: offset, y: elevationY, z: slab.dimensions.depth / 2 + 0.025 }),
+        rotationY: 0,
+      },
+      {
+        span: slab.dimensions.width,
+        createPosition: (offset) => ({ x: offset, y: elevationY, z: -(slab.dimensions.depth / 2 + 0.025) }),
+        rotationY: Math.PI,
+      },
+    ];
 
-    const xFacadeOpposite = xFacade.clone();
-    xFacadeOpposite.position.x = -(slab.dimensions.width / 2 + 0.01);
-    xFacadeOpposite.rotation.y = Math.PI / 2;
-    mesh.add(xFacadeOpposite);
+    faces.forEach((face) => {
+      const windowCount = Math.max(1, Math.min(5, Math.round(face.span / 1.25)));
+      const spacing = face.span / (windowCount + 1);
 
-    const zFacade = new Mesh(new PlaneGeometry(Math.max(0.4, slab.dimensions.width * 0.92), Math.max(0.4, slab.dimensions.height * 0.86)), sideMaterial.clone());
-    zFacade.position.set(0, 0, slab.dimensions.depth / 2 + 0.01);
-    zFacade.rotation.y = Math.PI;
-    mesh.add(zFacade);
-
-    const zFacadeOpposite = zFacade.clone();
-    zFacadeOpposite.position.z = -(slab.dimensions.depth / 2 + 0.01);
-    zFacadeOpposite.rotation.y = 0;
-    mesh.add(zFacadeOpposite);
+      for (let index = 0; index < windowCount; index += 1) {
+        const localOffset = -face.span / 2 + spacing * (index + 1);
+        const windowMesh = new Mesh(new PlaneGeometry(windowWidth, windowHeight), windowMaterial.clone());
+        const position = face.createPosition(localOffset);
+        windowMesh.position.set(position.x, position.y, position.z);
+        windowMesh.rotation.y = face.rotationY;
+        mesh.add(windowMesh);
+      }
+    });
   }
 
   private getSlabColor(level: number): string {
