@@ -419,6 +419,7 @@ export class Game {
   private readonly sidingTexture = this.createSidingTexture();
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudSpawnFromTop: boolean[] = [false, false, false];
+  private cloudSizeScales: number[] = [1, 1, 1];
   private cloudAnchorsInitialized = false;
   private cloudRespawnCursor = 0;
   private cloudLastLevelRespawn = -1;
@@ -1024,6 +1025,7 @@ export class Game {
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.cloudAnchorsInitialized = false;
     this.cloudSpawnFromTop = [false, false, false];
+    this.cloudSizeScales = [1, 1, 1];
     this.cloudRespawnCursor = 0;
     this.cloudLastLevelRespawn = -1;
     this.tentacleBurstKeys = [];
@@ -1554,6 +1556,7 @@ export class Game {
       this.cloudLayer.style.opacity = "0";
       this.cloudAnchorsInitialized = false;
       this.cloudSpawnFromTop = cloudNodes.map(() => false);
+      this.cloudSizeScales = cloudNodes.map(() => 1);
       this.cloudRespawnCursor = 0;
       this.cloudLastLevelRespawn = -1;
       return;
@@ -1568,6 +1571,7 @@ export class Game {
     if (!this.cloudAnchorsInitialized) {
       this.cloudWorldAnchors = cloudNodes.map((_, index) => this.createCloudAnchor(topSlab, index, 0, false));
       this.cloudSpawnFromTop = cloudNodes.map(() => false);
+      this.cloudSizeScales = cloudNodes.map((_, index) => this.sampleCloudSizeScale(topSlab.level, index, 0));
       this.cloudAnchorsInitialized = true;
       this.cloudRespawnCursor = 0;
       this.cloudLastLevelRespawn = topSlab.level;
@@ -1575,8 +1579,10 @@ export class Game {
 
     if (topSlab.level - this.cloudLastLevelRespawn >= CLOUD_RESPAWN_LEVEL_INTERVAL) {
       const respawnIndex = this.cloudRespawnCursor % cloudNodes.length;
-      this.cloudWorldAnchors[respawnIndex] = this.createCloudAnchor(topSlab, respawnIndex, this.frameCounter + topSlab.level * 13, true);
+      const respawnSalt = this.frameCounter + topSlab.level * 13;
+      this.cloudWorldAnchors[respawnIndex] = this.createCloudAnchor(topSlab, respawnIndex, respawnSalt, true);
       this.cloudSpawnFromTop[respawnIndex] = true;
+      this.cloudSizeScales[respawnIndex] = this.sampleCloudSizeScale(topSlab.level, respawnIndex, respawnSalt);
       this.cloudRespawnCursor = (this.cloudRespawnCursor + 1) % cloudNodes.length;
       this.cloudLastLevelRespawn = topSlab.level;
     }
@@ -1601,9 +1607,11 @@ export class Game {
       const tooFarSide = Math.abs(projected.x) > 2.35;
       const behindCamera = projected.z > 1.1;
       if (offBottom || tooFarSide || behindCamera || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
-        const respawnAnchor = this.createCloudAnchor(topSlab, index, this.frameCounter + index * 37, true);
+        const respawnSalt = this.frameCounter + index * 37;
+        const respawnAnchor = this.createCloudAnchor(topSlab, index, respawnSalt, true);
         this.cloudWorldAnchors[index] = respawnAnchor;
         this.cloudSpawnFromTop[index] = true;
+        this.cloudSizeScales[index] = this.sampleCloudSizeScale(topSlab.level, index, respawnSalt);
       }
 
       const stableAnchor = this.cloudWorldAnchors[index] ?? anchor;
@@ -1618,9 +1626,9 @@ export class Game {
       const depthFromStack = new Vector3().subVectors(stableAnchor, new Vector3(topSlab.position.x, topSlab.position.y, topSlab.position.z));
       const towardCamera = new Vector3(this.camera.position.x - topSlab.position.x, 0, this.camera.position.z - topSlab.position.z).normalize();
       const frontBack = depthFromStack.dot(towardCamera);
-      const sizeNoise = sampleDecorNoise(index * 0.77 + topSlab.level * 0.31 + this.frameCounter * 0.001, 71.3);
+      const sizeScale = this.cloudSizeScales[index] ?? 1;
       const depthScale = frontBack >= 0 ? 1.05 : 0.72;
-      const scale = (0.78 + sizeNoise * 0.48) * depthScale;
+      const scale = sizeScale * depthScale;
       cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
 
       const enteringFromTop = this.cloudSpawnFromTop[index] === true;
@@ -1640,6 +1648,11 @@ export class Game {
     const cloudOpacity = baselineCloudOpacity + cloudSignalOpacity;
     this.cloudLayer.style.opacity = Math.min(0.92, cloudOpacity).toFixed(3);
     this.cloudLayer.style.transform = "translateX(0px)";
+  }
+
+  private sampleCloudSizeScale(level: number, index: number, salt: number): number {
+    const sizeNoise = sampleDecorNoise(level * 0.31 + index * 0.77 + salt * 0.005, 71.3);
+    return 0.78 + sizeNoise * 0.48;
   }
 
   private createCloudAnchor(topSlab: SlabData, index: number, salt: number, spawnFromTop: boolean): Vector3 {
