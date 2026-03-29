@@ -2017,25 +2017,26 @@ export class Game {
 
     context.clearRect(0, 0, canvas.width, canvas.height);
 
-    const radius = 8.5;
-    const step = 11.5;
-    const centerY = 0;
+    const radiusX = 6.2;
+    const radiusY = 11.8;
+    const step = 10.8;
+    const centerY = 0.35;
 
     context.fillStyle = "rgba(255, 255, 255, 0.98)";
     for (let x = -12; x <= canvas.width + 14; x += step) {
       const centerX = x + step / 2;
       context.beginPath();
-      context.arc(centerX, centerY, radius, 0, Math.PI, false);
+      context.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI, false);
       context.closePath();
       context.fill();
     }
 
     context.strokeStyle = "rgba(232, 232, 232, 0.98)";
-    context.lineWidth = 1.2;
+    context.lineWidth = 1.15;
     for (let x = -12; x <= canvas.width + 14; x += step) {
       const centerX = x + step / 2;
       context.beginPath();
-      context.arc(centerX, centerY, radius, 0.04, Math.PI - 0.04, false);
+      context.ellipse(centerX, centerY, radiusX, radiusY, 0, 0.04, Math.PI - 0.04, false);
       context.stroke();
     }
 
@@ -2114,7 +2115,7 @@ export class Game {
       return;
     }
 
-    const eaveHeight = Math.max(0.28, Math.min(0.56, slab.dimensions.height * 0.18));
+    const eaveHeight = Math.max(0.34, Math.min(0.66, slab.dimensions.height * 0.22));
     const elevationY = slab.dimensions.height / 2 - eaveHeight * 0.32;
 
     const faces: Array<{
