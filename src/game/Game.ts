@@ -280,6 +280,8 @@ export class Game {
   private frameCounter = 0;
   private frameTimeMs = 0;
   private averageFrameTimeMs = 0;
+  private cameraLookAtY = STACK_LOOK_AHEAD_Y;
+  private readonly cameraTargetPosition = new Vector3(CAMERA_X, defaultDebugConfig.cameraHeight, defaultDebugConfig.cameraDistance);
   private activeQualityPreset: QualityPreset = toQualityPreset(defaultDebugConfig.performanceQualityPreset);
   private archivedLevelSet = new Set<number>();
   private archivedChunkCount = 0;
@@ -683,7 +685,7 @@ export class Game {
     } else {
       this.updateImpactPulse(deltaSeconds);
       this.updateDistractionActors();
-      this.updateCamera();
+      this.updateCamera(deltaSeconds);
     }
 
     this.renderer?.render(this.scene, this.camera);
@@ -700,7 +702,7 @@ export class Game {
     this.updateDebris(deltaSeconds);
     this.updateImpactPulse(deltaSeconds);
     this.updateCollapseSequence(deltaSeconds);
-    this.updateCamera();
+    this.updateCamera(deltaSeconds);
   }
 
   private updatePerformanceFrameTimes(deltaSeconds: number): void {
@@ -827,6 +829,11 @@ export class Game {
     this.syncArchivedRepresentation();
     this.refreshIntegrityTelemetry();
     this.updateDistractionActors();
+
+    const topLandedSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? null;
+    const initialTargetY = (topLandedSlab?.position.y ?? 0) + this.debugConfig.cameraHeight + STARTUP_CAMERA_LIFT;
+    this.cameraTargetPosition.set(CAMERA_X, initialTargetY, this.debugConfig.cameraDistance);
+    this.cameraLookAtY = Math.max(1.2, initialTargetY - this.debugConfig.cameraHeight + STACK_LOOK_AHEAD_Y);
   }
 
   private spawnNextActive(): void {
@@ -1087,50 +1094,53 @@ export class Game {
       tremor: selectDistractionLodTier(snapshot.level, lodNear, lodFar),
     };
 
-    if (shouldUpdateForLod(this.distractionLod.gorilla, this.frameCounter, scalars.distractionUpdateStride)) {
-      if (snapshot.active.gorilla) {
-        const width = this.container.clientWidth || window.innerWidth;
-        const height = this.container.clientHeight || window.innerHeight;
-        const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
-        const topPosition = topSlab?.position ?? { x: 0, y: 0, z: 0 };
-        const orbitPhase = this.distractionState.elapsedSeconds * GORILLA_CLIMB_SPEED * this.debugConfig.distractionMotionSpeed;
-        const aroundAngle = orbitPhase * 0.9;
-        const climbWave = (Math.sin(orbitPhase * Math.PI * 2) + 1) / 2;
-        const verticalRange = Math.max(2.6, Math.min(8.5, (this.landedSlabs.length - 1) * 0.33 + 2.1));
-        const orbitRadius = Math.max(this.debugConfig.baseWidth, this.debugConfig.baseDepth) * 0.55 + 1.35;
+    if (!snapshot.active.gorilla) {
+      this.gorillaActor.style.opacity = "0";
+      this.gorillaLastSlamCycle = -1;
+    } else if (shouldUpdateForLod(this.distractionLod.gorilla, this.frameCounter, scalars.distractionUpdateStride)) {
+      const width = this.container.clientWidth || window.innerWidth;
+      const height = this.container.clientHeight || window.innerHeight;
+      const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+      const topPosition = topSlab?.position ?? { x: 0, y: 0, z: 0 };
+      const orbitPhase = this.distractionState.elapsedSeconds * GORILLA_CLIMB_SPEED * this.debugConfig.distractionMotionSpeed;
+      const aroundAngle = orbitPhase * 0.9;
+      const climbWave = (Math.sin(orbitPhase * Math.PI * 2) + 1) / 2;
+      const verticalRange = Math.max(2.6, Math.min(8.5, (this.landedSlabs.length - 1) * 0.33 + 2.1));
+      const orbitRadius = Math.max(this.debugConfig.baseWidth, this.debugConfig.baseDepth) * 0.55 + 1.35;
 
-        const worldPoint = new Vector3(
-          topPosition.x + Math.cos(aroundAngle) * orbitRadius,
-          topPosition.y - verticalRange * 0.35 + climbWave * verticalRange,
-          topPosition.z + Math.sin(aroundAngle) * orbitRadius,
-        );
-        const projected = worldPoint.clone().project(this.camera);
-        const screenX = (projected.x * 0.5 + 0.5) * width;
-        const screenY = (-projected.y * 0.5 + 0.5) * height;
-        const clampedX = Math.min(width + 120, Math.max(-120, screenX));
-        const clampedY = Math.min(height + 120, Math.max(-120, screenY));
-        const inFrontOfCamera = projected.z > -1 && projected.z < 1;
-        const depthScale = 0.88 + (1 - Math.max(0, Math.min(1, (projected.z + 1) * 0.5))) * 0.32;
-        const gorillaOpacity = inFrontOfCamera ? 0.26 + snapshot.signals.gorilla * 0.72 : 0.12 + snapshot.signals.gorilla * 0.18;
+      const worldPoint = new Vector3(
+        topPosition.x + Math.cos(aroundAngle) * orbitRadius,
+        topPosition.y - verticalRange * 0.35 + climbWave * verticalRange,
+        topPosition.z + Math.sin(aroundAngle) * orbitRadius,
+      );
+      const projected = worldPoint.clone().project(this.camera);
+      const screenX = (projected.x * 0.5 + 0.5) * width;
+      const screenY = (-projected.y * 0.5 + 0.5) * height;
+      const clampedX = Math.min(width + 120, Math.max(-120, screenX));
+      const clampedY = Math.min(height + 120, Math.max(-120, screenY));
+      const inFrontOfCamera = projected.z > -1 && projected.z < 1;
+      const depthScale = 0.88 + (1 - Math.max(0, Math.min(1, (projected.z + 1) * 0.5))) * 0.32;
+      const gorillaOpacity = inFrontOfCamera ? 0.26 + snapshot.signals.gorilla * 0.72 : 0.12 + snapshot.signals.gorilla * 0.18;
 
-        this.gorillaActor.style.opacity = gorillaOpacity.toFixed(3);
-        this.gorillaActor.style.transform = `translate(${clampedX.toFixed(2)}px, ${clampedY.toFixed(2)}px) translate(-50%, -50%) scale(${depthScale.toFixed(3)})`;
+      this.gorillaActor.style.opacity = gorillaOpacity.toFixed(3);
+      this.gorillaActor.style.transform = `translate(${clampedX.toFixed(2)}px, ${clampedY.toFixed(2)}px) translate(-50%, -50%) scale(${depthScale.toFixed(3)})`;
 
-        const slamCycle = this.distractionState.elapsedSeconds * GORILLA_SLAM_CYCLE_SPEED * this.debugConfig.distractionMotionSpeed;
-        const slamCycleIndex = Math.floor(slamCycle);
-        const slamCycleProgress = slamCycle - slamCycleIndex;
-        if (slamCycleIndex !== this.gorillaLastSlamCycle && slamCycleProgress < 0.08) {
-          this.gorillaLastSlamCycle = slamCycleIndex;
-          this.gorillaSlamRemaining = GORILLA_SLAM_DURATION_SECONDS;
-          this.triggerImpactPulse(0.1);
-        }
-      } else {
-        this.gorillaActor.style.opacity = "0";
-        this.gorillaLastSlamCycle = -1;
+      const slamCycle = this.distractionState.elapsedSeconds * GORILLA_SLAM_CYCLE_SPEED * this.debugConfig.distractionMotionSpeed;
+      const slamCycleIndex = Math.floor(slamCycle);
+      const slamCycleProgress = slamCycle - slamCycleIndex;
+      if (slamCycleIndex !== this.gorillaLastSlamCycle && slamCycleProgress < 0.08) {
+        this.gorillaLastSlamCycle = slamCycleIndex;
+        this.gorillaSlamRemaining = GORILLA_SLAM_DURATION_SECONDS;
+        this.triggerImpactPulse(0.1);
       }
     }
 
-    if (shouldUpdateForLod(this.distractionLod.ufo, this.frameCounter, scalars.distractionUpdateStride)) {
+    const shouldUpdateUfo =
+      shouldUpdateForLod(this.distractionLod.ufo, this.frameCounter, scalars.distractionUpdateStride) ||
+      !snapshot.active.ufo ||
+      this.ufoExitSecondsRemaining > 0 ||
+      this.ufoWasActive;
+    if (shouldUpdateUfo) {
       const width = this.container.clientWidth || window.innerWidth;
       const height = this.container.clientHeight || window.innerHeight;
       const frameDeltaSeconds = Math.max(1 / 120, this.frameTimeMs > 0 ? this.frameTimeMs / 1000 : 1 / 60);
@@ -1319,7 +1329,7 @@ export class Game {
     this.shell.style.setProperty("--collapse-alpha", (0.12 + frame.progress * 0.35).toFixed(3));
   }
 
-  private updateCamera(): void {
+  private updateCamera(deltaSeconds: number): void {
     const topLandedSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
     const collapseFrame = this.collapseSequence ? sampleCollapseFrame(this.collapseSequence) : null;
     const builtFloors = Math.max(0, this.landedSlabs.length - this.startingStackLevels);
@@ -1332,10 +1342,14 @@ export class Game {
       (collapseFrame?.cameraDrop ?? 0);
     const targetZ = this.debugConfig.cameraDistance + (collapseFrame?.cameraPullback ?? 0);
 
-    this.camera.position.lerp(
-      new Vector3(CAMERA_X, targetY, targetZ),
-      this.debugConfig.cameraLerp,
-    );
+    const safeDeltaSeconds = Math.max(0, Math.min(0.1, deltaSeconds));
+    const fpsAdjustedLerp =
+      safeDeltaSeconds > 0
+        ? 1 - Math.pow(1 - this.debugConfig.cameraLerp, safeDeltaSeconds * 60)
+        : this.debugConfig.cameraLerp;
+
+    this.cameraTargetPosition.set(CAMERA_X, targetY, targetZ);
+    this.camera.position.lerp(this.cameraTargetPosition, fpsAdjustedLerp);
 
     const distractionSnapshot = this.getEffectiveDistractionSnapshot();
     const tremorStrength = distractionSnapshot.active.tremor ? distractionSnapshot.signals.tremor : 0;
@@ -1358,7 +1372,10 @@ export class Game {
       this.camera.position.z += Math.cos(wobblePhase * 0.85) * this.integrityTelemetry.wobbleStrength * 0.4;
     }
 
-    this.camera.lookAt(0, Math.max(1.2, targetY - this.debugConfig.cameraHeight + STACK_LOOK_AHEAD_Y), 0);
+    const lookAtTargetY = Math.max(1.2, targetY - this.debugConfig.cameraHeight + STACK_LOOK_AHEAD_Y);
+    const lookAtLerp = Math.min(1, fpsAdjustedLerp * 1.25);
+    this.cameraLookAtY += (lookAtTargetY - this.cameraLookAtY) * lookAtLerp;
+    this.camera.lookAt(0, this.cameraLookAtY, 0);
   }
 
   private updateMetrics(): void {
@@ -1502,6 +1519,14 @@ export class Game {
     if (integrityConfigChanged) {
       this.refreshIntegrityTelemetry();
     }
+
+    this.distractionState = updateDistractionState(
+      this.distractionState,
+      0,
+      this.landedSlabs.length - 1,
+      this.debugConfig,
+    );
+    this.updateDistractionActors();
 
     if (!this.debugConfig.performanceAutoQualityEnabled) {
       this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
