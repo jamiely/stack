@@ -2017,22 +2017,25 @@ export class Game {
 
     context.clearRect(0, 0, canvas.width, canvas.height);
 
-    const radius = 12.6;
-    const step = 13;
-    const centerY = 3.4;
+    const radius = 8.5;
+    const step = 11.5;
+    const centerY = 0;
 
-    context.strokeStyle = "rgba(255, 255, 255, 0.72)";
-    context.lineWidth = 0.9;
-    context.beginPath();
-    context.moveTo(0, 1.2);
-    context.lineTo(canvas.width, 1.2);
-    context.stroke();
-
-    context.strokeStyle = "rgba(255, 255, 255, 0.94)";
-    context.lineWidth = 1.8;
-    for (let x = -14; x <= canvas.width + 20; x += step) {
+    context.fillStyle = "rgba(255, 255, 255, 0.98)";
+    for (let x = -12; x <= canvas.width + 14; x += step) {
+      const centerX = x + step / 2;
       context.beginPath();
-      context.arc(x + step / 2, centerY, radius, 0.03, Math.PI - 0.03, false);
+      context.arc(centerX, centerY, radius, 0, Math.PI, false);
+      context.closePath();
+      context.fill();
+    }
+
+    context.strokeStyle = "rgba(232, 232, 232, 0.98)";
+    context.lineWidth = 1.2;
+    for (let x = -12; x <= canvas.width + 14; x += step) {
+      const centerX = x + step / 2;
+      context.beginPath();
+      context.arc(centerX, centerY, radius, 0.04, Math.PI - 0.04, false);
       context.stroke();
     }
 
