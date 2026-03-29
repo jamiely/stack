@@ -7,6 +7,7 @@ export interface DayNightFrame {
   directionalIntensity: number;
   phase: DayNightPhase;
   starVisibility: number;
+  noonFlareStrength: number;
 }
 
 interface DayNightStop {
@@ -18,6 +19,9 @@ interface DayNightStop {
   directionalIntensity: number;
   starVisibility: number;
 }
+
+const NOON_T = 3 / 6;
+const NOON_FLARE_HALF_WINDOW = 1 / 6;
 
 const DAY_NIGHT_STOPS: DayNightStop[] = [
   {
@@ -104,6 +108,7 @@ export function sampleDayNightFrame(stackHeight: number, blocksPerCycle: number)
     ambientIntensity: lerp(currentStop.ambientIntensity, nextStop.ambientIntensity, easedT),
     directionalIntensity: lerp(currentStop.directionalIntensity, nextStop.directionalIntensity, easedT),
     starVisibility: lerp(currentStop.starVisibility, nextStop.starVisibility, easedT),
+    noonFlareStrength: resolveNoonFlareStrength(t),
     phase: currentStop.phase,
   };
 }
@@ -118,6 +123,13 @@ function findSegmentIndex(t: number): number {
     }
   }
   return DAY_NIGHT_STOPS.length - 2;
+}
+
+function resolveNoonFlareStrength(t: number): number {
+  const distanceToNoon = Math.abs(t - NOON_T);
+  const wrappedDistance = Math.min(distanceToNoon, 1 - distanceToNoon);
+  const normalized = clamp(1 - wrappedDistance / NOON_FLARE_HALF_WINDOW, 0, 1);
+  return smoothstep(normalized);
 }
 
 function lerpHex(start: string, end: string, t: number): string {

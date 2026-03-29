@@ -44,4 +44,19 @@ describe("dayNight", () => {
     expect(sunset.starVisibility).toBeGreaterThan(noon.starVisibility);
     expect(noon.starVisibility).toBeLessThanOrEqual(0.02);
   });
+
+  it("peaks flare strength near noon and fades away from midday", () => {
+    const cycleBlocks = 60;
+    const dawn = sampleDayNightFrame(10, cycleBlocks);
+    const earlyMorning = sampleDayNightFrame(20, cycleBlocks);
+    const noon = sampleDayNightFrame(30, cycleBlocks);
+    const evening = sampleDayNightFrame(40, cycleBlocks);
+    const night = sampleDayNightFrame(0, cycleBlocks);
+
+    expect(noon.noonFlareStrength).toBeGreaterThan(0.95);
+    expect(earlyMorning.noonFlareStrength).toBeLessThan(noon.noonFlareStrength);
+    expect(evening.noonFlareStrength).toBeLessThan(noon.noonFlareStrength);
+    expect(dawn.noonFlareStrength).toBeLessThanOrEqual(0.02);
+    expect(night.noonFlareStrength).toBeLessThanOrEqual(0.02);
+  });
 });

@@ -68,6 +68,23 @@ body {
   z-index: 1;
 }
 
+.distraction-noon-flare {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  width: min(58vw, 38rem);
+  aspect-ratio: 1 / 1;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 250, 229, 0.96) 0 9%, rgba(255, 238, 172, 0.72) 16%, rgba(255, 213, 119, 0.34) 31%, transparent 58%),
+    radial-gradient(circle at 28% 72%, rgba(255, 224, 146, 0.34) 0 8%, transparent 38%),
+    radial-gradient(circle at 66% 18%, rgba(255, 255, 246, 0.45) 0 6%, transparent 26%);
+  mix-blend-mode: screen;
+  filter: blur(0.45px);
+  transform: translate(-50%, -50%);
+  transition: opacity 80ms linear;
+}
+
 .distraction-actor {
   position: absolute;
   opacity: 0;
@@ -92,6 +109,16 @@ body {
   box-shadow:
     0 0 1.1rem rgba(140, 215, 255, 0.7),
     inset 0 -0.45rem 0.55rem rgba(30, 56, 101, 0.55);
+}
+
+.distraction-actor--bat {
+  width: 3.2rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 55%, rgba(66, 48, 90, 0.9), rgba(19, 14, 29, 0.92) 62%),
+    conic-gradient(from 180deg at 50% 55%, rgba(92, 73, 124, 0.55), rgba(27, 17, 42, 0.6));
+  box-shadow: 0 0.25rem 0.9rem rgba(0, 0, 0, 0.55);
 }
 
 .distraction-clouds {

@@ -244,7 +244,9 @@ const STACK_LOOK_AHEAD_Y = 1.05;
 const STARTUP_CAMERA_LIFT = 2.2;
 const DAY_NIGHT_COLOR_LERP_SPEED = 3.2;
 const DAY_NIGHT_STAR_LERP_SPEED = 4.2;
+const DAY_NIGHT_NOON_FLARE_LERP_SPEED = 3.8;
 const DAY_NIGHT_STAR_MAX_OPACITY = 1;
+const DAY_NIGHT_NOON_FLARE_MAX_OPACITY = 0.92;
 const STARTUP_CAMERA_LIFT_FADE_FLOORS = 10;
 const PLACEMENT_SHAKE_DURATION_SECONDS = 0.16;
 const COLLAPSE_VOXEL_SIZE = 0.38;
@@ -299,6 +301,7 @@ export class Game {
   private readonly cloudLayer: HTMLDivElement;
   private readonly fireworksActor: HTMLDivElement;
   private readonly tremorPulse: HTMLDivElement;
+  private readonly noonFlare: HTMLDivElement;
 
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(50, 1, 0.1, 100);
@@ -472,6 +475,7 @@ export class Game {
     this.cloudLayer = document.createElement("div");
     this.fireworksActor = document.createElement("div");
     this.tremorPulse = document.createElement("div");
+    this.noonFlare = document.createElement("div");
     this.renderer = this.createRenderer();
 
     this.scene.background = new Color("#07101c");
@@ -625,7 +629,18 @@ export class Game {
     this.tremorPulse.className = "distraction-tremor";
     this.tremorPulse.dataset.testid = "actor-tremor";
 
-    this.distractionLayer.append(this.gorillaActor, this.ufoActor, this.batActor, this.cloudLayer, this.fireworksActor, this.tremorPulse);
+    this.noonFlare.className = "distraction-noon-flare";
+    this.noonFlare.dataset.testid = "actor-noon-flare";
+
+    this.distractionLayer.append(
+      this.noonFlare,
+      this.gorillaActor,
+      this.ufoActor,
+      this.batActor,
+      this.cloudLayer,
+      this.fireworksActor,
+      this.tremorPulse,
+    );
   }
 
   private createDebugControls(): DocumentFragment {
@@ -1252,6 +1267,39 @@ export class Game {
     this.starFieldSmall.visible = this.dayNightStarSmallMaterial.opacity > 0.01;
     this.starFieldMedium.visible = this.dayNightStarMediumMaterial.opacity > 0.01;
     this.starFieldLarge.visible = this.dayNightStarLargeMaterial.opacity > 0.01;
+
+    const flareBlend = 1 - Math.exp(-Math.max(0, Math.min(0.2, deltaSeconds)) * DAY_NIGHT_NOON_FLARE_LERP_SPEED);
+    const targetFlareOpacity = frame.noonFlareStrength * DAY_NIGHT_NOON_FLARE_MAX_OPACITY;
+    const currentFlareOpacity = Number.parseFloat(this.noonFlare.style.opacity || "0");
+    const nextFlareOpacity = currentFlareOpacity + (targetFlareOpacity - currentFlareOpacity) * flareBlend;
+    this.noonFlare.style.opacity = nextFlareOpacity.toFixed(3);
+    this.updateNoonFlarePosition(nextFlareOpacity);
+  }
+
+  private updateNoonFlarePosition(flareOpacity: number): void {
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+
+    const focusSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
+    if (!focusSlab) {
+      this.noonFlare.style.transform = "translate(50vw, 34vh) translate(-50%, -50%) scale(1)";
+      return;
+    }
+
+    const projected = new Vector3(
+      focusSlab.position.x,
+      focusSlab.position.y + focusSlab.dimensions.height * 0.45,
+      focusSlab.position.z,
+    ).project(this.camera);
+    const targetX = (projected.x * 0.5 + 0.5) * width;
+    const targetY = (-projected.y * 0.5 + 0.5) * height - height * 0.08;
+    const clampedX = Math.min(width * 0.72, Math.max(width * 0.28, targetX));
+    const clampedY = Math.min(height * 0.62, Math.max(height * 0.14, targetY));
+    const scale = 1 + flareOpacity * 0.32;
+    this.noonFlare.style.transform = `translate(${clampedX.toFixed(2)}px, ${clampedY.toFixed(2)}px) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
   }
 
   private updateDistractions(deltaSeconds: number): void {
