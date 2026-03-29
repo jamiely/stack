@@ -244,7 +244,7 @@ const STACK_LOOK_AHEAD_Y = 1.05;
 const STARTUP_CAMERA_LIFT = 2.2;
 const DAY_NIGHT_COLOR_LERP_SPEED = 3.2;
 const DAY_NIGHT_STAR_LERP_SPEED = 2.4;
-const DAY_NIGHT_STAR_MAX_OPACITY = 0.6;
+const DAY_NIGHT_STAR_MAX_OPACITY = 0.9;
 const STARTUP_CAMERA_LIFT_FADE_FLOORS = 10;
 const PLACEMENT_SHAKE_DURATION_SECONDS = 0.16;
 const COLLAPSE_VOXEL_SIZE = 0.38;
@@ -367,10 +367,10 @@ export class Game {
   );
   private readonly dayNightTargetSkyColor = new Color("#07101c");
   private readonly dayNightStarMaterial = new PointsMaterial({
-    color: "#f4f8ff",
+    color: "#f6fbff",
     transparent: true,
     opacity: 0,
-    size: 1.3,
+    size: 2.4,
     sizeAttenuation: false,
     depthWrite: false,
   });
@@ -1221,6 +1221,7 @@ export class Game {
     const targetStarOpacity = frame.starVisibility * DAY_NIGHT_STAR_MAX_OPACITY;
     this.dayNightStarMaterial.opacity += (targetStarOpacity - this.dayNightStarMaterial.opacity) * starBlend;
     this.starField.visible = this.dayNightStarMaterial.opacity > 0.01;
+    this.starField.position.set(this.camera.position.x * 0.05, 0, this.camera.position.z * 0.05);
   }
 
   private updateDistractions(deltaSeconds: number): void {
@@ -3381,14 +3382,16 @@ export class Game {
 
   private createStarField(starCount: number): Points {
     const positions: number[] = [];
-    const radius = 70;
+    const spreadX = 62;
+    const minY = -6;
+    const maxY = 34;
+    const minZ = -72;
+    const maxZ = -30;
 
     for (let index = 0; index < starCount; index += 1) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI * 0.42 + Math.PI * 0.06;
-      const x = Math.cos(theta) * Math.sin(phi) * radius;
-      const y = Math.cos(phi) * radius + 16;
-      const z = Math.sin(theta) * Math.sin(phi) * radius - 20;
+      const x = (Math.random() * 2 - 1) * spreadX;
+      const y = minY + Math.random() * (maxY - minY);
+      const z = minZ + Math.random() * (maxZ - minZ);
       positions.push(x, y, z);
     }
 
