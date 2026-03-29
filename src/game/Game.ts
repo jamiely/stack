@@ -243,8 +243,8 @@ const CLOUD_SWAY_DISTANCE_PX = 120;
 const STACK_LOOK_AHEAD_Y = 1.05;
 const STARTUP_CAMERA_LIFT = 2.2;
 const DAY_NIGHT_COLOR_LERP_SPEED = 3.2;
-const DAY_NIGHT_STAR_LERP_SPEED = 2.4;
-const DAY_NIGHT_STAR_MAX_OPACITY = 0.9;
+const DAY_NIGHT_STAR_LERP_SPEED = 4.2;
+const DAY_NIGHT_STAR_MAX_OPACITY = 1;
 const STARTUP_CAMERA_LIFT_FADE_FLOORS = 10;
 const PLACEMENT_SHAKE_DURATION_SECONDS = 0.16;
 const COLLAPSE_VOXEL_SIZE = 0.38;
@@ -483,8 +483,9 @@ export class Game {
       this.debugConfig.cameraDistance,
     );
     this.gridHelper.position.y = -12;
+    this.starField.position.set(0, 0, -64);
+    this.camera.add(this.starField);
     this.scene.add(
-      this.starField,
       this.stackGroup,
       this.archivedGroup,
       this.debrisGroup,
@@ -1221,7 +1222,6 @@ export class Game {
     const targetStarOpacity = frame.starVisibility * DAY_NIGHT_STAR_MAX_OPACITY;
     this.dayNightStarMaterial.opacity += (targetStarOpacity - this.dayNightStarMaterial.opacity) * starBlend;
     this.starField.visible = this.dayNightStarMaterial.opacity > 0.01;
-    this.starField.position.set(this.camera.position.x * 0.05, this.camera.position.y * 0.45 - 4, this.camera.position.z * 0.05);
   }
 
   private updateDistractions(deltaSeconds: number): void {
@@ -3382,15 +3382,14 @@ export class Game {
 
   private createStarField(starCount: number): Points {
     const positions: number[] = [];
-    const spreadX = 26;
-    const minY = -10;
-    const maxY = 28;
-    const minZ = -70;
-    const maxZ = -26;
+    const spreadX = 42;
+    const spreadY = 26;
+    const minZ = -30;
+    const maxZ = -4;
 
     for (let index = 0; index < starCount; index += 1) {
       const x = (Math.random() * 2 - 1) * spreadX;
-      const y = minY + Math.random() * (maxY - minY);
+      const y = (Math.random() * 2 - 1) * spreadY;
       const z = minZ + Math.random() * (maxZ - minZ);
       positions.push(x, y, z);
     }

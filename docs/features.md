@@ -45,7 +45,7 @@ This document tracks implemented gameplay features and notable behavior decision
 - Landed slabs can also render scalloped eave trims near top edges for arcade-style architectural variation, on all visible sides, with flush edge spans plus tiny corner seal pieces to close seam gaps while avoiding sharp corner spikes
 - Landed slabs can render deterministic randomized bottom-half weathering overlays to add façade wear variation
 - Slab color palette varies by slab level (hue progression), and slab facade finish now deterministically alternates between smooth, brick, and siding variants
-- A continuous, eased day/night lighting cycle modulates sky and ambient/directional light through gradual phases (night → dawn → early morning → noon → evening → sunset → night) with frame-smoothed background color blending between states, plus a subtle star field that fades in at night and recedes through daylight
+- A continuous, eased day/night lighting cycle modulates sky and ambient/directional light through gradual phases (night → dawn → early morning → noon → evening → sunset → night) with frame-smoothed background color blending between states, plus a subtle fixed-screen star field that fades in at night and recedes through daylight
 - **Color stability rule:** a slab keeps its color when it transitions from active to landed (no post-placement recolor)
 
 ## Input

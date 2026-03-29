@@ -27,7 +27,7 @@ const DAY_NIGHT_STOPS: DayNightStop[] = [
     skyBottom: "#03060f",
     ambientIntensity: 0.8,
     directionalIntensity: 0.9,
-    starVisibility: 0.85,
+    starVisibility: 1,
   },
   {
     t: 1 / 6,
@@ -36,7 +36,7 @@ const DAY_NIGHT_STOPS: DayNightStop[] = [
     skyBottom: "#8a5b6d",
     ambientIntensity: 1.0,
     directionalIntensity: 1.2,
-    starVisibility: 0.4,
+    starVisibility: 0.5,
   },
   {
     t: 2 / 6,
@@ -63,7 +63,7 @@ const DAY_NIGHT_STOPS: DayNightStop[] = [
     skyBottom: "#f2b07a",
     ambientIntensity: 1.35,
     directionalIntensity: 1.75,
-    starVisibility: 0.1,
+    starVisibility: 0.2,
   },
   {
     t: 5 / 6,
@@ -72,7 +72,7 @@ const DAY_NIGHT_STOPS: DayNightStop[] = [
     skyBottom: "#cf5f4d",
     ambientIntensity: 1.05,
     directionalIntensity: 1.25,
-    starVisibility: 0.45,
+    starVisibility: 0.72,
   },
   {
     t: 1,
@@ -81,7 +81,7 @@ const DAY_NIGHT_STOPS: DayNightStop[] = [
     skyBottom: "#03060f",
     ambientIntensity: 0.8,
     directionalIntensity: 0.9,
-    starVisibility: 0.85,
+    starVisibility: 1,
   },
 ];
 
