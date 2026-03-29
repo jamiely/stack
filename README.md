@@ -19,7 +19,7 @@ The repo now includes a playable early milestone:
 - V5.1 performance/scalability pass: distant slab archival into static chunk proxies, distraction LOD throttling, strict debris pooling/caps, and runtime perf diagnostics
 - Upward camera follow with frame-rate-independent smoothing + eased look-target tracking + tunable framing offset/focal Y offset (with camera height now independent from focal-point offset), score/player-built-height HUD (excluding prebuilt starter slabs), impact flash + configurable placement shake feedback, slabs spawning from behind the tower for more front-side visibility, vertically centered 3D window façades (body frames, protruding sills, deterministic per-side count variation, one consistent style per slab, rectangular/pointed-gothic/rounded-gothic/planter/shuttered variants), extra window-spacing padding, animated lower ledges that expand in after placement and vary from 25–100% span, decorative windows/eaves/weathering constrained to camera-facing sides, always-on scalloped eave trims with corner overlap to reduce corner gaps, bottom-half weathering on landed slabs (including prebuilt starters), and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
-- Vitest unit test setup with 90%+ enforced coverage on the logic layer
+- Vitest unit test setup with 90%+ enforced coverage on non-rendering code (logic modules + non-rendering runtime services such as debug config and feedback orchestration)
 - Playwright coverage for autostart boot flow, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
 - Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, recovery telemetry, feedback telemetry, distraction-state/actor-visual assertions, integrity telemetry assertions, collapse-state assertions, and performance diagnostics assertions
 - Git hooks for unit tests on commit and Playwright on commit/push
@@ -40,7 +40,7 @@ The dev server runs on `http://127.0.0.1:4173`.
 - `npm run check`: run TypeScript type-checking only
 - `npm run test`: run Vitest once
 - `npm run test:unit`: run the unit suite used by pre-commit
-- `npm run coverage`: enforce the logic-layer coverage threshold
+- `npm run coverage`: enforce the non-rendering-code coverage threshold
 - `npm run test:e2e`: run the Playwright suite used by pre-commit and pre-push
 
 ## Controls

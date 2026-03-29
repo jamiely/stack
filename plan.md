@@ -1,7 +1,7 @@
 # Tower Stacker Implementation Plan
 
 ## Summary
-Build a greenfield desktop-first browser prototype of `Tower Stacker` using plain Three.js, TypeScript, and Vite with hot reload. V1 focuses on the core stacking loop only, but it must still be fully playable: title/start screen, live height/score UI, game-over with restart, upward camera follow, alternating X/Z placement, and simple falling overhang animation. Mobile is limited to touch input support in the initial plan; Electron is not part of V1, but the architecture should stay packaging-friendly. Testing and tuning are part of the core scope: add Playwright coverage for end-to-end functionality, a dedicated test mode that supports deterministic stepping, runtime debug controls for gameplay parameters, and unit tests targeting at least 90% coverage for the testable logic layer.
+Build a greenfield desktop-first browser prototype of `Tower Stacker` using plain Three.js, TypeScript, and Vite with hot reload. V1 focuses on the core stacking loop only, but it must still be fully playable: title/start screen, live height/score UI, game-over with restart, upward camera follow, alternating X/Z placement, and simple falling overhang animation. Mobile is limited to touch input support in the initial plan; Electron is not part of V1, but the architecture should stay packaging-friendly. Testing and tuning are part of the core scope: add Playwright coverage for end-to-end functionality, a dedicated test mode that supports deterministic stepping, runtime debug controls for gameplay parameters, and unit tests targeting at least 90% coverage for testable non-rendering code.
 
 ## Implementation Status (2026-03-28)
 
@@ -40,7 +40,7 @@ The remaining work is no longer feature implementation from this plan. Future wo
 - Keep future Electron support in mind by avoiding browser-only coupling in core game logic. Core systems should not depend on DOM APIs except through a thin app/input/UI boundary.
 - Add a test harness mode for deterministic verification. Test mode should expose a stable control surface for Playwright and manual QA: seeded startup, paused boot option, single-step/tick advancement, scripted slab placement, and readable game-state hooks through a guarded debug API.
 - Add developer-facing debug controls for tuning gameplay in runtime without code edits. At minimum expose slab width/depth/height, move speed, speed ramp, perfect tolerance, starting stack size or prebuilt levels, debris lifetime, and camera follow values.
-- Keep game rules and calculations in pure modules where possible so unit tests can achieve at least 90% coverage on the logic layer without depending on WebGL or DOM rendering.
+- Keep game rules and other non-rendering calculations/services in pure modules where possible so unit tests can achieve at least 90% coverage on non-rendering code without depending on WebGL or DOM rendering.
 
 ## Public Interfaces / Types
 - `GameState`: `idle | playing | game_over`
@@ -73,7 +73,7 @@ The remaining work is no longer feature implementation from this plan. Future wo
 5. Basic juice
    Add impact feedback, simple debris fall/spin, and lightweight visual tuning for readability.
 6. Automated verification and coverage
-   Add unit tests for the logic layer, Playwright end-to-end tests for core flows, and coverage reporting with a 90% unit-test threshold.
+   Add unit tests for non-rendering code, Playwright end-to-end tests for core flows, and coverage reporting with a 90% unit-test threshold.
 7. Mobile input pass
    Validate touch input and responsive layout for the HUD without treating low-end mobile performance as a V1 optimization target.
 
@@ -88,7 +88,7 @@ The remaining work is no longer feature implementation from this plan. Future wo
   - deterministic stepping advances identical game states for identical seeds and inputs
   - bootstrap stack generation produces valid initial tower state for debug/test scenarios
 - Enforce unit-test coverage:
-  - configure coverage reporting for the logic layer
+  - configure coverage reporting for non-rendering code
   - fail CI or local verification when unit-test coverage drops below 90%
 - Playwright end-to-end verification:
   - start screen launches the game successfully
@@ -117,7 +117,7 @@ The remaining work is no longer feature implementation from this plan. Future wo
 - V1 excludes saboteurs, audio system, procedural mesh slicing, tower collapse physics, streak bonus growth, and Electron packaging.
 - Placeholder geometry/materials are acceptable for V1; asset production is not part of this milestone.
 - Mobile support in V1 means touch-capable interaction and usable layout, not full mobile-performance optimization from day one.
-- The 90% coverage target applies to unit-testable application logic rather than WebGL rendering code or thin framework/bootstrap glue.
+- The 90% coverage target applies to unit-testable non-rendering application code rather than WebGL rendering code or thin framework/bootstrap glue.
 
 ## V2+ Roadmap Status
 
@@ -212,7 +212,7 @@ This roadmap has been implemented in the repository and now serves as a completi
 
 The roadmap is considered complete when:
 - V2–V5 features above are implemented and documented.
-- Logic-layer unit coverage remains >= 90% throughout.
+- Non-rendering-code unit coverage remains >= 90% throughout.
 - Playwright core-flow suite passes with new systems enabled.
 - Debug/test control surface remains deterministic and scriptable.
 - `README.md` + `docs/features.md` reflect the expanded feature set.

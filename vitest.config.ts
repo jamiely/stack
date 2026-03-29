@@ -7,7 +7,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
-      include: ["src/game/logic/**/*.ts"],
+      include: ["src/game/logic/**/*.ts", "src/game/debugConfig.ts", "src/game/FeedbackManager.ts"],
       thresholds: {
         lines: 90,
         functions: 90,

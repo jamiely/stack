@@ -274,7 +274,7 @@ These controls should update runtime configuration without requiring source edit
 
 ### **Unit Testing and Coverage Target**
 
-The core gameplay rules should be structured so they can be unit-tested independently of rendering. The overlap calculation, trimming behavior, axis alternation, speed progression, perfect tolerance behavior, and debug/test bootstrap logic should all live in pure or near-pure modules. Unit tests should target a minimum of **90% coverage** for the testable logic layer.
+The core gameplay rules should be structured so they can be unit-tested independently of rendering. The overlap calculation, trimming behavior, axis alternation, speed progression, perfect tolerance behavior, and debug/test bootstrap logic should all live in pure or near-pure modules. Unit tests should target a minimum of **90% coverage** for testable non-rendering code.
 
 ## **Phase 1: The Core Kinematic Loop**
 

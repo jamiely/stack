@@ -101,7 +101,7 @@ Runtime tuning panel includes:
 
 ## Automated Verification
 
-- Unit tests cover pure logic modules (trim, spawn, oscillation, config clamping, collapse voxel planning, and projected screen-culling rules)
+- Unit tests cover non-rendering modules (trim/spawn/oscillation/feedback/distraction/integrity/performance/recovery/collapse logic, config clamping, and non-rendering runtime services such as feedback orchestration)
 - Playwright end-to-end tests cover:
   - Title boot autostart flow with intro title-card exit animation
   - Debug-panel and status-surface query gating
@@ -123,4 +123,4 @@ Runtime tuning panel includes:
   - High-start-stack performance smoke with archival/quality toggles and responsive input assertion
   - Deterministic scripted outcomes preserved with optimization toggles enabled
   - Mobile-sized touch/tap stop input path
-- Unit coverage threshold is enforced at 90% for the logic layer
+- Unit coverage threshold is enforced at 90% for non-rendering code

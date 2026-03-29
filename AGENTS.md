@@ -7,14 +7,14 @@ Your primary goal is to COMPLETE the task end-to-end with minimal user interacti
 - Treat `docs/design.md` as the source design brief for Tower Stacker.
 - Treat `plan.md` as the current implementation plan and default execution roadmap.
 - When implementing features, align decisions with those documents unless the user explicitly overrides them.
-- Maintain the documented testing requirements: Playwright coverage for core gameplay flows, a deterministic test mode with programmatic stepping, runtime debug controls for tuning, and at least 90% unit-test coverage for the logic layer.
+- Maintain the documented testing requirements: Playwright coverage for core gameplay flows, a deterministic test mode with programmatic stepping, runtime debug controls for tuning, and at least 90% unit-test coverage for non-rendering code.
 - When writing or extending gameplay code, explicitly consider whether the change should expose a new debug control for runtime tuning or test setup.
 - Commit after every completed repo change so work is captured incrementally.
 - Push after major changes or milestones so the remote stays current.
 - Run unit tests before every commit through local pre-commit hooks.
 - Run Playwright end-to-end tests before every commit through local pre-commit hooks.
 - Run Playwright end-to-end tests before every push through local pre-push hooks.
-- Enforce unit-test coverage in CI as a required step, with a minimum threshold of 90% for the logic layer.
+- Enforce unit-test coverage in CI as a required step, with a minimum threshold of 90% for non-rendering code.
 
 ## Git Workflow
 
