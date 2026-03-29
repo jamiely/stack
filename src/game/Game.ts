@@ -1088,7 +1088,12 @@ export class Game {
     });
     this.feedbackManager.play(getFailureFeedbackPlan(trigger));
     this.triggerImpactPulse(0.36);
-    this.spawnCollapseVoxels(additionalBurstSlabs);
+
+    const debrisBurstSlabs = this.collectBurstSlabsFromActiveDebris();
+    this.spawnCollapseVoxels([...additionalBurstSlabs, ...debrisBurstSlabs]);
+    this.debrisPieces = [];
+    this.clearGroup(this.debrisGroup, true);
+
     this.stackGroup.visible = false;
     this.archivedGroup.visible = false;
   }
@@ -3079,6 +3084,7 @@ export class Game {
       mesh.material.color.set(this.getSlabColor(slab.level));
       mesh.material.emissive.set(this.getSlabEmissive(slab.level));
     }
+    mesh.userData.slabLevel = slab.level;
 
     this.debrisGroup.add(mesh);
 
@@ -3106,6 +3112,30 @@ export class Game {
       }
       this.recycleDebrisMesh(piece.mesh);
     }
+  }
+
+  private collectBurstSlabsFromActiveDebris(): SlabData[] {
+    const fallbackLevel = this.landedSlabs[this.landedSlabs.length - 1]?.level ?? 0;
+    return this.debrisPieces.map((piece, index) => {
+      const slabLevel =
+        typeof piece.mesh.userData.slabLevel === "number" ? Math.max(0, Math.floor(piece.mesh.userData.slabLevel)) : fallbackLevel + index;
+
+      return {
+        level: slabLevel,
+        axis: "x",
+        position: {
+          x: piece.mesh.position.x,
+          y: piece.mesh.position.y,
+          z: piece.mesh.position.z,
+        },
+        dimensions: {
+          width: Math.max(0.12, piece.mesh.scale.x),
+          height: Math.max(0.12, piece.mesh.scale.y),
+          depth: Math.max(0.12, piece.mesh.scale.z),
+        },
+        direction: 1,
+      };
+    });
   }
 
   private getOrCreateDebrisMesh(): Mesh {
