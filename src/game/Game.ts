@@ -25,6 +25,7 @@ import {
   FACE_ROTATION,
   filterFacesByVisibility,
   resolveSlabHue,
+  resolveTentacleSegmentOffset,
   resolveWindowMetrics,
   resolveWindowShutterPalette,
   sampleDecorNoise,
@@ -1517,11 +1518,8 @@ export class Game {
         const segmentWidth = Math.max(0.06, windowWidth * (0.34 - segment * 0.036));
         const segmentHeight = segmentWidth;
         const segmentMesh = new Mesh(new BoxGeometry(segmentWidth, segmentHeight, segmentLength), tentacleMaterial);
-        segmentMesh.position.set(
-          Math.sin(segment * 0.9 + index) * segmentWidth * 0.22,
-          Math.cos(segment * 0.8 + index * 0.4) * segmentHeight * 0.24,
-          cursor + segmentLength / 2,
-        );
+        const offset = resolveTentacleSegmentOffset(segment, index, segmentWidth, segmentHeight);
+        segmentMesh.position.set(offset.x, offset.y, cursor + segmentLength / 2);
         segmentMesh.userData.baseY = segmentMesh.position.y;
         segmentMesh.userData.waveAmplitude = segmentHeight * (0.25 + segment * 0.12);
         segmentMesh.userData.wavePhase = root.userData.phase + segment * 0.65;

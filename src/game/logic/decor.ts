@@ -86,6 +86,22 @@ export function resolveWindowShutterPalette(level: number): "slate" | "teal" | "
   return "sand";
 }
 
+export function resolveTentacleSegmentOffset(
+  segmentIndex: number,
+  tentacleIndex: number,
+  segmentWidth: number,
+  segmentHeight: number,
+): { x: number; y: number } {
+  if (segmentIndex <= 0) {
+    return { x: 0, y: 0 };
+  }
+
+  return {
+    x: Math.sin(segmentIndex * 0.9 + tentacleIndex) * segmentWidth * 0.22,
+    y: Math.cos(segmentIndex * 0.8 + tentacleIndex * 0.4) * segmentHeight * 0.24,
+  };
+}
+
 export function shouldRenderWeathering(noise: number, threshold = 0.16): boolean {
   return noise > threshold;
 }

@@ -4,6 +4,7 @@ import {
   filterFacesByVisibility,
   isFaceHiddenFromCamera,
   resolveSlabHue,
+  resolveTentacleSegmentOffset,
   resolveWindowMetrics,
   resolveWindowShutterPalette,
   sampleDecorNoise,
@@ -89,6 +90,18 @@ describe("isFaceHiddenFromCamera", () => {
     expect(visible.some((face) => face.id === "front")).toBe(true);
     expect(visible.some((face) => face.id === "right")).toBe(true);
     expect(hidden.some((face) => face.id === "back")).toBe(true);
+  });
+});
+
+describe("tentacle segment offsets", () => {
+  it("anchors the base segment at the window center", () => {
+    expect(resolveTentacleSegmentOffset(0, 3, 0.2, 0.2)).toEqual({ x: 0, y: 0 });
+  });
+
+  it("keeps later segments within bounded lateral offsets", () => {
+    const offset = resolveTentacleSegmentOffset(3, 2, 0.3, 0.25);
+    expect(Math.abs(offset.x)).toBeLessThanOrEqual(0.3 * 0.22 + 1e-9);
+    expect(Math.abs(offset.y)).toBeLessThanOrEqual(0.25 * 0.24 + 1e-9);
   });
 });
 
