@@ -2016,23 +2016,21 @@ export class Game {
     }
 
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "rgba(255, 255, 255, 0.98)";
-    context.fillRect(0, 0, canvas.width, 4);
 
-    const radius = 10.2;
-    const step = 15;
-    const centerY = 4.5;
+    const radius = 12.6;
+    const step = 13;
+    const centerY = 3.4;
 
-    context.fillStyle = "rgba(240, 240, 240, 0.99)";
-    for (let x = -12; x <= canvas.width + 18; x += step) {
-      context.beginPath();
-      context.arc(x + step / 2, centerY, radius, 0, Math.PI, false);
-      context.fill();
-    }
+    context.strokeStyle = "rgba(255, 255, 255, 0.72)";
+    context.lineWidth = 0.9;
+    context.beginPath();
+    context.moveTo(0, 1.2);
+    context.lineTo(canvas.width, 1.2);
+    context.stroke();
 
-    context.strokeStyle = "rgba(166, 166, 166, 0.92)";
-    context.lineWidth = 1.35;
-    for (let x = -12; x <= canvas.width + 18; x += step) {
+    context.strokeStyle = "rgba(255, 255, 255, 0.94)";
+    context.lineWidth = 1.8;
+    for (let x = -14; x <= canvas.width + 20; x += step) {
       context.beginPath();
       context.arc(x + step / 2, centerY, radius, 0.03, Math.PI - 0.03, false);
       context.stroke();
@@ -2113,7 +2111,7 @@ export class Game {
       return;
     }
 
-    const eaveHeight = Math.max(0.24, Math.min(0.48, slab.dimensions.height * 0.16));
+    const eaveHeight = Math.max(0.28, Math.min(0.56, slab.dimensions.height * 0.18));
     const elevationY = slab.dimensions.height / 2 - eaveHeight * 0.32;
 
     const faces: Array<{
