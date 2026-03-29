@@ -98,6 +98,7 @@ type DebugToggleKey =
   | "distractionGorillaEnabled"
   | "distractionTremorEnabled"
   | "distractionUfoEnabled"
+  | "distractionBatEnabled"
   | "distractionContrastEnabled"
   | "distractionCloudEnabled"
   | "distractionFireworksEnabled"
@@ -148,6 +149,7 @@ interface PerformanceSnapshot {
   distractionLod: {
     gorilla: DistractionLodTier;
     ufo: DistractionLodTier;
+    bat: DistractionLodTier;
     clouds: DistractionLodTier;
     tremor: DistractionLodTier;
   };
@@ -174,9 +176,10 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   distractionTentacleStartLevel: { min: 0, max: 80, step: 1, label: "Tentacle Start" },
   distractionGorillaStartLevel: { min: 0, max: 80, step: 1, label: "Gorilla Start" },
   distractionUfoStartLevel: { min: 0, max: 100, step: 1, label: "UFO Start" },
+  distractionBatStartLevel: { min: 0, max: 120, step: 1, label: "Bat Start" },
   distractionCloudStartLevel: { min: 0, max: 120, step: 1, label: "Cloud Start" },
   distractionFireworksStartLevel: { min: 0, max: 120, step: 1, label: "Fireworks Start" },
-  dayNightCycleDurationSeconds: { min: 20, max: 240, step: 1, label: "Day/Night Cycle" },
+  dayNightCycleBlocks: { min: 4, max: 80, step: 1, label: "Day/Night Blocks" },
   integrityPrecariousThreshold: { min: 0.35, max: 0.85, step: 0.01, label: "Precarious Threshold" },
   integrityUnstableThreshold: { min: 0.45, max: 1.2, step: 0.01, label: "Unstable Threshold" },
   integrityWobbleStrength: { min: 0, max: 1.5, step: 0.01, label: "Integrity Wobble" },
@@ -196,6 +199,7 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
   debrisTumbleSpeed: { min: 0.2, max: 3, step: 0.05, label: "Debris Tumble" },
   placementShakeAmount: { min: 0, max: 1.5, step: 0.01, label: "Placement Shake" },
+  tremorShakeAmount: { min: 0, max: 3, step: 0.05, label: "Tremor Y Shake" },
 };
 
 const CAMERA_X = 8;
@@ -208,6 +212,7 @@ const DEBUG_TOGGLE_META: Record<DebugToggleKey, { label: string }> = {
   distractionGorillaEnabled: { label: "Gorilla Layer" },
   distractionTremorEnabled: { label: "Tremor Pulse" },
   distractionUfoEnabled: { label: "UFO Layer" },
+  distractionBatEnabled: { label: "Bat Layer" },
   distractionContrastEnabled: { label: "Contrast Wash" },
   distractionCloudEnabled: { label: "Cloud Occlusion" },
   distractionFireworksEnabled: { label: "Fireworks" },
@@ -219,6 +224,7 @@ const DEBUG_DISTRACTION_CHANNELS: DistractionChannel[] = [
   "gorilla",
   "tremor",
   "ufo",
+  "bat",
   "contrastWash",
   "clouds",
   "fireworks",
@@ -232,6 +238,7 @@ const GORILLA_SLAM_DURATION_SECONDS = 0.2;
 const CLOUD_SWAY_DISTANCE_PX = 120;
 const STACK_LOOK_AHEAD_Y = 1.05;
 const STARTUP_CAMERA_LIFT = 2.2;
+const DAY_NIGHT_COLOR_LERP_SPEED = 3.2;
 const STARTUP_CAMERA_LIFT_FADE_FLOORS = 10;
 const PLACEMENT_SHAKE_DURATION_SECONDS = 0.16;
 const COLLAPSE_VOXEL_SIZE = 0.38;
@@ -247,6 +254,7 @@ const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string 
   gorilla: { label: "Gorilla" },
   tremor: { label: "Tremor" },
   ufo: { label: "UFO" },
+  bat: { label: "Bat" },
   contrastWash: { label: "Contrast" },
   clouds: { label: "Clouds" },
   fireworks: { label: "Fireworks" },
@@ -281,6 +289,7 @@ export class Game {
   private readonly distractionLayer: HTMLDivElement;
   private readonly gorillaActor: HTMLDivElement;
   private readonly ufoActor: HTMLDivElement;
+  private readonly batActor: HTMLDivElement;
   private readonly cloudLayer: HTMLDivElement;
   private readonly fireworksActor: HTMLDivElement;
   private readonly tremorPulse: HTMLDivElement;
@@ -350,12 +359,14 @@ export class Game {
     defaultDebugConfig.cameraHeight + defaultDebugConfig.cameraFramingOffset + defaultDebugConfig.cameraYOffset,
     defaultDebugConfig.cameraDistance,
   );
+  private readonly dayNightTargetSkyColor = new Color("#07101c");
   private activeQualityPreset: QualityPreset = toQualityPreset(defaultDebugConfig.performanceQualityPreset);
   private archivedLevelSet = new Set<number>();
   private archivedChunkCount = 0;
   private distractionLod: PerformanceSnapshot["distractionLod"] = {
     gorilla: "high",
     ufo: "high",
+    bat: "high",
     clouds: "high",
     tremor: "high",
   };
@@ -421,6 +432,7 @@ export class Game {
     this.distractionLayer = document.createElement("div");
     this.gorillaActor = document.createElement("div");
     this.ufoActor = document.createElement("div");
+    this.batActor = document.createElement("div");
     this.cloudLayer = document.createElement("div");
     this.fireworksActor = document.createElement("div");
     this.tremorPulse = document.createElement("div");
@@ -547,6 +559,9 @@ export class Game {
     this.ufoActor.className = "distraction-actor distraction-actor--ufo";
     this.ufoActor.dataset.testid = "actor-ufo";
 
+    this.batActor.className = "distraction-actor distraction-actor--bat";
+    this.batActor.dataset.testid = "actor-bat";
+
     this.cloudLayer.className = "distraction-clouds";
     this.cloudLayer.dataset.testid = "actor-clouds";
     for (let index = 0; index < 3; index += 1) {
@@ -562,7 +577,7 @@ export class Game {
     this.tremorPulse.className = "distraction-tremor";
     this.tremorPulse.dataset.testid = "actor-tremor";
 
-    this.distractionLayer.append(this.gorillaActor, this.ufoActor, this.cloudLayer, this.fireworksActor, this.tremorPulse);
+    this.distractionLayer.append(this.gorillaActor, this.ufoActor, this.batActor, this.cloudLayer, this.fireworksActor, this.tremorPulse);
   }
 
   private createDebugControls(): DocumentFragment {
@@ -603,8 +618,9 @@ export class Game {
             "lodFarDistance",
             "maxActiveDebris",
             "debrisPoolLimit",
+            "distractionBatStartLevel",
             "distractionFireworksStartLevel",
-            "dayNightCycleDurationSeconds",
+            "dayNightCycleBlocks",
           ];
           const rawValue = Number(input.value);
           const nextConfig = {
@@ -811,7 +827,7 @@ export class Game {
     this.refreshQualityPreset();
     this.updateDistractions(deltaSeconds);
     this.updateDistractionActors();
-    this.updateDayNightCycle();
+    this.updateDayNightCycle(deltaSeconds);
     this.updateActiveSlab(deltaSeconds);
     this.updateDebris(deltaSeconds);
     this.updateCollapseVoxels(deltaSeconds);
@@ -1163,11 +1179,20 @@ export class Game {
     };
   }
 
-  private updateDayNightCycle(): void {
-    const frame = sampleDayNightFrame(this.simulationElapsedSeconds, this.debugConfig.dayNightCycleDurationSeconds);
-    this.scene.background = new Color(frame.skyTop);
-    this.ambientLight.intensity = frame.ambientIntensity;
-    this.directionalLight.intensity = frame.directionalIntensity;
+  private updateDayNightCycle(deltaSeconds: number): void {
+    const builtFloors = Math.max(0, this.landedSlabs.length - this.startingStackLevels);
+    const frame = sampleDayNightFrame(builtFloors, this.debugConfig.dayNightCycleBlocks);
+    const blend = 1 - Math.exp(-Math.max(0, Math.min(0.2, deltaSeconds)) * DAY_NIGHT_COLOR_LERP_SPEED);
+
+    this.dayNightTargetSkyColor.set(frame.skyTop);
+    if (this.scene.background instanceof Color) {
+      this.scene.background.lerp(this.dayNightTargetSkyColor, blend);
+    } else {
+      this.scene.background = this.dayNightTargetSkyColor.clone();
+    }
+
+    this.ambientLight.intensity += (frame.ambientIntensity - this.ambientLight.intensity) * blend;
+    this.directionalLight.intensity += (frame.directionalIntensity - this.directionalLight.intensity) * blend;
   }
 
   private updateDistractions(deltaSeconds: number): void {
@@ -1195,6 +1220,7 @@ export class Game {
     this.distractionLod = {
       gorilla: selectDistractionLodTier(Math.max(0, snapshot.level - this.debugConfig.distractionGorillaStartLevel), lodNear, lodFar),
       ufo: selectDistractionLodTier(Math.max(0, snapshot.level - this.debugConfig.distractionUfoStartLevel), lodNear, lodFar),
+      bat: selectDistractionLodTier(Math.max(0, snapshot.level - this.debugConfig.distractionBatStartLevel), lodNear, lodFar),
       clouds: selectDistractionLodTier(Math.max(0, snapshot.level - this.debugConfig.distractionCloudStartLevel), lodNear, lodFar),
       tremor: selectDistractionLodTier(snapshot.level, lodNear, lodFar),
     };
@@ -1329,6 +1355,31 @@ export class Game {
           this.ufoActor.style.opacity = "0";
         }
       }
+    }
+
+    if (!snapshot.active.bat) {
+      this.batActor.style.opacity = "0";
+    } else if (shouldUpdateForLod(this.distractionLod.bat, this.frameCounter, scalars.distractionUpdateStride)) {
+      const width = this.container.clientWidth || window.innerWidth;
+      const height = this.container.clientHeight || window.innerHeight;
+      const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+      const centerX = topSlab?.position.x ?? 0;
+      const centerY = (topSlab?.position.y ?? 0) + (topSlab?.dimensions.height ?? this.debugConfig.slabHeight) * 0.9;
+      const centerZ = topSlab?.position.z ?? 0;
+      const phase = this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * 2.2;
+      const orbitRadius = Math.max(2.4, this.debugConfig.baseWidth * 0.9 + snapshot.signals.bat * 1.2);
+      const worldPoint = new Vector3(
+        centerX + Math.cos(phase) * orbitRadius,
+        centerY + Math.sin(phase * 2.4) * 0.65,
+        centerZ + Math.sin(phase * 1.15) * orbitRadius * 0.6,
+      );
+      const projected = worldPoint.project(this.camera);
+      const screenX = (projected.x * 0.5 + 0.5) * width;
+      const screenY = (-projected.y * 0.5 + 0.5) * height;
+      const flap = 0.85 + Math.sin(phase * 6.4) * 0.35;
+      const opacity = projected.z > -1 && projected.z < 1 ? 0.22 + snapshot.signals.bat * 0.7 : 0.08;
+      this.batActor.style.opacity = opacity.toFixed(3);
+      this.batActor.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(${flap.toFixed(3)})`;
     }
 
     if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {
@@ -1761,7 +1812,11 @@ export class Game {
 
     const distractionSnapshot = this.getEffectiveDistractionSnapshot();
     const tremorStrength = distractionSnapshot.active.tremor ? distractionSnapshot.signals.tremor : 0;
-    const tremorShake = sampleTremorCameraShake(this.distractionState.elapsedSeconds, tremorStrength);
+    const tremorShake = sampleTremorCameraShake(
+      this.distractionState.elapsedSeconds,
+      tremorStrength,
+      this.debugConfig.tremorShakeAmount,
+    );
     this.camera.position.x += tremorShake.x;
     this.camera.position.y += tremorShake.y;
 
@@ -2054,8 +2109,9 @@ export class Game {
         "lodFarDistance",
         "maxActiveDebris",
         "debrisPoolLimit",
+        "distractionBatStartLevel",
         "distractionFireworksStartLevel",
-        "dayNightCycleDurationSeconds",
+        "dayNightCycleBlocks",
       ];
 
       node.textContent = integerKeys.includes(key)
@@ -2157,6 +2213,7 @@ export class Game {
         visuals: {
           gorillaOpacity: Number(this.gorillaActor.style.opacity || 0),
           ufoOpacity: Number(this.ufoActor.style.opacity || 0),
+          batOpacity: Number(this.batActor.style.opacity || 0),
           cloudOpacity: Number(this.cloudLayer.style.opacity || 0),
           contrastOpacity: Number(this.shell.style.getPropertyValue("--contrast-alpha") || 0),
           tremorStrength: distractionSnapshot.active.tremor ? distractionSnapshot.signals.tremor : 0,
