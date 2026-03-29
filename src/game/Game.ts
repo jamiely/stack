@@ -417,9 +417,8 @@ export class Game {
   private readonly brickTexture = this.createBrickTexture();
   private readonly sidingTexture = this.createSidingTexture();
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
+  private cloudSpawnFromTop: boolean[] = [false, false, false];
   private cloudAnchorsInitialized = false;
-  private cloudRespawnCursor = 0;
-  private cloudLastRespawnLevel = -1;
   private tentacleBurstKeys: string[] = [];
 
   public constructor(container: HTMLDivElement) {
@@ -1021,8 +1020,7 @@ export class Game {
     this.averageFrameTimeMs = 0;
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.cloudAnchorsInitialized = false;
-    this.cloudRespawnCursor = 0;
-    this.cloudLastRespawnLevel = -1;
+    this.cloudSpawnFromTop = [false, false, false];
     this.tentacleBurstKeys = [];
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
@@ -1550,8 +1548,7 @@ export class Game {
     if (!cloudChannelEnabled) {
       this.cloudLayer.style.opacity = "0";
       this.cloudAnchorsInitialized = false;
-      this.cloudRespawnCursor = 0;
-      this.cloudLastRespawnLevel = -1;
+      this.cloudSpawnFromTop = cloudNodes.map(() => false);
       return;
     }
 
@@ -1562,61 +1559,58 @@ export class Game {
     }
 
     if (!this.cloudAnchorsInitialized) {
-      this.cloudWorldAnchors = cloudNodes.map((_, index) => this.createCloudAnchor(topSlab, index, 0));
+      this.cloudWorldAnchors = cloudNodes.map((_, index) => this.createCloudAnchor(topSlab, index, 0, false));
+      this.cloudSpawnFromTop = cloudNodes.map(() => false);
       this.cloudAnchorsInitialized = true;
-      this.cloudRespawnCursor = 0;
-      this.cloudLastRespawnLevel = topSlab.level;
-    }
-
-    if (topSlab.level !== this.cloudLastRespawnLevel) {
-      const index = this.cloudRespawnCursor % cloudNodes.length;
-      this.cloudWorldAnchors[index] = this.createCloudAnchor(topSlab, index, topSlab.level);
-      this.cloudRespawnCursor = (this.cloudRespawnCursor + 1) % cloudNodes.length;
-      this.cloudLastRespawnLevel = topSlab.level;
     }
 
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
     const swayPhase = this.distractionState.elapsedSeconds * 0.6 * this.debugConfig.distractionMotionSpeed;
     const bobPhase = this.distractionState.elapsedSeconds * 0.28;
-    const topY = topSlab.position.y;
-    const slabHeight = Math.max(0.5, this.debugConfig.slabHeight);
-    let visibleClouds = 0;
 
     cloudNodes.forEach((cloudNode, index) => {
-      const anchor = this.cloudWorldAnchors[index] ?? this.createCloudAnchor(topSlab, index, this.frameCounter);
+      const anchor = this.cloudWorldAnchors[index] ?? this.createCloudAnchor(topSlab, index, this.frameCounter, false);
       this.cloudWorldAnchors[index] = anchor;
-      const followY = topY + slabHeight * (1 + index * 0.35);
 
-      if (anchor.y < followY - slabHeight * 3.6) {
-        this.cloudWorldAnchors[index] = this.createCloudAnchor(topSlab, index, this.frameCounter + index * 37);
-      } else {
-        anchor.y += Math.max(0, followY - anchor.y) * 0.07;
+      const worldPoint = new Vector3(
+        anchor.x + Math.sin(swayPhase + index) * (0.55 + index * 0.2),
+        anchor.y + Math.cos(bobPhase + index * 0.75) * 0.22,
+        anchor.z + Math.cos(swayPhase * 0.65 + index) * 0.38,
+      );
+      const projected = worldPoint.project(this.camera);
+
+      const offBottom = projected.y > 1.25;
+      const tooFarSide = Math.abs(projected.x) > 1.7;
+      const behindCamera = projected.z > 1.1;
+      if (offBottom || tooFarSide || behindCamera || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
+        const respawnAnchor = this.createCloudAnchor(topSlab, index, this.frameCounter + index * 37, true);
+        this.cloudWorldAnchors[index] = respawnAnchor;
+        this.cloudSpawnFromTop[index] = true;
       }
 
       const stableAnchor = this.cloudWorldAnchors[index] ?? anchor;
-      const worldPoint = new Vector3(
+      const stablePoint = new Vector3(
         stableAnchor.x + Math.sin(swayPhase + index) * (0.55 + index * 0.2),
         stableAnchor.y + Math.cos(bobPhase + index * 0.75) * 0.22,
         stableAnchor.z + Math.cos(swayPhase * 0.65 + index) * 0.38,
       );
-      const projected = worldPoint.project(this.camera);
-      if (
-        projected.x >= -1.05 && projected.x <= 1.05 &&
-        projected.y >= -1.05 && projected.y <= 1.05 &&
-        projected.z <= 1.05
-      ) {
-        visibleClouds += 1;
-      }
-
-      const screenX = (projected.x * 0.5 + 0.5) * width;
-      const screenY = (-projected.y * 0.5 + 0.5) * height;
+      const stableProjected = stablePoint.project(this.camera);
+      const screenX = (stableProjected.x * 0.5 + 0.5) * width;
+      const screenY = (-stableProjected.y * 0.5 + 0.5) * height;
       cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%)`;
-    });
 
-    if (visibleClouds === 0) {
-      this.cloudWorldAnchors[0] = this.createCloudAnchor(topSlab, 0, this.frameCounter + 113);
-    }
+      const enteringFromTop = this.cloudSpawnFromTop[index] === true;
+      if (!enteringFromTop) {
+        cloudNode.style.opacity = "1";
+      } else {
+        const entryAlpha = Math.min(1, Math.max(0, (stableProjected.y + 1.18) / 0.34));
+        cloudNode.style.opacity = entryAlpha.toFixed(3);
+        if (entryAlpha >= 0.995) {
+          this.cloudSpawnFromTop[index] = false;
+        }
+      }
+    });
 
     const baselineCloudOpacity = 0.28;
     const cloudSignalOpacity = snapshot.active.clouds ? snapshot.signals.clouds * 0.46 : 0;
@@ -1625,20 +1619,33 @@ export class Game {
     this.cloudLayer.style.transform = "translateX(0px)";
   }
 
-  private createCloudAnchor(topSlab: SlabData, index: number, salt: number): Vector3 {
+  private createCloudAnchor(topSlab: SlabData, index: number, salt: number, spawnFromTop: boolean): Vector3 {
     const slabHeight = Math.max(0.5, this.debugConfig.slabHeight);
-    const baseRadius = Math.max(this.debugConfig.baseWidth, this.debugConfig.baseDepth) * 0.55 + 1.8;
-    const angleNoise = sampleDecorNoise(topSlab.level * 0.53 + salt * 0.17 + index * 1.91, 11.7);
-    const radiusNoise = sampleDecorNoise(topSlab.level * 0.39 + salt * 0.23 + index * 1.13, 27.4);
-    const heightNoise = sampleDecorNoise(topSlab.level * 0.21 + salt * 0.19 + index * 0.87, 43.6);
-    const angle = angleNoise * Math.PI * 2;
-    const radius = baseRadius + radiusNoise * 3.2;
-    const y = topSlab.position.y + slabHeight * (0.8 + heightNoise * 2.4 + index * 0.2);
+    const topCenter = new Vector3(topSlab.position.x, topSlab.position.y, topSlab.position.z);
+    const toCamera = new Vector3(this.camera.position.x - topCenter.x, 0, this.camera.position.z - topCenter.z);
+    if (toCamera.lengthSq() < 0.0001) {
+      toCamera.set(1, 0, 0);
+    } else {
+      toCamera.normalize();
+    }
+    const lateral = new Vector3(-toCamera.z, 0, toCamera.x);
+
+    const sideNoise = sampleDecorNoise(topSlab.level * 0.41 + salt * 0.23 + index * 1.31, 9.4);
+    const depthNoise = sampleDecorNoise(topSlab.level * 0.37 + salt * 0.19 + index * 1.91, 23.5);
+    const lateralNoise = sampleDecorNoise(topSlab.level * 0.53 + salt * 0.17 + index * 0.83, 41.2);
+    const heightNoise = sampleDecorNoise(topSlab.level * 0.29 + salt * 0.21 + index * 0.59, 63.7);
+
+    const frontSign = sideNoise > 0.5 ? 1 : -1;
+    const depthDistance = 1.6 + depthNoise * 3.6;
+    const lateralDistance = (lateralNoise * 2 - 1) * (2.6 + depthNoise * 2.4);
+    const baseY = spawnFromTop
+      ? topSlab.position.y + this.debugConfig.cameraHeight * (1.2 + heightNoise * 0.45)
+      : topSlab.position.y + slabHeight * (1 + heightNoise * 2.6 + index * 0.22);
 
     return new Vector3(
-      topSlab.position.x + Math.cos(angle) * radius,
-      y,
-      topSlab.position.z + Math.sin(angle) * radius,
+      topCenter.x + toCamera.x * depthDistance * frontSign + lateral.x * lateralDistance,
+      baseY,
+      topCenter.z + toCamera.z * depthDistance * frontSign + lateral.z * lateralDistance,
     );
   }
 
