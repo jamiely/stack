@@ -189,9 +189,14 @@ const COLLAPSE_VOXEL_MAX_COUNT = 560;
 const TENTACLE_SIDE_SWITCH_SPEED = 0.75;
 const TENTACLE_BURST_CHANCE = 0.5;
 const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
+const TENTACLE_MAX_PERSISTED_BURSTS = 32;
+const TENTACLE_WAVE_SPEED = 5.8;
 const WINDOW_STYLES: WindowStyle[] = ["rectangular", "pointedGothic", "roundedGothic", "planter", "shuttered"];
 const WINDOW_MIN_FACE_SPAN = 0.86;
 const SHUTTER_WINDOW_MIN_FACE_SPAN = 1.02;
+const WINDOW_EDGE_PADDING_MULTIPLIER = 0.62;
+const WINDOW_PAIR_GAP_MULTIPLIER = 1.18;
+const EAVE_CORNER_OVERLAP = 0.12;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -342,7 +347,7 @@ export class Game {
   private readonly weatheringTexture = this.createWeatheringTexture();
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudAnchorsInitialized = false;
-  private tentacleBurstKey: string | null = null;
+  private tentacleBurstKeys: string[] = [];
 
   public constructor(container: HTMLDivElement) {
     this.container = container;
@@ -907,7 +912,7 @@ export class Game {
     this.averageFrameTimeMs = 0;
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.cloudAnchorsInitialized = false;
-    this.tentacleBurstKey = null;
+    this.tentacleBurstKeys = [];
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
 
@@ -922,17 +927,15 @@ export class Game {
     this.updateDistractionActors();
 
     const topLandedSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? null;
-    const initialTargetY =
+    const initialFocusY =
       (topLandedSlab?.position.y ?? 0) +
-      this.debugConfig.cameraHeight +
       this.debugConfig.cameraFramingOffset +
       this.debugConfig.cameraYOffset +
-      STARTUP_CAMERA_LIFT;
+      STARTUP_CAMERA_LIFT +
+      STACK_LOOK_AHEAD_Y;
+    const initialTargetY = initialFocusY + this.debugConfig.cameraHeight;
     this.cameraTargetPosition.set(CAMERA_X, initialTargetY, this.debugConfig.cameraDistance);
-    this.cameraLookAtY = Math.max(
-      1.2,
-      initialTargetY - this.debugConfig.cameraHeight - this.debugConfig.cameraFramingOffset - this.debugConfig.cameraYOffset + STACK_LOOK_AHEAD_Y,
-    );
+    this.cameraLookAtY = Math.max(1.2, initialFocusY);
   }
 
   private spawnNextActive(): void {
@@ -945,8 +948,9 @@ export class Game {
     this.activeSlab = activeSlab;
 
     const targetAxisPosition = activeSlab.axis === "x" ? target.position.x : target.position.z;
-    const spawnSide = this.seededRandom ? ((this.seededRandom() < 0.5 ? -1 : 1) as 1 | -1) : (-1 as 1 | -1);
-    const spawnOffset = targetAxisPosition + spawnSide * this.debugConfig.motionRange;
+    const spawnSide = -1 as 1 | -1;
+    const seededBehindFactor = this.seededRandom ? 0.72 + this.seededRandom() * 0.28 : 1;
+    const spawnOffset = targetAxisPosition + spawnSide * this.debugConfig.motionRange * seededBehindFactor;
     const spawnDirection = (spawnSide * -1) as 1 | -1;
 
     this.oscillation = {
@@ -1245,6 +1249,7 @@ export class Game {
 
       if (snapshot.active.ufo) {
         const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+        this.syncUfoVisualSize(topSlab ?? null);
         const orbitPhase = this.distractionState.elapsedSeconds * UFO_ORBIT_ANGULAR_SPEED * this.debugConfig.distractionMotionSpeed;
         const orbitRadius = Math.max(3.2, this.debugConfig.baseWidth * 1.15 + snapshot.signals.ufo * 1.8);
         const orbitCenterX = topSlab?.position.x ?? 0;
@@ -1337,6 +1342,22 @@ export class Game {
     this.updateTentacleBursts(snapshot);
   }
 
+  private syncUfoVisualSize(topSlab: SlabData | null): void {
+    const height = this.container.clientHeight || window.innerHeight;
+    if (!topSlab || height <= 0) {
+      this.ufoActor.style.height = "2.3rem";
+      this.ufoActor.style.width = "5.4rem";
+      return;
+    }
+
+    const slabBottom = new Vector3(topSlab.position.x, topSlab.position.y, topSlab.position.z).project(this.camera);
+    const slabTop = new Vector3(topSlab.position.x, topSlab.position.y + topSlab.dimensions.height, topSlab.position.z).project(this.camera);
+    const projectedHeight = Math.abs((slabTop.y - slabBottom.y) * 0.5 * height);
+    const ufoHeightPx = Math.max(18, Math.min(140, projectedHeight));
+    this.ufoActor.style.height = `${ufoHeightPx.toFixed(1)}px`;
+    this.ufoActor.style.width = `${(ufoHeightPx * 2.35).toFixed(1)}px`;
+  }
+
   private updateCloudLayer(snapshot: DistractionSnapshot): void {
     const cloudNodes = Array.from(this.cloudLayer.querySelectorAll<HTMLElement>(".distraction-cloud"));
     if (cloudNodes.length === 0) {
@@ -1406,60 +1427,72 @@ export class Game {
       if (this.tentacleGroup.children.length > 0) {
         this.clearGroup(this.tentacleGroup, true);
       }
-      this.tentacleBurstKey = null;
+      this.tentacleBurstKeys = [];
       return;
     }
 
     const slab = this.landedSlabs[this.landedSlabs.length - 1];
     if (!slab || slab.dimensions.height < 0.9) {
-      this.clearGroup(this.tentacleGroup, true);
-      this.tentacleBurstKey = null;
       return;
     }
 
-    const cycle = Math.floor(this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * TENTACLE_SIDE_SWITCH_SPEED);
-    const cycleNoise = this.sampleDecorNoise(slab.level * 0.29 + cycle * 0.91, 24.8);
-    if (cycleNoise >= TENTACLE_BURST_CHANCE) {
-      const burstKey = `${slab.level}:${cycle}:none`;
-      if (burstKey !== this.tentacleBurstKey) {
-        this.clearGroup(this.tentacleGroup, true);
-        this.tentacleBurstKey = burstKey;
+    const hiddenFaces = this.getHiddenFaceDescriptors(slab);
+    if (hiddenFaces.length > 0) {
+      const cycle = Math.floor(this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * TENTACLE_SIDE_SWITCH_SPEED);
+      const cycleNoise = this.sampleDecorNoise(slab.level * 0.29 + cycle * 0.91, 24.8);
+      if (cycleNoise < TENTACLE_BURST_CHANCE) {
+        const sideNoise = this.sampleDecorNoise(slab.level * 0.43 + cycle * 0.67, 18.3);
+        const hiddenFaceIndex = Math.min(hiddenFaces.length - 1, Math.floor(sideNoise * hiddenFaces.length));
+        const face = hiddenFaces[hiddenFaceIndex];
+        const burstKey = `${slab.level}:${face?.noiseSalt ?? -1}`;
+        if (face && !this.tentacleBurstKeys.includes(burstKey)) {
+          const created = this.createTentacleBurstForFace(slab, face);
+          if (created) {
+            this.tentacleBurstKeys.push(burstKey);
+            while (this.tentacleBurstKeys.length > TENTACLE_MAX_PERSISTED_BURSTS) {
+              const removedKey = this.tentacleBurstKeys.shift();
+              const removedRoot = removedKey
+                ? this.tentacleGroup.children.find((child) => child.userData.burstKey === removedKey)
+                : null;
+              if (removedRoot) {
+                this.tentacleGroup.remove(removedRoot);
+                this.disposeObject3DMeshes(removedRoot);
+              }
+            }
+          }
+        }
       }
-      return;
     }
 
-    const sideNoise = this.sampleDecorNoise(slab.level * 0.43 + cycle * 0.67, 18.3);
-    const faceIndex = Math.min(3, Math.floor(sideNoise * 4));
-    const burstKey = `${slab.level}:${cycle}:${faceIndex}`;
+    this.animateTentacles(snapshot.signals.tentacle);
+  }
 
-    if (burstKey !== this.tentacleBurstKey) {
-      this.rebuildTentacleBurstForFace(slab, faceIndex);
-      this.tentacleBurstKey = burstKey;
-    }
+  private animateTentacles(signal: number): void {
+    this.tentacleGroup.children.forEach((burstRoot, burstIndex) => {
+      burstRoot.children.forEach((tentacle, index) => {
+        const phase = typeof tentacle.userData.phase === "number" ? tentacle.userData.phase : 0;
+        const baseRotationY = typeof tentacle.userData.baseRotationY === "number" ? tentacle.userData.baseRotationY : 0;
+        const wiggle = (Math.sin(this.distractionState.elapsedSeconds * 6.2 + phase) + 1) / 2;
+        const extension = (0.35 + signal * (0.7 + wiggle * 0.9)) * TENTACLE_EXTENSION_MULTIPLIER;
+        tentacle.scale.z = extension;
+        tentacle.scale.x = 0.92 + signal * 0.22;
+        tentacle.scale.y = 0.92 + signal * 0.18;
+        tentacle.rotation.x = Math.sin(this.distractionState.elapsedSeconds * 4.7 + phase) * 0.2;
+        tentacle.rotation.y = baseRotationY + Math.cos(this.distractionState.elapsedSeconds * 3.9 + phase + (burstIndex + index) * 0.4) * 0.12;
 
-    const signal = snapshot.signals.tentacle;
-    this.tentacleGroup.children.forEach((tentacle, index) => {
-      const phase = typeof tentacle.userData.phase === "number" ? tentacle.userData.phase : 0;
-      const baseRotationY = typeof tentacle.userData.baseRotationY === "number" ? tentacle.userData.baseRotationY : 0;
-      const wiggle = (Math.sin(this.distractionState.elapsedSeconds * 6.2 + phase) + 1) / 2;
-      const extension = (0.35 + signal * (0.7 + wiggle * 0.9)) * TENTACLE_EXTENSION_MULTIPLIER;
-      tentacle.scale.z = extension;
-      tentacle.scale.x = 0.92 + signal * 0.22;
-      tentacle.scale.y = 0.92 + signal * 0.18;
-      tentacle.rotation.x = Math.sin(this.distractionState.elapsedSeconds * 4.7 + phase) * 0.13;
-      tentacle.rotation.y = baseRotationY + Math.cos(this.distractionState.elapsedSeconds * 3.9 + phase + index * 0.4) * 0.08;
+        tentacle.children.forEach((segment) => {
+          const baseY = typeof segment.userData.baseY === "number" ? segment.userData.baseY : segment.position.y;
+          const waveAmplitude = typeof segment.userData.waveAmplitude === "number" ? segment.userData.waveAmplitude : 0;
+          const wavePhase = typeof segment.userData.wavePhase === "number" ? segment.userData.wavePhase : phase;
+          const wave =
+            Math.sin(this.distractionState.elapsedSeconds * TENTACLE_WAVE_SPEED + wavePhase) * waveAmplitude * (0.55 + signal);
+          segment.position.y = baseY + wave;
+        });
+      });
     });
   }
 
-  private rebuildTentacleBurstForFace(slab: SlabData, faceIndex: number): void {
-    this.clearGroup(this.tentacleGroup, true);
-
-    const faces = this.getWindowFaceDescriptors(slab);
-    const face = faces[faceIndex];
-    if (!face) {
-      return;
-    }
-
+  private createTentacleBurstForFace(slab: SlabData, face: WindowFaceDescriptor): boolean {
     const windowHeight = Math.max(0.5, Math.min(0.92, slab.dimensions.height * 0.36));
     const windowWidth = Math.max(0.16, windowHeight * 0.42);
     const frameDepth = Math.max(0.045, Math.min(0.08, windowWidth * 0.3));
@@ -1467,15 +1500,16 @@ export class Game {
     const windowStyle = this.getWindowStyleForSlab(slab);
 
     if (!this.shouldRenderWindowsForFace(face.span, windowStyle, windowWidth, frameThickness)) {
-      return;
+      return false;
     }
 
-    const windowCount = this.getWindowCountForFace(slab, face, faceIndex, windowStyle, windowWidth, frameThickness);
+    const faceIndex = this.getWindowFaceDescriptors(slab).findIndex((candidate) => candidate.noiseSalt === face.noiseSalt);
+    const windowCount = this.getWindowCountForFace(slab, face, Math.max(0, faceIndex), windowStyle, windowWidth, frameThickness);
     if (windowCount < 1) {
-      return;
+      return false;
     }
 
-    const offsets = this.getWindowHorizontalOffsets(face.span, windowCount);
+    const offsets = this.getWindowHorizontalOffsets(face.span, windowCount, windowStyle, windowWidth, frameThickness);
 
     const tentacleMaterial = new MeshStandardMaterial({
       color: new Color("#b436ff"),
@@ -1484,6 +1518,9 @@ export class Game {
       metalness: 0.08,
       roughness: 0.62,
     });
+
+    const burstRoot = new Group();
+    burstRoot.userData.burstKey = `${slab.level}:${face.noiseSalt}`;
 
     offsets.forEach((localOffset, index) => {
       const root = new Group();
@@ -1503,9 +1540,12 @@ export class Game {
         const segmentMesh = new Mesh(new BoxGeometry(segmentWidth, segmentHeight, segmentLength), tentacleMaterial);
         segmentMesh.position.set(
           Math.sin(segment * 0.9 + index) * segmentWidth * 0.22,
-          Math.cos(segment * 0.8 + index * 0.4) * segmentHeight * 0.2,
+          Math.cos(segment * 0.8 + index * 0.4) * segmentHeight * 0.24,
           cursor + segmentLength / 2,
         );
+        segmentMesh.userData.baseY = segmentMesh.position.y;
+        segmentMesh.userData.waveAmplitude = segmentHeight * (0.25 + segment * 0.12);
+        segmentMesh.userData.wavePhase = root.userData.phase + segment * 0.65;
         cursor += segmentLength * 0.82;
         root.add(segmentMesh);
       }
@@ -1515,10 +1555,21 @@ export class Game {
       const tip = new Mesh(new CylinderGeometry(0, tipRadius, tipLength, 4, 1), tentacleMaterial);
       tip.rotation.x = Math.PI / 2;
       tip.position.z = cursor + tipLength / 2;
+      tip.userData.baseY = tip.position.y;
+      tip.userData.waveAmplitude = tipRadius * 1.15;
+      tip.userData.wavePhase = root.userData.phase + segmentCount * 0.65;
       root.add(tip);
 
-      this.tentacleGroup.add(root);
+      burstRoot.add(root);
     });
+
+    if (burstRoot.children.length === 0) {
+      this.disposeObject3DMeshes(burstRoot);
+      return false;
+    }
+
+    this.tentacleGroup.add(burstRoot);
+    return true;
   }
 
   private updateActiveSlab(deltaSeconds: number): void {
@@ -1649,13 +1700,14 @@ export class Game {
     const builtFloors = Math.max(0, this.landedSlabs.length - this.startingStackLevels);
     const startupLiftFactor = Math.max(0, 1 - builtFloors / STARTUP_CAMERA_LIFT_FADE_FLOORS);
     const startupLift = STARTUP_CAMERA_LIFT * startupLiftFactor;
-    const targetY =
+    const focusY =
       (topLandedSlab?.position.y ?? 0) +
-      this.debugConfig.cameraHeight +
       this.debugConfig.cameraFramingOffset +
       this.debugConfig.cameraYOffset +
-      startupLift -
+      startupLift +
+      STACK_LOOK_AHEAD_Y -
       (collapseFrame?.cameraDrop ?? 0);
+    const targetY = focusY + this.debugConfig.cameraHeight;
     const targetZ = this.debugConfig.cameraDistance + (collapseFrame?.cameraPullback ?? 0);
 
     const safeDeltaSeconds = Math.max(0, Math.min(0.1, deltaSeconds));
@@ -1698,10 +1750,7 @@ export class Game {
       this.camera.position.z += Math.cos(wobblePhase * 0.85) * this.integrityTelemetry.wobbleStrength * 0.4;
     }
 
-    const lookAtTargetY = Math.max(
-      1.2,
-      targetY - this.debugConfig.cameraHeight - this.debugConfig.cameraFramingOffset - this.debugConfig.cameraYOffset + STACK_LOOK_AHEAD_Y,
-    );
+    const lookAtTargetY = Math.max(1.2, focusY);
     const lookAtLerp = Math.min(1, fpsAdjustedLerp * 1.25);
     this.cameraLookAtY += (lookAtTargetY - this.cameraLookAtY) * lookAtLerp;
     this.camera.lookAt(0, this.cameraLookAtY, 0);
@@ -2239,7 +2288,9 @@ export class Game {
 
     const windowStyle = this.getWindowStyleForSlab(slab);
 
-    this.getWindowFaceDescriptors(slab).forEach((face, faceIndex) => {
+    this.getWindowFaceDescriptors(slab)
+      .filter((face) => !this.isFaceHiddenFromCamera(slab, face.rotationY))
+      .forEach((face, faceIndex) => {
       if (!this.shouldRenderWindowsForFace(face.span, windowStyle, windowWidth, frameThickness)) {
         return;
       }
@@ -2249,7 +2300,7 @@ export class Game {
         return;
       }
 
-      const offsets = this.getWindowHorizontalOffsets(face.span, windowCount);
+      const offsets = this.getWindowHorizontalOffsets(face.span, windowCount, windowStyle, windowWidth, frameThickness);
 
       offsets.forEach((localOffset) => {
         const windowGroup = new Group();
@@ -2314,6 +2365,18 @@ export class Game {
     ];
   }
 
+  private getHiddenFaceDescriptors(slab: SlabData): WindowFaceDescriptor[] {
+    return this.getWindowFaceDescriptors(slab).filter((face) => this.isFaceHiddenFromCamera(slab, face.rotationY));
+  }
+
+  private isFaceHiddenFromCamera(slab: SlabData, rotationY: number): boolean {
+    const toCameraX = this.camera.position.x - slab.position.x;
+    const toCameraZ = this.camera.position.z - slab.position.z;
+    const normalX = Math.sin(rotationY);
+    const normalZ = Math.cos(rotationY);
+    return normalX * toCameraX + normalZ * toCameraZ <= 0;
+  }
+
   private getWindowCountForFace(
     slab: SlabData,
     face: WindowFaceDescriptor,
@@ -2362,10 +2425,14 @@ export class Game {
     frameThickness: number,
   ): number {
     const footprint = this.getWindowFootprintWidth(style, outerWidth, frameThickness);
+    const edgePadding = footprint * WINDOW_EDGE_PADDING_MULTIPLIER;
+    const minimumPairGap = footprint * WINDOW_PAIR_GAP_MULTIPLIER;
+
     for (let count = 7; count >= 1; count -= 1) {
-      const spacing = span / (count + 1);
-      const hasEdgeClearance = spacing >= footprint * 0.5;
-      const hasPairClearance = count <= 1 || spacing >= footprint;
+      const available = Math.max(0, span - edgePadding * 2);
+      const spacing = count <= 1 ? available : available / (count - 1);
+      const hasEdgeClearance = span >= edgePadding * 2 + footprint;
+      const hasPairClearance = count <= 1 || spacing >= minimumPairGap;
       if (hasEdgeClearance && hasPairClearance) {
         return count;
       }
@@ -2374,9 +2441,23 @@ export class Game {
     return 0;
   }
 
-  private getWindowHorizontalOffsets(span: number, count: number): number[] {
-    const spacing = span / (count + 1);
-    return Array.from({ length: count }, (_, index) => -span / 2 + spacing * (index + 1));
+  private getWindowHorizontalOffsets(
+    span: number,
+    count: number,
+    style: WindowStyle,
+    windowWidth: number,
+    frameThickness: number,
+  ): number[] {
+    const outerWidth = windowWidth + frameThickness * 2;
+    const footprint = this.getWindowFootprintWidth(style, outerWidth, frameThickness);
+    const edgePadding = footprint * WINDOW_EDGE_PADDING_MULTIPLIER;
+    if (count === 1) {
+      return [0];
+    }
+
+    const available = Math.max(0, span - edgePadding * 2);
+    const spacing = available / (count - 1);
+    return Array.from({ length: count }, (_, index) => -available / 2 + spacing * index);
   }
 
   private getWindowStyleForSlab(slab: SlabData): WindowStyle {
@@ -2691,7 +2772,9 @@ export class Game {
       },
     ];
 
-    faces.forEach((face) => {
+    faces
+      .filter((face) => !this.isFaceHiddenFromCamera(slab, face.rotationY))
+      .forEach((face) => {
       const material = new MeshStandardMaterial({
         color: weatheringColor,
         emissive: new Color("#080a0f"),
@@ -2709,8 +2792,8 @@ export class Game {
       const position = face.createPosition();
       weathering.position.set(position.x, position.y, position.z);
       weathering.rotation.y = face.rotationY;
-      mesh.add(weathering);
-    });
+        mesh.add(weathering);
+      });
   }
 
   private decorateSlabWithEaves(mesh: Mesh, slab: SlabData): void {
@@ -2748,7 +2831,7 @@ export class Game {
       },
     ];
 
-    const finalFaces = faces;
+    const finalFaces = faces.filter((face) => !this.isFaceHiddenFromCamera(slab, face.rotationY));
 
     const slabBaseColor = new Color(this.getSlabColor(slab.level));
     const eaveColor = slabBaseColor.clone().offsetHSL(0, -0.08, -0.06);
@@ -2768,7 +2851,7 @@ export class Game {
         depthWrite: false,
       });
 
-      const eaveWidth = Math.max(0.4, face.span * 0.96);
+      const eaveWidth = Math.max(0.4, face.span + EAVE_CORNER_OVERLAP);
       const eave = new Mesh(new PlaneGeometry(eaveWidth, eaveHeight), material);
       const position = face.createPosition();
       eave.position.set(position.x, position.y, position.z);
@@ -2777,8 +2860,8 @@ export class Game {
     });
   }
 
-  private shouldRenderEavesForSlab(level: number): boolean {
-    return this.sampleDecorNoise(level, 0.17) > 0.36;
+  private shouldRenderEavesForSlab(_level: number): boolean {
+    return true;
   }
 
   private shouldRenderWeatheringForSlab(level: number): boolean {
