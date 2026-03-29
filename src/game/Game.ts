@@ -2994,14 +2994,43 @@ export class Game {
     return new Color().setHSL(hue / 360, 0.58, 0.16).getStyle();
   }
 
+  private isSlabNearScreen(slab: SlabData, outsideBlocks = 2): boolean {
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight;
+
+    const center = new Vector3(slab.position.x, slab.position.y, slab.position.z).project(this.camera);
+    const top = new Vector3(slab.position.x, slab.position.y + slab.dimensions.height, slab.position.z).project(this.camera);
+    const projectedHeightPx = Math.max(1, Math.abs((top.y - center.y) * 0.5 * height) * 2);
+    const marginPx = Math.max(90, projectedHeightPx * outsideBlocks);
+
+    const screenX = (center.x * 0.5 + 0.5) * width;
+    const screenY = (-center.y * 0.5 + 0.5) * height;
+    const nearDepth = center.z > -1.5 && center.z < 1.5;
+
+    return (
+      nearDepth &&
+      screenX >= -marginPx &&
+      screenX <= width + marginPx &&
+      screenY >= -marginPx &&
+      screenY <= height + marginPx
+    );
+  }
+
   private spawnCollapseVoxels(additionalBurstSlabs: SlabData[] = []): void {
     this.clearGroup(this.collapseVoxelGroup, true);
     this.collapseVoxels = [];
 
     const random = this.seededRandom ?? Math.random;
-    const burstSlabs = [...additionalBurstSlabs, ...this.landedSlabs]
+    const onScreenLandedSlabs = this.landedSlabs.filter((slab) => this.isSlabNearScreen(slab, 2));
+    const burstSlabs = [...additionalBurstSlabs, ...onScreenLandedSlabs]
       .slice()
       .sort((a, b) => b.position.y - a.position.y || b.level - a.level);
+
+    if (burstSlabs.length === 0) {
+      const fallbackTop = this.landedSlabs.slice(-3).reverse();
+      burstSlabs.push(...fallbackTop);
+    }
+
     const topSlab = burstSlabs[0] ?? this.landedSlabs[this.landedSlabs.length - 1];
     const topCenter = topSlab?.position ?? { x: 0, y: 0, z: 0 };
 
