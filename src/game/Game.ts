@@ -256,6 +256,7 @@ const TENTACLE_BURST_CHANCE = 0.5;
 const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
+const CLOUD_RESPAWN_LEVEL_INTERVAL = 2;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -419,6 +420,8 @@ export class Game {
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudSpawnFromTop: boolean[] = [false, false, false];
   private cloudAnchorsInitialized = false;
+  private cloudRespawnCursor = 0;
+  private cloudLastLevelRespawn = -1;
   private tentacleBurstKeys: string[] = [];
 
   public constructor(container: HTMLDivElement) {
@@ -1021,6 +1024,8 @@ export class Game {
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.cloudAnchorsInitialized = false;
     this.cloudSpawnFromTop = [false, false, false];
+    this.cloudRespawnCursor = 0;
+    this.cloudLastLevelRespawn = -1;
     this.tentacleBurstKeys = [];
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
@@ -1549,6 +1554,8 @@ export class Game {
       this.cloudLayer.style.opacity = "0";
       this.cloudAnchorsInitialized = false;
       this.cloudSpawnFromTop = cloudNodes.map(() => false);
+      this.cloudRespawnCursor = 0;
+      this.cloudLastLevelRespawn = -1;
       return;
     }
 
@@ -1562,6 +1569,16 @@ export class Game {
       this.cloudWorldAnchors = cloudNodes.map((_, index) => this.createCloudAnchor(topSlab, index, 0, false));
       this.cloudSpawnFromTop = cloudNodes.map(() => false);
       this.cloudAnchorsInitialized = true;
+      this.cloudRespawnCursor = 0;
+      this.cloudLastLevelRespawn = topSlab.level;
+    }
+
+    if (topSlab.level - this.cloudLastLevelRespawn >= CLOUD_RESPAWN_LEVEL_INTERVAL) {
+      const respawnIndex = this.cloudRespawnCursor % cloudNodes.length;
+      this.cloudWorldAnchors[respawnIndex] = this.createCloudAnchor(topSlab, respawnIndex, this.frameCounter + topSlab.level * 13, true);
+      this.cloudSpawnFromTop[respawnIndex] = true;
+      this.cloudRespawnCursor = (this.cloudRespawnCursor + 1) % cloudNodes.length;
+      this.cloudLastLevelRespawn = topSlab.level;
     }
 
     const width = this.container.clientWidth || window.innerWidth;
@@ -1636,10 +1653,12 @@ export class Game {
     const heightNoise = sampleDecorNoise(topSlab.level * 0.29 + salt * 0.21 + index * 0.59, 63.7);
 
     const frontSign = sideNoise > 0.5 ? 1 : -1;
-    const depthDistance = 1.6 + depthNoise * 3.6;
-    const lateralDistance = (lateralNoise * 2 - 1) * (2.6 + depthNoise * 2.4);
+    const depthDistance = spawnFromTop ? 1.2 + depthNoise * 2.2 : 1.6 + depthNoise * 3.6;
+    const lateralDistance = spawnFromTop
+      ? (lateralNoise * 2 - 1) * (1.4 + depthNoise * 1.4)
+      : (lateralNoise * 2 - 1) * (2.6 + depthNoise * 2.4);
     const baseY = spawnFromTop
-      ? topSlab.position.y + this.debugConfig.cameraHeight * (1.2 + heightNoise * 0.45)
+      ? topSlab.position.y + this.debugConfig.cameraHeight * (1.4 + heightNoise * 0.55)
       : topSlab.position.y + slabHeight * (1 + heightNoise * 2.6 + index * 0.22);
 
     return new Vector3(
