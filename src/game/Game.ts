@@ -2251,9 +2251,12 @@ export class Game {
     );
 
     const darkTrim = shouldUseDarkWindowTrim(slab.level);
+    const slabHue = resolveSlabHue(slab.level) / 360;
+    const darkTrimColor = new Color().setHSL(slabHue, 0.48, 0.27);
+    const darkTrimEmissive = darkTrimColor.clone().offsetHSL(0, 0, -0.18);
     const frameMaterial = new MeshStandardMaterial({
-      color: darkTrim ? new Color("#171c24") : new Color("#f2f6ff"),
-      emissive: darkTrim ? new Color("#0a0f18") : new Color("#222e40"),
+      color: darkTrim ? darkTrimColor : new Color("#f2f6ff"),
+      emissive: darkTrim ? darkTrimEmissive : new Color("#222e40"),
       emissiveIntensity: darkTrim ? 0.2 : 0.12,
       metalness: 0.06,
       roughness: darkTrim ? 0.54 : 0.64,
@@ -2271,9 +2274,11 @@ export class Game {
       depthWrite: false,
     });
 
+    const sillDarkColor = darkTrimColor.clone().offsetHSL(0, 0, 0.04);
+    const sillDarkEmissive = sillDarkColor.clone().offsetHSL(0, 0, -0.2);
     const sillMaterial = new MeshStandardMaterial({
-      color: darkTrim ? new Color("#303846") : new Color("#e7edf9"),
-      emissive: darkTrim ? new Color("#0e131b") : new Color("#28364a"),
+      color: darkTrim ? sillDarkColor : new Color("#e7edf9"),
+      emissive: darkTrim ? sillDarkEmissive : new Color("#28364a"),
       emissiveIntensity: darkTrim ? 0.1 : 0.14,
       metalness: 0.04,
       roughness: 0.66,
