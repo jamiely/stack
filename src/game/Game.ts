@@ -1440,13 +1440,14 @@ export class Game {
     const signal = snapshot.signals.tentacle;
     this.tentacleGroup.children.forEach((tentacle, index) => {
       const phase = typeof tentacle.userData.phase === "number" ? tentacle.userData.phase : 0;
+      const baseRotationY = typeof tentacle.userData.baseRotationY === "number" ? tentacle.userData.baseRotationY : 0;
       const wiggle = (Math.sin(this.distractionState.elapsedSeconds * 6.2 + phase) + 1) / 2;
       const extension = 0.35 + signal * (0.7 + wiggle * 0.9);
       tentacle.scale.z = extension;
       tentacle.scale.x = 0.92 + signal * 0.22;
       tentacle.scale.y = 0.92 + signal * 0.18;
       tentacle.rotation.x = Math.sin(this.distractionState.elapsedSeconds * 4.7 + phase) * 0.13;
-      tentacle.rotation.y = Math.cos(this.distractionState.elapsedSeconds * 3.9 + phase + index * 0.4) * 0.08;
+      tentacle.rotation.y = baseRotationY + Math.cos(this.distractionState.elapsedSeconds * 3.9 + phase + index * 0.4) * 0.08;
     });
   }
 
@@ -1490,6 +1491,7 @@ export class Game {
       const position = face.createPosition(localOffset, outDepth);
       root.position.set(slab.position.x + position.x, slab.position.y + position.y, slab.position.z + position.z);
       root.rotation.y = face.rotationY;
+      root.userData.baseRotationY = face.rotationY;
       root.userData.phase = index * 0.83 + this.sampleDecorNoise(slab.level * 0.71 + index * 0.43, 10.22) * Math.PI * 2;
 
       const segmentCount = 3 + Math.floor(this.sampleDecorNoise(slab.level * 0.97 + index * 0.77, 16.11) * 3);
