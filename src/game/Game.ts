@@ -187,7 +187,10 @@ const COLLAPSE_VOXEL_SIZE = 0.45;
 const COLLAPSE_VOXEL_LIFETIME_SECONDS = 2.2;
 const COLLAPSE_VOXEL_MAX_COUNT = 560;
 const TENTACLE_SIDE_SWITCH_SPEED = 0.75;
+const TENTACLE_BURST_CHANCE = 0.5;
 const WINDOW_STYLES: WindowStyle[] = ["rectangular", "pointedGothic", "roundedGothic", "planter", "shuttered"];
+const WINDOW_MIN_FACE_SPAN = 0.86;
+const SHUTTER_WINDOW_MIN_FACE_SPAN = 1.02;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -1415,6 +1418,16 @@ export class Game {
     }
 
     const cycle = Math.floor(this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * TENTACLE_SIDE_SWITCH_SPEED);
+    const cycleNoise = this.sampleDecorNoise(slab.level * 0.29 + cycle * 0.91, 24.8);
+    if (cycleNoise >= TENTACLE_BURST_CHANCE) {
+      const burstKey = `${slab.level}:${cycle}:none`;
+      if (burstKey !== this.tentacleBurstKey) {
+        this.clearGroup(this.tentacleGroup, true);
+        this.tentacleBurstKey = burstKey;
+      }
+      return;
+    }
+
     const sideNoise = this.sampleDecorNoise(slab.level * 0.43 + cycle * 0.67, 18.3);
     const faceIndex = Math.min(3, Math.floor(sideNoise * 4));
     const burstKey = `${slab.level}:${cycle}:${faceIndex}`;
@@ -1446,18 +1459,29 @@ export class Game {
       return;
     }
 
-    const windowCount = this.getWindowCountForFace(slab, face, faceIndex);
-    const offsets = this.getWindowHorizontalOffsets(face.span, windowCount);
     const windowHeight = Math.max(0.5, Math.min(0.92, slab.dimensions.height * 0.36));
     const windowWidth = Math.max(0.16, windowHeight * 0.42);
     const frameDepth = Math.max(0.045, Math.min(0.08, windowWidth * 0.3));
+    const frameThickness = Math.max(0.03, Math.min(0.09, windowWidth * 0.2));
+    const windowStyle = this.getWindowStyleForSlab(slab);
+
+    if (!this.shouldRenderWindowsForFace(face.span, windowStyle, windowWidth, frameThickness)) {
+      return;
+    }
+
+    const windowCount = this.getWindowCountForFace(slab, face, faceIndex, windowStyle, windowWidth, frameThickness);
+    if (windowCount < 1) {
+      return;
+    }
+
+    const offsets = this.getWindowHorizontalOffsets(face.span, windowCount);
 
     const tentacleMaterial = new MeshStandardMaterial({
-      color: new Color("#5a7591"),
-      emissive: new Color("#152434"),
-      emissiveIntensity: 0.2,
+      color: new Color("#b436ff"),
+      emissive: new Color("#4e06a1"),
+      emissiveIntensity: 0.5,
       metalness: 0.08,
-      roughness: 0.72,
+      roughness: 0.62,
     });
 
     offsets.forEach((localOffset, index) => {
@@ -2214,7 +2238,15 @@ export class Game {
     const windowStyle = this.getWindowStyleForSlab(slab);
 
     this.getWindowFaceDescriptors(slab).forEach((face, faceIndex) => {
-      const windowCount = this.getWindowCountForFace(slab, face, faceIndex);
+      if (!this.shouldRenderWindowsForFace(face.span, windowStyle, windowWidth, frameThickness)) {
+        return;
+      }
+
+      const windowCount = this.getWindowCountForFace(slab, face, faceIndex, windowStyle, windowWidth, frameThickness);
+      if (windowCount < 1) {
+        return;
+      }
+
       const offsets = this.getWindowHorizontalOffsets(face.span, windowCount);
 
       offsets.forEach((localOffset) => {
@@ -2256,13 +2288,13 @@ export class Game {
       {
         span: slab.dimensions.depth,
         createPosition: (offset, outDepth) => ({ x: slab.dimensions.width / 2 + outDepth, y: 0, z: offset }),
-        rotationY: -Math.PI / 2,
+        rotationY: Math.PI / 2,
         noiseSalt: 1.7,
       },
       {
         span: slab.dimensions.depth,
         createPosition: (offset, outDepth) => ({ x: -(slab.dimensions.width / 2 + outDepth), y: 0, z: offset }),
-        rotationY: Math.PI / 2,
+        rotationY: -Math.PI / 2,
         noiseSalt: 2.9,
       },
       {
@@ -2280,10 +2312,46 @@ export class Game {
     ];
   }
 
-  private getWindowCountForFace(slab: SlabData, face: WindowFaceDescriptor, faceIndex: number): number {
-    const maxCountBySpan = Math.max(1, Math.min(7, Math.floor(face.span / 0.8)));
+  private getWindowCountForFace(
+    slab: SlabData,
+    face: WindowFaceDescriptor,
+    faceIndex: number,
+    style: WindowStyle,
+    windowWidth: number,
+    frameThickness: number,
+  ): number {
+    const outerWidth = windowWidth + frameThickness * 2;
+    const windowFootprintWidth = this.getWindowFootprintWidth(style, outerWidth, frameThickness);
+    const maxCountBySpan = Math.max(0, Math.min(7, Math.floor(face.span / 0.8)));
+    const maxCountByFootprint = Math.max(0, Math.min(7, Math.floor(face.span / windowFootprintWidth) - 1));
+    const maxCount = Math.min(maxCountBySpan, maxCountByFootprint);
+    if (maxCount < 1) {
+      return 0;
+    }
+
     const countNoise = this.sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + faceIndex * 0.73);
-    return Math.max(1, Math.min(maxCountBySpan, 1 + Math.floor(countNoise * maxCountBySpan)));
+    return Math.max(1, Math.min(maxCount, 1 + Math.floor(countNoise * maxCount)));
+  }
+
+  private shouldRenderWindowsForFace(
+    span: number,
+    style: WindowStyle,
+    windowWidth: number,
+    frameThickness: number,
+  ): boolean {
+    const outerWidth = windowWidth + frameThickness * 2;
+    const minimumSpan = style === "shuttered" ? SHUTTER_WINDOW_MIN_FACE_SPAN : WINDOW_MIN_FACE_SPAN;
+    const minimumFootprint = this.getWindowFootprintWidth(style, outerWidth, frameThickness) * 2;
+    return span >= Math.max(minimumSpan, minimumFootprint);
+  }
+
+  private getWindowFootprintWidth(style: WindowStyle, outerWidth: number, frameThickness: number): number {
+    if (style !== "shuttered") {
+      return outerWidth;
+    }
+
+    const shutterWidth = Math.max(frameThickness * 1.8, outerWidth * 0.22);
+    return outerWidth + shutterWidth * 2;
   }
 
   private getWindowHorizontalOffsets(span: number, count: number): number[] {
