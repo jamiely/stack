@@ -74,6 +74,13 @@ interface CollapseVoxel {
   remainingLifetime: number;
 }
 
+interface LedgeAnimation {
+  mesh: Mesh;
+  elapsedSeconds: number;
+  durationSeconds: number;
+  targetScaleX: number;
+}
+
 type WindowStyle = "rectangular" | "pointedGothic" | "roundedGothic" | "planter" | "shuttered";
 
 interface WindowFaceDescriptor {
@@ -197,6 +204,9 @@ const SHUTTER_WINDOW_MIN_FACE_SPAN = 1.02;
 const WINDOW_EDGE_PADDING_MULTIPLIER = 0.62;
 const WINDOW_PAIR_GAP_MULTIPLIER = 1.18;
 const EAVE_CORNER_OVERLAP = 0.12;
+const LEDGE_MIN_WIDTH_RATIO = 0.25;
+const LEDGE_MAX_WIDTH_RATIO = 1;
+const LEDGE_ANIMATION_DURATION_SECONDS = 0.3;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -290,6 +300,7 @@ export class Game {
   private debrisPieces: DebrisPiece[] = [];
   private debrisPool: Mesh[] = [];
   private collapseVoxels: CollapseVoxel[] = [];
+  private ledgeAnimations: LedgeAnimation[] = [];
   private oscillation: OscillationState | null = null;
   private lastFrameTime = 0;
   private gameState: GameState = "idle";
@@ -788,6 +799,7 @@ export class Game {
     this.updateActiveSlab(deltaSeconds);
     this.updateDebris(deltaSeconds);
     this.updateCollapseVoxels(deltaSeconds);
+    this.updateLedgeAnimations(deltaSeconds);
     this.updateImpactPulse(deltaSeconds);
     this.updateCollapseSequence(deltaSeconds);
     this.updateCamera(deltaSeconds);
@@ -904,6 +916,7 @@ export class Game {
     this.debrisPieces = [];
     this.debrisPool = [];
     this.collapseVoxels = [];
+    this.ledgeAnimations = [];
     this.activeMesh = null;
     this.activeSlab = null;
     this.oscillation = null;
@@ -1656,6 +1669,25 @@ export class Game {
     });
   }
 
+  private updateLedgeAnimations(deltaSeconds: number): void {
+    if (this.ledgeAnimations.length === 0) {
+      return;
+    }
+
+    this.ledgeAnimations = this.ledgeAnimations.filter((animation) => {
+      if (!animation.mesh.parent) {
+        return false;
+      }
+
+      animation.elapsedSeconds = Math.min(animation.durationSeconds, animation.elapsedSeconds + deltaSeconds);
+      const progress = animation.durationSeconds <= 0 ? 1 : animation.elapsedSeconds / animation.durationSeconds;
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const scaleX = Math.max(0.01, animation.targetScaleX * eased);
+      animation.mesh.scale.x = scaleX;
+      return progress < 1;
+    });
+  }
+
   private triggerImpactPulse(durationSeconds: number): void {
     this.impactPulseRemaining = Math.max(this.impactPulseRemaining, durationSeconds);
     this.shell.style.setProperty("--impact-alpha", "0.5");
@@ -2171,6 +2203,7 @@ export class Game {
     if (!isTop) {
       this.decorateSlabWithWeathering(mesh, slab);
       this.decorateSlabWithWindows(mesh, slab);
+      this.decorateSlabWithLedge(mesh, slab);
       this.decorateSlabWithEaves(mesh, slab);
     }
 
@@ -2794,6 +2827,80 @@ export class Game {
       weathering.rotation.y = face.rotationY;
         mesh.add(weathering);
       });
+  }
+
+  private decorateSlabWithLedge(mesh: Mesh, slab: SlabData): void {
+    if (slab.dimensions.height < 0.9) {
+      return;
+    }
+
+    const visibleFaces = this.getWindowFaceDescriptors(slab).filter((face) => !this.isFaceHiddenFromCamera(slab, face.rotationY));
+    if (visibleFaces.length === 0) {
+      return;
+    }
+
+    const faceNoise = this.sampleDecorNoise(slab.level * 0.77 + 2.13, 6.91);
+    const faceIndex = Math.min(visibleFaces.length - 1, Math.floor(faceNoise * visibleFaces.length));
+    const face = visibleFaces[faceIndex];
+    if (!face) {
+      return;
+    }
+
+    const widthNoise = this.sampleDecorNoise(slab.level * 1.19 + face.noiseSalt, 8.37);
+    const widthRatio = LEDGE_MIN_WIDTH_RATIO + widthNoise * (LEDGE_MAX_WIDTH_RATIO - LEDGE_MIN_WIDTH_RATIO);
+    const ledgeWidth = Math.max(0.24, face.span * widthRatio);
+    const ledgeHeight = Math.max(0.1, slab.dimensions.height * 0.1);
+    const ledgeDepth = Math.max(0.24, Math.min(0.52, slab.dimensions.height * 0.18));
+
+    const slabBaseColor = new Color(this.getSlabColor(slab.level));
+    const ledgeColor = slabBaseColor.clone().offsetHSL(0, -0.12, 0.14);
+    const ledgeMaterial = new MeshStandardMaterial({
+      color: ledgeColor,
+      emissive: new Color(this.getSlabEmissive(slab.level)).multiplyScalar(0.45),
+      emissiveIntensity: 0.14,
+      metalness: 0.04,
+      roughness: 0.66,
+    });
+
+    const ledge = new Mesh(new BoxGeometry(face.span, ledgeHeight, ledgeDepth), ledgeMaterial);
+    const ledgeY = -slab.dimensions.height / 2 + ledgeHeight / 2 + 0.02;
+    const outDepth = ledgeDepth / 2 - 0.01;
+    const position = face.createPosition(0, outDepth);
+    ledge.position.set(position.x, ledgeY, position.z);
+    ledge.rotation.y = face.rotationY;
+
+    const lipHeight = ledgeHeight * 0.34;
+    const lipDepth = Math.max(0.06, ledgeDepth * 0.22);
+    const lip = new Mesh(
+      new BoxGeometry(face.span, lipHeight, lipDepth),
+      new MeshStandardMaterial({
+        color: ledgeColor.clone().offsetHSL(0, -0.08, 0.06),
+        emissive: new Color("#25384f"),
+        emissiveIntensity: 0.08,
+        metalness: 0.03,
+        roughness: 0.7,
+      }),
+    );
+    lip.position.set(0, ledgeHeight / 2 - lipHeight / 2, ledgeDepth / 2 - lipDepth / 2);
+    ledge.add(lip);
+
+    ledge.userData.isLedge = true;
+    ledge.userData.usableWidth = ledgeWidth;
+
+    const shouldAnimate = slab.level >= this.startingStackLevels;
+    if (shouldAnimate) {
+      ledge.scale.x = 0.01;
+      this.ledgeAnimations.push({
+        mesh: ledge,
+        elapsedSeconds: 0,
+        durationSeconds: LEDGE_ANIMATION_DURATION_SECONDS,
+        targetScaleX: widthRatio,
+      });
+    } else {
+      ledge.scale.x = widthRatio;
+    }
+
+    mesh.add(ledge);
   }
 
   private decorateSlabWithEaves(mesh: Mesh, slab: SlabData): void {
