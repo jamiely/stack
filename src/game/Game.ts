@@ -79,6 +79,7 @@ import {
 } from "./logic/runtime";
 import { resolveFacadeStyle } from "./logic/facade";
 import { sampleGorillaClimbPosition } from "./logic/gorilla";
+import { resolveCloudSpawnNdcX, shouldRespawnCloud } from "./logic/clouds";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
@@ -1603,10 +1604,7 @@ export class Game {
       );
       const projected = worldPoint.project(this.camera);
 
-      const offBottom = projected.y > 1.25;
-      const tooFarSide = Math.abs(projected.x) > 2.35;
-      const behindCamera = projected.z > 1.1;
-      if (offBottom || tooFarSide || behindCamera || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
+      if (shouldRespawnCloud(projected)) {
         const respawnSalt = this.frameCounter + index * 37;
         const respawnAnchor = this.createCloudAnchor(topSlab, index, respawnSalt, true);
         this.cloudWorldAnchors[index] = respawnAnchor;
@@ -1664,28 +1662,42 @@ export class Game {
     } else {
       toCamera.normalize();
     }
-    const lateral = new Vector3(-toCamera.z, 0, toCamera.x);
 
     const sideNoise = sampleDecorNoise(topSlab.level * 0.41 + salt * 0.23 + index * 1.31, 9.4);
     const depthNoise = sampleDecorNoise(topSlab.level * 0.37 + salt * 0.19 + index * 1.91, 23.5);
-    const lateralNoise = sampleDecorNoise(topSlab.level * 0.53 + salt * 0.17 + index * 0.83, 41.2);
+    const xNoise = sampleDecorNoise(topSlab.level * 0.53 + salt * 0.17 + index * 0.83, 41.2);
     const heightNoise = sampleDecorNoise(topSlab.level * 0.29 + salt * 0.21 + index * 0.59, 63.7);
 
     const alternatingSign = (index + Math.floor(Math.abs(salt) * 0.5)) % 2 === 0 ? 1 : -1;
     const frontSign = sideNoise > 0.65 ? 1 : sideNoise < 0.35 ? -1 : alternatingSign;
     const depthDistance = spawnFromTop ? 1.6 + depthNoise * 3.2 : 2.2 + depthNoise * 5.4;
-    const lateralDistance = spawnFromTop
-      ? (lateralNoise * 2 - 1) * (4.2 + depthNoise * 4.6)
-      : (lateralNoise * 2 - 1) * (5.8 + depthNoise * 7.2);
     const baseY = spawnFromTop
       ? topSlab.position.y + this.debugConfig.cameraHeight * (1.45 + heightNoise * 0.55)
       : topSlab.position.y + slabHeight * (1 + heightNoise * 2.8 + index * 0.25);
 
+    const targetNdcX = resolveCloudSpawnNdcX(xNoise);
+    const targetNdcY = spawnFromTop ? 1.03 : 0.28 - heightNoise * 0.75;
+    const screenAnchored = this.sampleWorldPointForScreenTarget(targetNdcX, targetNdcY, baseY, topCenter);
+
     return new Vector3(
-      topCenter.x + toCamera.x * depthDistance * frontSign + lateral.x * lateralDistance,
+      screenAnchored.x + toCamera.x * depthDistance * frontSign,
       baseY,
-      topCenter.z + toCamera.z * depthDistance * frontSign + lateral.z * lateralDistance,
+      screenAnchored.z + toCamera.z * depthDistance * frontSign,
     );
+  }
+
+  private sampleWorldPointForScreenTarget(ndcX: number, ndcY: number, targetY: number, fallbackCenter: Vector3): Vector3 {
+    const origin = this.camera.position.clone();
+    const projected = new Vector3(ndcX, ndcY, 0.5).unproject(this.camera);
+    const direction = projected.sub(origin);
+    const safeY = Math.abs(direction.y) > 0.0001 ? direction.y : direction.y >= 0 ? 0.0001 : -0.0001;
+    const t = (targetY - origin.y) / safeY;
+
+    if (!Number.isFinite(t) || t <= 0) {
+      return new Vector3(fallbackCenter.x, targetY, fallbackCenter.z);
+    }
+
+    return origin.add(direction.multiplyScalar(t));
   }
 
   private updateTentacleBursts(snapshot: DistractionSnapshot): void {
