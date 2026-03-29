@@ -21,6 +21,7 @@ import {
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
+import { isFaceHiddenFromCamera, resolveSlabHue, resolveWindowMetrics, sampleDecorNoise, shouldRenderWeathering } from "./logic/decor";
 import { advanceOscillation } from "./logic/oscillation";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
 import { advanceCollapseSequence, createCollapseSequence, sampleCollapseFrame } from "./logic/collapse";
@@ -1450,9 +1451,9 @@ export class Game {
     const hiddenFaces = this.getHiddenFaceDescriptors(slab);
     if (hiddenFaces.length > 0) {
       const cycle = Math.floor(this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * TENTACLE_SIDE_SWITCH_SPEED);
-      const cycleNoise = this.sampleDecorNoise(slab.level * 0.29 + cycle * 0.91, 24.8);
+      const cycleNoise = sampleDecorNoise(slab.level * 0.29 + cycle * 0.91, 24.8);
       if (cycleNoise < TENTACLE_BURST_CHANCE) {
-        const sideNoise = this.sampleDecorNoise(slab.level * 0.43 + cycle * 0.67, 18.3);
+        const sideNoise = sampleDecorNoise(slab.level * 0.43 + cycle * 0.67, 18.3);
         const hiddenFaceIndex = Math.min(hiddenFaces.length - 1, Math.floor(sideNoise * hiddenFaces.length));
         const face = hiddenFaces[hiddenFaceIndex];
         const burstKey = `${slab.level}:${face?.noiseSalt ?? -1}`;
@@ -1504,10 +1505,7 @@ export class Game {
   }
 
   private createTentacleBurstForFace(slab: SlabData, face: WindowFaceDescriptor): boolean {
-    const windowHeight = Math.max(0.5, Math.min(0.92, slab.dimensions.height * 0.36));
-    const windowWidth = Math.max(0.16, windowHeight * 0.42);
-    const frameDepth = Math.max(0.045, Math.min(0.08, windowWidth * 0.3));
-    const frameThickness = Math.max(0.03, Math.min(0.09, windowWidth * 0.2));
+    const { windowHeight, windowWidth, frameDepth, frameThickness } = resolveWindowMetrics(slab.dimensions.height);
     const windowStyle = this.getWindowStyleForSlab(slab);
 
     if (!shouldRenderWindowsForFace(face.span, windowStyle, windowWidth, frameThickness)) {
@@ -1515,7 +1513,7 @@ export class Game {
     }
 
     const faceIndex = this.getWindowFaceDescriptors(slab).findIndex((candidate) => candidate.noiseSalt === face.noiseSalt);
-    const countNoise = this.sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + Math.max(0, faceIndex) * 0.73);
+    const countNoise = sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + Math.max(0, faceIndex) * 0.73);
     const windowCount = resolveWindowCountForFace(face.span, windowStyle, windowWidth, frameThickness, countNoise);
     if (windowCount < 1) {
       return false;
@@ -1541,9 +1539,9 @@ export class Game {
       root.position.set(slab.position.x + position.x, slab.position.y + position.y, slab.position.z + position.z);
       root.rotation.y = face.rotationY;
       root.userData.baseRotationY = face.rotationY;
-      root.userData.phase = index * 0.83 + this.sampleDecorNoise(slab.level * 0.71 + index * 0.43, 10.22) * Math.PI * 2;
+      root.userData.phase = index * 0.83 + sampleDecorNoise(slab.level * 0.71 + index * 0.43, 10.22) * Math.PI * 2;
 
-      const segmentCount = 3 + Math.floor(this.sampleDecorNoise(slab.level * 0.97 + index * 0.77, 16.11) * 3);
+      const segmentCount = 3 + Math.floor(sampleDecorNoise(slab.level * 0.97 + index * 0.77, 16.11) * 3);
       let cursor = 0;
       for (let segment = 0; segment < segmentCount; segment += 1) {
         const segmentLength = Math.max(0.12, windowHeight * (0.18 - segment * 0.016));
@@ -2281,12 +2279,9 @@ export class Game {
       return;
     }
 
-    const windowHeight = Math.max(0.5, Math.min(0.92, slab.dimensions.height * 0.36));
-    const windowWidth = Math.max(0.16, windowHeight * 0.42);
-    const frameDepth = Math.max(0.045, Math.min(0.08, windowWidth * 0.3));
-    const frameThickness = Math.max(0.03, Math.min(0.09, windowWidth * 0.2));
-    const sillHeight = Math.max(0.03, frameThickness * 0.6);
-    const sillDepth = frameDepth * 1.9;
+    const { windowHeight, windowWidth, frameDepth, frameThickness, sillHeight, sillDepth } = resolveWindowMetrics(
+      slab.dimensions.height,
+    );
 
     const frameMaterial = new MeshStandardMaterial({
       color: new Color("#f2f6ff"),
@@ -2325,7 +2320,7 @@ export class Game {
         return;
       }
 
-      const countNoise = this.sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + faceIndex * 0.73);
+      const countNoise = sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + faceIndex * 0.73);
       const windowCount = resolveWindowCountForFace(face.span, windowStyle, windowWidth, frameThickness, countNoise);
       if (windowCount < 1) {
         return;
@@ -2401,15 +2396,15 @@ export class Game {
   }
 
   private isFaceHiddenFromCamera(slab: SlabData, rotationY: number): boolean {
-    const toCameraX = this.camera.position.x - slab.position.x;
-    const toCameraZ = this.camera.position.z - slab.position.z;
-    const normalX = Math.sin(rotationY);
-    const normalZ = Math.cos(rotationY);
-    return normalX * toCameraX + normalZ * toCameraZ <= 0;
+    return isFaceHiddenFromCamera(
+      { x: slab.position.x, z: slab.position.z },
+      { x: this.camera.position.x, z: this.camera.position.z },
+      rotationY,
+    );
   }
 
   private getWindowStyleForSlab(slab: SlabData): WindowStyle {
-    const styleNoise = this.sampleDecorNoise(slab.level * 1.27 + 8.17, 3.09);
+    const styleNoise = sampleDecorNoise(slab.level * 1.27 + 8.17, 3.09);
     return resolveWindowStyle(styleNoise);
   }
 
@@ -2753,7 +2748,7 @@ export class Game {
       return;
     }
 
-    const faceNoise = this.sampleDecorNoise(slab.level * 0.77 + 2.13, 6.91);
+    const faceNoise = sampleDecorNoise(slab.level * 0.77 + 2.13, 6.91);
     const faceIndex = resolveLedgeFaceIndex(visibleFaces.length, faceNoise);
     if (faceIndex === null) {
       return;
@@ -2764,7 +2759,7 @@ export class Game {
       return;
     }
 
-    const widthNoise = this.sampleDecorNoise(slab.level * 1.19 + face.noiseSalt, 8.37);
+    const widthNoise = sampleDecorNoise(slab.level * 1.19 + face.noiseSalt, 8.37);
     const { widthRatio, ledgeWidth, ledgeHeight, ledgeDepth, lipHeight, lipDepth } = resolveLedgeDimensions(
       face.span,
       slab.dimensions.height,
@@ -2889,21 +2884,16 @@ export class Game {
   }
 
   private shouldRenderWeatheringForSlab(level: number): boolean {
-    return this.sampleDecorNoise(level, 4.61) > 0.16;
-  }
-
-  private sampleDecorNoise(level: number, salt: number): number {
-    const value = Math.sin(level * 12.9898 + salt * 78.233) * 43758.5453123;
-    return value - Math.floor(value);
+    return shouldRenderWeathering(sampleDecorNoise(level, 4.61));
   }
 
   private getSlabColor(level: number): string {
-    const hue = (42 + level * 31) % 360;
+    const hue = resolveSlabHue(level);
     return new Color().setHSL(hue / 360, 0.72, 0.67).getStyle();
   }
 
   private getSlabEmissive(level: number): string {
-    const hue = (42 + level * 31) % 360;
+    const hue = resolveSlabHue(level);
     return new Color().setHSL(hue / 360, 0.58, 0.16).getStyle();
   }
 
