@@ -21,8 +21,8 @@ export function resolveCloudSpawnNdcX(noise: number): number {
 
 export function resolveCloudVerticalVelocity(noise: number, spawnFromTop: boolean): number {
   const clampedNoise = clamp(noise, 0, 1);
-  const baseDrift = spawnFromTop ? -0.22 : -0.08;
-  const variance = spawnFromTop ? 0.16 : 0.08;
+  const baseDrift = spawnFromTop ? -3.2 : -0.2;
+  const variance = spawnFromTop ? 1.6 : 0.25;
   return baseDrift - clampedNoise * variance;
 }
 

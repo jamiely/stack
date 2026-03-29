@@ -1683,17 +1683,17 @@ export class Game {
     const alternatingSign = (index + Math.floor(Math.abs(salt) * 0.5)) % 2 === 0 ? 1 : -1;
     const frontSign = sideNoise > 0.65 ? 1 : sideNoise < 0.35 ? -1 : alternatingSign;
     const depthDistance = spawnFromTop ? 1.6 + depthNoise * 3.2 : 2.2 + depthNoise * 5.4;
-    const baseY = spawnFromTop
-      ? topSlab.position.y + this.debugConfig.cameraHeight * (1.45 + heightNoise * 0.55)
-      : topSlab.position.y + slabHeight * (1 + heightNoise * 2.8 + index * 0.25);
+    const travelY = topSlab.position.y + slabHeight * (1 + heightNoise * 2.8 + index * 0.25);
+    const spawnY = this.camera.position.y + this.debugConfig.cameraHeight * (1.25 + heightNoise * 0.35);
+    const anchorY = spawnFromTop ? spawnY : travelY;
 
     const targetNdcX = resolveCloudSpawnNdcX(xNoise);
-    const targetNdcY = spawnFromTop ? 1.03 : 0.28 - heightNoise * 0.75;
-    const screenAnchored = this.sampleWorldPointForScreenTarget(targetNdcX, targetNdcY, baseY, topCenter);
+    const targetNdcY = spawnFromTop ? 0.08 : 0.28 - heightNoise * 0.75;
+    const screenAnchored = this.sampleWorldPointForScreenTarget(targetNdcX, targetNdcY, travelY, topCenter);
 
     return new Vector3(
       screenAnchored.x + toCamera.x * depthDistance * frontSign,
-      baseY,
+      anchorY,
       screenAnchored.z + toCamera.z * depthDistance * frontSign,
     );
   }
