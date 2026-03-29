@@ -2122,36 +2122,30 @@ export class Game {
       span: number;
       createPosition: () => { x: number; y: number; z: number };
       rotationY: number;
-      faceIndex: number;
     }> = [
       {
         span: slab.dimensions.depth,
         createPosition: () => ({ x: slab.dimensions.width / 2 + 0.028, y: elevationY, z: 0 }),
         rotationY: -Math.PI / 2,
-        faceIndex: 0,
       },
       {
         span: slab.dimensions.depth,
         createPosition: () => ({ x: -(slab.dimensions.width / 2 + 0.028), y: elevationY, z: 0 }),
         rotationY: Math.PI / 2,
-        faceIndex: 1,
       },
       {
         span: slab.dimensions.width,
         createPosition: () => ({ x: 0, y: elevationY, z: slab.dimensions.depth / 2 + 0.028 }),
         rotationY: 0,
-        faceIndex: 2,
       },
       {
         span: slab.dimensions.width,
         createPosition: () => ({ x: 0, y: elevationY, z: -(slab.dimensions.depth / 2 + 0.028) }),
         rotationY: Math.PI,
-        faceIndex: 3,
       },
     ];
 
-    const chosenFaces = faces.filter((face) => this.sampleDecorNoise(slab.level, face.faceIndex + 0.91) > 0.42);
-    const finalFaces = chosenFaces.length > 0 ? chosenFaces : [faces[Math.floor(this.sampleDecorNoise(slab.level, 8.14) * faces.length)]!];
+    const finalFaces = faces;
 
     const slabBaseColor = new Color(this.getSlabColor(slab.level));
     const eaveColor = slabBaseColor.clone().offsetHSL(0, -0.08, -0.06);
@@ -2171,7 +2165,7 @@ export class Game {
         depthWrite: false,
       });
 
-      const eave = new Mesh(new PlaneGeometry(Math.max(0.5, face.span * 0.98), eaveHeight), material);
+      const eave = new Mesh(new PlaneGeometry(Math.max(0.5, face.span + 0.08), eaveHeight), material);
       const position = face.createPosition();
       eave.position.set(position.x, position.y, position.z);
       eave.rotation.y = face.rotationY;
