@@ -834,7 +834,7 @@ test("integrity telemetry reports deterministic stable/precarious/unstable trans
   await expect.poll(async () => (await getTestState(page))?.integrity.wobbleStrength).toBeCloseTo(0.4, 5);
 });
 
-test("unstable integrity triggers collapse fail sequence without requiring a hard miss", async ({ page }) => {
+test("unstable integrity no longer ends the run without a hard miss", async ({ page }) => {
   await page.goto("/?debug&test");
 
   await page.evaluate(() => {
@@ -881,7 +881,7 @@ test("unstable integrity triggers collapse fail sequence without requiring a har
     }
 
     const outcomes = [api.placeAtOffset(3.0), api.placeAtOffset(3.8)];
-    api.stepSimulation(180);
+    api.stepSimulation(30);
     return {
       outcomes,
       state: api.getState(),
@@ -892,10 +892,8 @@ test("unstable integrity triggers collapse fail sequence without requiring a har
   expect(scripted?.outcomes.filter((outcome) => outcome === "miss")).toHaveLength(0);
 
   await expect.poll(async () => (await getTestState(page))?.integrity.tier).toBe("unstable");
-  await expect.poll(async () => (await getTestState(page))?.gameState).toBe("game_over");
-  await expect.poll(async () => (await getTestState(page))?.collapse.trigger).toBe("instability");
-  await expect.poll(async () => (await getTestState(page))?.collapse.completed).toBe(true);
-  await expect.poll(async () => (await getTestState(page))?.feedback.lastEvent).toBe("collapse_failure");
+  await expect.poll(async () => (await getTestState(page))?.gameState).toBe("playing");
+  await expect.poll(async () => (await getTestState(page))?.collapse.trigger).toBeNull();
 });
 
 test("audio/haptics toggles gate runtime feedback emission", async ({ page }) => {

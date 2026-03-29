@@ -13,9 +13,9 @@ The repo now includes a playable early milestone:
 - Combo streak tracking (default target: 8 perfect hits) with live HUD progress
 - Recovery rewards at combo milestones: capped slab-growth recovery plus temporary movement slowdown windows
 - Lightweight audio + haptics feedback manager (perfect/trim/miss cues) with safe browser capability gating
-- V3 distraction framework with deterministic seeded state, level-gated channel activation, runtime toggle/threshold tuning hooks, on-demand debug launch triggers, and V3.2 actor visuals (gorilla perimeter climbing with rhythmic slam pulses, UFO full-circuit tower orbit with off-screen fly-off exits toward the player + contrast wash, minimum UFO altitude above slab height, persistent world-projected cloud cover with stack occlusion, tremor pulse)
+- V3 distraction framework with deterministic seeded state, level-gated channel activation, runtime toggle/threshold tuning hooks, on-demand debug launch triggers, and V3.2 actor visuals (gorilla perimeter climbing with rhythmic slam pulses, UFO full-circuit tower orbit with off-screen fly-off exits toward the player + contrast wash, UFO orbit locked to one slab-height above the top floor, persistent world-projected cloud cover with stack occlusion that keeps at least one cloud onscreen while enabled, tremor pulse)
 - V4.1 structural integrity telemetry with deterministic center-of-mass approximation, `stable/precarious/unstable` tiering, and precarious camera wobble feedback
-- V4.2 collapse fail sequence: hard misses or unstable integrity now trigger a deterministic tower-topple presentation with failure camera pullback, voxelized tower explosion burst, and collapse feedback cues
+- V4.2 collapse fail sequence: hard misses trigger a deterministic tower-topple presentation with failure camera pullback, voxelized tower explosion burst, and collapse feedback cues
 - V5.1 performance/scalability pass: distant slab archival into static chunk proxies, distraction LOD throttling, strict debris pooling/caps, and runtime perf diagnostics
 - Upward camera follow with frame-rate-independent smoothing + eased look-target tracking + tunable framing offset/direct Y offset, score/player-built-height HUD (excluding prebuilt starter slabs), impact flash + configurable placement shake feedback, slab-window facade dressing on placed slabs, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
@@ -47,8 +47,7 @@ The dev server runs on `http://127.0.0.1:4173`.
 
 - Runs start automatically on load; the `Tower stacker` title briefly appears, then eases out to the left
 - `Space`/`Enter` on key release, mouse click, or tap while playing: stop the moving slab
-- During `game_over`, gameplay input (`Space`/`Enter` release, click, or touch in the play area) immediately restarts the run
-- `Restart Run`: restart after a miss
+- During `game_over`, gameplay input (`Space`/`Enter` release, click, or touch in the play area) immediately restarts the run (no restart button)
 - Visit `/?debug` to expose the runtime tuning panel
 - In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
 - Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused; optional `&seed=<int>` drives deterministic seeded active-slab spawn states and is surfaced through test-state snapshots

@@ -18,19 +18,20 @@ This document tracks implemented gameplay features and notable behavior decision
   - enables temporary movement slowdown for a configurable number of floors
 - Audio + haptics feedback manager emits distinct cues for `perfect`, `landed`, and `miss` outcomes with browser-safe capability gating
 - Runs start immediately on load; a brief `Tower stacker` title card appears at boot and eases out left
-- Restart-after-failure is available from the contextual primary menu button (no separate rebuild action)
+- Restart-after-failure is handled by direct gameplay input (`Space`/`Enter` release, click, tap) from `game_over` without a dedicated restart button
 - V3 distraction framework runs as a deterministic side-channel (seeded + level-gated) without mutating trim/placement math
 - V3.2 actor layer now renders a gorilla that climbs around the tower perimeter with rhythmic slam pulses, a UFO that can complete a full tower orbit and then flies off-screen toward the player in Z instead of popping out when deactivating (with contrast-wash flashes), and persistent front-layer cloud cover (including mid-screen occluders) with distraction-driven intensity boosts
-- UFO vertical orbit now enforces a minimum altitude at least one slab-height above the current tower top
+- UFO orbit altitude now tracks exactly one slab-height above the current tower top center
 - Structural integrity telemetry computes a deterministic tower center-of-mass approximation and classifies `stable`/`precarious`/`unstable` tiers against tunable thresholds
-- Collapse fail sequence triggers on hard misses or unstable integrity, applying deterministic fallback toppling visuals, failure camera pullback, and collapse feedback cues
+- Collapse fail sequence triggers on hard misses, applying deterministic fallback toppling visuals, failure camera pullback, and collapse feedback cues
 - V5.1 performance layer archives distant slabs into static chunk proxies, applies distraction LOD throttling, and enforces strict debris pooling/active caps through runtime quality controls
 
 ## Visual and Camera Behavior
 
 - Camera follows landed tower height (instead of the just-spawned active slab) with configurable distance/lerp plus a tunable framing offset, frame-rate-independent damping, and a smoothed look target so post-placement climbs feel fluid even during frame-time spikes; startup framing applies a short-lived lift so the initial stack starts lower in the viewport and then eases toward normal framing as floors are added
 - Successful placements trigger a brief impact flash pulse plus a configurable camera shake burst (`Placement Shake` debug control)
-- Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer), contrast wash intensity, and camera tremor pulse effects; cloud rendering is now world-projected so vertical cloud position tracks world space instead of appearing pinned to screen coordinates
+- Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer), contrast wash intensity, and camera tremor pulse effects; cloud rendering is world-projected so vertical cloud position tracks world space instead of appearing pinned to screen coordinates
+- Cloud layer keeps at least one cloud visible on screen while enabled and no longer hard-disappears when cloud distraction activity drops
 - Precarious integrity tier introduces deterministic camera wobble scaled by configurable instability strength
 - Active collapse sequence applies deterministic tower tilt/drop presentation and camera pullback progression
 - Collapse now also spawns a deterministic voxelized explosion burst from tower slabs for game-over presentation
@@ -44,7 +45,7 @@ This document tracks implemented gameplay features and notable behavior decision
 
 - Keyboard: `Space` / `Enter` on **key release** to place the active slab
 - Pointer: click/tap on play area
-- While in `game_over`, direct gameplay input (`Space`/`Enter` release or touch/click in the play area) immediately starts a fresh run
+- While in `game_over`, direct gameplay input (`Space`/`Enter` release or touch/click in the play area) immediately starts a fresh run (no visible restart button)
 - Input is blocked when interacting with overlay/debug controls
 - Touch input is handled explicitly for mobile `touchstart` and desktop pointer paths
 

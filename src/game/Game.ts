@@ -21,7 +21,7 @@ import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
 import { advanceOscillation } from "./logic/oscillation";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
-import { advanceCollapseSequence, createCollapseSequence, sampleCollapseFrame, shouldTriggerCollapse } from "./logic/collapse";
+import { advanceCollapseSequence, createCollapseSequence, sampleCollapseFrame } from "./logic/collapse";
 import {
   collectArchivableLevels,
   getQualityScalars,
@@ -1013,19 +1013,9 @@ export class Game {
     this.refreshIntegrityTelemetry();
     this.score += 1;
 
-    if (shouldTriggerCollapse(result.outcome, this.integrityTelemetry.tier)) {
-      this.beginCollapseSequence("instability", this.integrityTelemetry.offset);
-      this.gameState = "game_over";
-      this.statusMessage =
-        "Structural integrity failed. Center-of-mass drift exceeded the tower support and triggered collapse.";
-      this.activeSlab = null;
-      this.activeMesh = null;
-      this.oscillation = null;
-      this.renderHud();
-      return;
-    }
-
-    if (recoveryResolution.triggered) {
+    if (this.integrityTelemetry.tier === "unstable") {
+      this.statusMessage = "Tower integrity is unstable. Keep stacking, or a hard miss will end the run.";
+    } else if (recoveryResolution.triggered) {
       const slowdownPercent = Math.round((1 - this.debugConfig.recoverySlowdownFactor) * 100);
       this.statusMessage =
         slowdownPercent > 0
@@ -1231,8 +1221,9 @@ export class Game {
         const orbitPhase = this.distractionState.elapsedSeconds * UFO_ORBIT_ANGULAR_SPEED * this.debugConfig.distractionMotionSpeed;
         const orbitRadius = Math.max(3.2, this.debugConfig.baseWidth * 1.15 + snapshot.signals.ufo * 1.8);
         const orbitCenterX = topSlab?.position.x ?? 0;
-        const minUfoY = (topSlab?.position.y ?? 0) + (topSlab?.dimensions.height ?? this.debugConfig.slabHeight) + 0.15;
-        const orbitCenterY = Math.max(minUfoY, (topSlab?.position.y ?? 0) + 2.35 + Math.sin(orbitPhase * 1.9) * 0.5);
+        const topCenterY = topSlab?.position.y ?? 0;
+        const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
+        const orbitCenterY = topCenterY + topSlabHeight;
         const orbitCenterZ = topSlab?.position.z ?? 0;
 
         const worldPoint = new Vector3(
@@ -1323,7 +1314,8 @@ export class Game {
       return;
     }
 
-    if (!snapshot.active.clouds) {
+    const cloudChannelEnabled = this.debugConfig.distractionsEnabled && this.debugConfig.distractionCloudEnabled;
+    if (!cloudChannelEnabled) {
       this.cloudLayer.style.opacity = "0";
       this.cloudAnchorsInitialized = false;
       return;
@@ -1364,12 +1356,16 @@ export class Game {
         anchor.z + Math.cos(swayPhase * 0.65 + index) * 0.38,
       );
       const projected = worldPoint.project(this.camera);
-      const screenX = (projected.x * 0.5 + 0.5) * width + Math.sin(swayPhase + index * 0.35) * CLOUD_SWAY_DISTANCE_PX * swayMultiplier;
-      const screenY = (-projected.y * 0.5 + 0.5) * height;
+      const rawScreenX = (projected.x * 0.5 + 0.5) * width + Math.sin(swayPhase + index * 0.35) * CLOUD_SWAY_DISTANCE_PX * swayMultiplier;
+      const rawScreenY = (-projected.y * 0.5 + 0.5) * height;
+      const screenX = index === 0 ? Math.min(width - 80, Math.max(80, rawScreenX)) : rawScreenX;
+      const screenY = index === 0 ? Math.min(height - 80, Math.max(80, rawScreenY)) : rawScreenY;
       cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%)`;
     });
 
-    const cloudOpacity = 0.34 + snapshot.signals.clouds * 0.46;
+    const baselineCloudOpacity = 0.28;
+    const cloudSignalOpacity = snapshot.active.clouds ? snapshot.signals.clouds * 0.46 : 0;
+    const cloudOpacity = baselineCloudOpacity + cloudSignalOpacity;
     this.cloudLayer.style.opacity = Math.min(0.92, cloudOpacity).toFixed(3);
     this.cloudLayer.style.transform = "translateX(0px)";
   }
@@ -1784,9 +1780,8 @@ export class Game {
     } else if (this.gameState === "game_over") {
       this.overlayTitle.textContent = "Tower Fell";
       this.overlayBody.textContent =
-        "Failure now triggers the collapse sequence (hard miss or unstable integrity drift). Restart the run or tune collapse/debug thresholds.";
-      this.primaryButton.textContent = "Restart Run";
-      this.primaryButton.style.display = "inline-flex";
+        "A hard miss triggers the collapse sequence. Press space/enter, click, or tap to immediately start a fresh run.";
+      this.primaryButton.style.display = "none";
       overlay?.classList.remove("overlay--hidden");
     } else {
       this.overlayTitle.textContent = "Tower Stacker";
