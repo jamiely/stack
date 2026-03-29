@@ -1917,6 +1917,11 @@ export class Game {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer?.setSize(width, height, false);
+
+    const horizontalScale = Math.max(1, this.camera.aspect) * 1.35;
+    this.starFieldSmall.scale.x = horizontalScale;
+    this.starFieldMedium.scale.x = horizontalScale;
+    this.starFieldLarge.scale.x = horizontalScale;
   }
 
   private syncArchivedRepresentation(): void {
@@ -3413,7 +3418,7 @@ export class Game {
   private createStarField(starCount: number, material: PointsMaterial, minZ: number, maxZ: number): Points {
     const positions: number[] = [];
     const colors: number[] = [];
-    const spreadX = 44;
+    const spreadX = 52;
     const spreadY = 34;
 
     for (let index = 0; index < starCount; index += 1) {
