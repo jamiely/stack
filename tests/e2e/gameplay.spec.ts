@@ -708,6 +708,10 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
     const element = node as HTMLElement;
     return element.style.transform;
   });
+  const cloudTransformBefore = await page.locator('[data-testid="actor-clouds"] .distraction-cloud').first().evaluate((node) => {
+    const element = node as HTMLElement;
+    return element.style.transform;
+  });
 
   await page.evaluate(() => {
     const api = (window as Window & {
@@ -721,8 +725,13 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
     const element = node as HTMLElement;
     return element.style.transform;
   });
+  const cloudTransformAfter = await page.locator('[data-testid="actor-clouds"] .distraction-cloud').first().evaluate((node) => {
+    const element = node as HTMLElement;
+    return element.style.transform;
+  });
 
   expect(gorillaTransformAfter).not.toBe(gorillaTransformBefore);
+  expect(cloudTransformAfter).not.toBe(cloudTransformBefore);
 
   await page.evaluate(() => {
     const api = (window as Window & {

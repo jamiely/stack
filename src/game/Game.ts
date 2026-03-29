@@ -239,7 +239,6 @@ const UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND = 6.8;
 const GORILLA_CLIMB_SPEED = 0.7;
 const GORILLA_SLAM_CYCLE_SPEED = 0.62;
 const GORILLA_SLAM_DURATION_SECONDS = 0.2;
-const CLOUD_SWAY_DISTANCE_PX = 120;
 const STACK_LOOK_AHEAD_Y = 1.05;
 const STARTUP_CAMERA_LIFT = 2.2;
 const DAY_NIGHT_COLOR_LERP_SPEED = 3.2;
@@ -419,6 +418,8 @@ export class Game {
   private readonly sidingTexture = this.createSidingTexture();
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudAnchorsInitialized = false;
+  private cloudRespawnCursor = 0;
+  private cloudLastRespawnLevel = -1;
   private tentacleBurstKeys: string[] = [];
 
   public constructor(container: HTMLDivElement) {
@@ -1020,6 +1021,8 @@ export class Game {
     this.averageFrameTimeMs = 0;
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.cloudAnchorsInitialized = false;
+    this.cloudRespawnCursor = 0;
+    this.cloudLastRespawnLevel = -1;
     this.tentacleBurstKeys = [];
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
@@ -1547,56 +1550,96 @@ export class Game {
     if (!cloudChannelEnabled) {
       this.cloudLayer.style.opacity = "0";
       this.cloudAnchorsInitialized = false;
+      this.cloudRespawnCursor = 0;
+      this.cloudLastRespawnLevel = -1;
+      return;
+    }
+
+    const topSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
+    if (!topSlab) {
+      this.cloudLayer.style.opacity = "0";
       return;
     }
 
     if (!this.cloudAnchorsInitialized) {
-      const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
-      const topY = topSlab?.position.y ?? 0;
-      const baseX = topSlab?.position.x ?? 0;
-      const baseZ = topSlab?.position.z ?? 0;
-      const offsets = [
-        { x: -3.8, y: 2.6, z: -2.2 },
-        { x: 2.1, y: 0.9, z: 1.6 },
-        { x: -1.2, y: -0.5, z: 2.9 },
-      ];
-      this.cloudWorldAnchors = offsets.map(
-        (offset) =>
-          new Vector3(
-            baseX + offset.x,
-            topY + this.debugConfig.slabHeight * (1.2 + offset.y),
-            baseZ + offset.z,
-          ),
-      );
+      this.cloudWorldAnchors = cloudNodes.map((_, index) => this.createCloudAnchor(topSlab, index, 0));
       this.cloudAnchorsInitialized = true;
+      this.cloudRespawnCursor = 0;
+      this.cloudLastRespawnLevel = topSlab.level;
+    }
+
+    if (topSlab.level !== this.cloudLastRespawnLevel) {
+      const index = this.cloudRespawnCursor % cloudNodes.length;
+      this.cloudWorldAnchors[index] = this.createCloudAnchor(topSlab, index, topSlab.level);
+      this.cloudRespawnCursor = (this.cloudRespawnCursor + 1) % cloudNodes.length;
+      this.cloudLastRespawnLevel = topSlab.level;
     }
 
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
     const swayPhase = this.distractionState.elapsedSeconds * 0.6 * this.debugConfig.distractionMotionSpeed;
     const bobPhase = this.distractionState.elapsedSeconds * 0.28;
+    const topY = topSlab.position.y;
+    const slabHeight = Math.max(0.5, this.debugConfig.slabHeight);
+    let visibleClouds = 0;
 
     cloudNodes.forEach((cloudNode, index) => {
-      const anchor = this.cloudWorldAnchors[index] ?? this.cloudWorldAnchors[0] ?? new Vector3();
-      const swayMultiplier = index === 1 ? 1 : index === 2 ? -0.7 : 0.85;
+      const anchor = this.cloudWorldAnchors[index] ?? this.createCloudAnchor(topSlab, index, this.frameCounter);
+      this.cloudWorldAnchors[index] = anchor;
+      const followY = topY + slabHeight * (1 + index * 0.35);
+
+      if (anchor.y < followY - slabHeight * 3.6) {
+        this.cloudWorldAnchors[index] = this.createCloudAnchor(topSlab, index, this.frameCounter + index * 37);
+      } else {
+        anchor.y += Math.max(0, followY - anchor.y) * 0.07;
+      }
+
+      const stableAnchor = this.cloudWorldAnchors[index] ?? anchor;
       const worldPoint = new Vector3(
-        anchor.x + Math.sin(swayPhase + index) * (0.55 + index * 0.2),
-        anchor.y + Math.cos(bobPhase + index * 0.75) * 0.22,
-        anchor.z + Math.cos(swayPhase * 0.65 + index) * 0.38,
+        stableAnchor.x + Math.sin(swayPhase + index) * (0.55 + index * 0.2),
+        stableAnchor.y + Math.cos(bobPhase + index * 0.75) * 0.22,
+        stableAnchor.z + Math.cos(swayPhase * 0.65 + index) * 0.38,
       );
       const projected = worldPoint.project(this.camera);
-      const rawScreenX = (projected.x * 0.5 + 0.5) * width + Math.sin(swayPhase + index * 0.35) * CLOUD_SWAY_DISTANCE_PX * swayMultiplier;
-      const rawScreenY = (-projected.y * 0.5 + 0.5) * height;
-      const screenX = index === 0 ? Math.min(width - 80, Math.max(80, rawScreenX)) : rawScreenX;
-      const screenY = index === 0 ? Math.min(height - 80, Math.max(80, rawScreenY)) : rawScreenY;
+      if (
+        projected.x >= -1.05 && projected.x <= 1.05 &&
+        projected.y >= -1.05 && projected.y <= 1.05 &&
+        projected.z <= 1.05
+      ) {
+        visibleClouds += 1;
+      }
+
+      const screenX = (projected.x * 0.5 + 0.5) * width;
+      const screenY = (-projected.y * 0.5 + 0.5) * height;
       cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%)`;
     });
+
+    if (visibleClouds === 0) {
+      this.cloudWorldAnchors[0] = this.createCloudAnchor(topSlab, 0, this.frameCounter + 113);
+    }
 
     const baselineCloudOpacity = 0.28;
     const cloudSignalOpacity = snapshot.active.clouds ? snapshot.signals.clouds * 0.46 : 0;
     const cloudOpacity = baselineCloudOpacity + cloudSignalOpacity;
     this.cloudLayer.style.opacity = Math.min(0.92, cloudOpacity).toFixed(3);
     this.cloudLayer.style.transform = "translateX(0px)";
+  }
+
+  private createCloudAnchor(topSlab: SlabData, index: number, salt: number): Vector3 {
+    const slabHeight = Math.max(0.5, this.debugConfig.slabHeight);
+    const baseRadius = Math.max(this.debugConfig.baseWidth, this.debugConfig.baseDepth) * 0.55 + 1.8;
+    const angleNoise = sampleDecorNoise(topSlab.level * 0.53 + salt * 0.17 + index * 1.91, 11.7);
+    const radiusNoise = sampleDecorNoise(topSlab.level * 0.39 + salt * 0.23 + index * 1.13, 27.4);
+    const heightNoise = sampleDecorNoise(topSlab.level * 0.21 + salt * 0.19 + index * 0.87, 43.6);
+    const angle = angleNoise * Math.PI * 2;
+    const radius = baseRadius + radiusNoise * 3.2;
+    const y = topSlab.position.y + slabHeight * (0.8 + heightNoise * 2.4 + index * 0.2);
+
+    return new Vector3(
+      topSlab.position.x + Math.cos(angle) * radius,
+      y,
+      topSlab.position.z + Math.sin(angle) * radius,
+    );
   }
 
   private updateTentacleBursts(snapshot: DistractionSnapshot): void {
