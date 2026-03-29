@@ -2205,20 +2205,28 @@ export class Game {
     }
 
     context.clearRect(0, 0, canvas.width, canvas.height);
+
     const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, "rgba(255, 255, 255, 0)");
-    gradient.addColorStop(0.35, "rgba(255, 255, 255, 0.18)");
-    gradient.addColorStop(1, "rgba(255, 255, 255, 0.92)");
+    gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+    gradient.addColorStop(0.42, "rgba(140, 140, 140, 0.35)");
+    gradient.addColorStop(1, "rgba(255, 255, 255, 0.96)");
     context.fillStyle = gradient;
     context.fillRect(0, 0, canvas.width, canvas.height);
 
-    context.fillStyle = "rgba(255, 255, 255, 0.22)";
-    for (let index = 0; index < 28; index += 1) {
-      const x = Math.random() * canvas.width;
-      const y = canvas.height * 0.45 + Math.random() * canvas.height * 0.5;
-      const width = 8 + Math.random() * 24;
-      const height = 1 + Math.random() * 2;
+    context.fillStyle = "rgba(255, 255, 255, 0.88)";
+    for (let index = 0; index < 22; index += 1) {
+      const x = (index * 37.17) % canvas.width;
+      const y = canvas.height * 0.5 + ((index * 19.91) % (canvas.height * 0.45));
+      const width = 10 + ((index * 7.13) % 24);
+      const height = 1.2 + ((index * 3.31) % 2.6);
       context.fillRect(x, y, width, height);
+    }
+
+    context.fillStyle = "rgba(255, 255, 255, 0.58)";
+    for (let index = 0; index < 14; index += 1) {
+      const x = (index * 23.41 + 11) % canvas.width;
+      const y = canvas.height * 0.55 + ((index * 11.73) % (canvas.height * 0.38));
+      context.fillRect(x, y, 3.2, 8 + ((index * 5.7) % 11));
     }
 
     const texture = new CanvasTexture(canvas);
@@ -2233,9 +2241,9 @@ export class Game {
       return;
     }
 
-    const weatheringHeight = Math.max(0.46, slab.dimensions.height * 0.54);
+    const weatheringHeight = Math.max(0.5, slab.dimensions.height * 0.58);
     const elevationY = -slab.dimensions.height / 2 + weatheringHeight / 2;
-    const weatheringColor = new Color(this.getSlabColor(slab.level)).offsetHSL(0, -0.12, -0.16);
+    const weatheringColor = new Color(this.getSlabColor(slab.level)).offsetHSL(0, -0.08, -0.3);
 
     const faces: Array<{
       span: number;
@@ -2267,13 +2275,13 @@ export class Game {
     faces.forEach((face) => {
       const material = new MeshStandardMaterial({
         color: weatheringColor,
-        emissive: new Color("#0f1117"),
-        emissiveIntensity: 0.04,
+        emissive: new Color("#080a0f"),
+        emissiveIntensity: 0.02,
         metalness: 0.01,
-        roughness: 0.9,
-        map: this.weatheringTexture,
+        roughness: 0.92,
+        alphaMap: this.weatheringTexture,
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.48,
         side: DoubleSide,
         depthWrite: false,
       });
@@ -2364,7 +2372,7 @@ export class Game {
   }
 
   private shouldRenderWeatheringForSlab(level: number): boolean {
-    return this.sampleDecorNoise(level, 4.61) > 0.42;
+    return this.sampleDecorNoise(level, 4.61) > 0.16;
   }
 
   private sampleDecorNoise(level: number, salt: number): number {
