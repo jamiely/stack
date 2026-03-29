@@ -1006,7 +1006,6 @@ export class Game {
         x: missedSlab.position.x - target.position.x,
         z: missedSlab.position.z - target.position.z,
       };
-      this.spawnDebris(missedSlab, missedSlab.axis, true);
       this.activeSlab = null;
       this.activeMesh = null;
       this.oscillation = null;
@@ -2995,8 +2994,8 @@ export class Game {
     this.collapseVoxels = [];
 
     const random = this.seededRandom ?? Math.random;
-    const burstSlabs = [...this.landedSlabs, ...additionalBurstSlabs];
-    const topSlab = burstSlabs[burstSlabs.length - 1];
+    const burstSlabs = [...additionalBurstSlabs, ...this.landedSlabs];
+    const topSlab = burstSlabs[0] ?? this.landedSlabs[this.landedSlabs.length - 1];
     const topCenter = topSlab?.position ?? { x: 0, y: 0, z: 0 };
 
     for (let slabIndex = 0; slabIndex < burstSlabs.length; slabIndex += 1) {
