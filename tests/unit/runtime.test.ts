@@ -41,6 +41,7 @@ describe("distraction timer helpers", () => {
     const record = createDistractionTimerRecord(2);
     expect(record.tentacle).toBe(2);
     expect(record.clouds).toBe(2);
+    expect(record.bat).toBe(2);
     expect(record.fireworks).toBe(2);
 
     tickDistractionTimerRecord(record, ["tentacle", "ufo", "fireworks"], 0.5);
@@ -70,6 +71,7 @@ describe("distraction forcing + ufo orbit helpers", () => {
     expect(canForceDistractionChannel("gorilla", config)).toBe(true);
     expect(canForceDistractionChannel("tremor", config)).toBe(true);
     expect(canForceDistractionChannel("ufo", config)).toBe(true);
+    expect(canForceDistractionChannel("bat", config)).toBe(true);
     expect(canForceDistractionChannel("contrastWash", config)).toBe(true);
     expect(canForceDistractionChannel("clouds", config)).toBe(true);
     expect(canForceDistractionChannel("fireworks", config)).toBe(true);
@@ -79,6 +81,7 @@ describe("distraction forcing + ufo orbit helpers", () => {
     expect(canForceDistractionChannel("tentacle", { ...config, distractionTentacleEnabled: false })).toBe(false);
     expect(canForceDistractionChannel("gorilla", { ...config, distractionGorillaEnabled: false })).toBe(false);
     expect(canForceDistractionChannel("tremor", { ...config, distractionTremorEnabled: false })).toBe(false);
+    expect(canForceDistractionChannel("bat", { ...config, distractionBatEnabled: false })).toBe(false);
     expect(canForceDistractionChannel("contrastWash", { ...config, distractionContrastEnabled: false })).toBe(false);
     expect(canForceDistractionChannel("clouds", { ...config, distractionCloudEnabled: false })).toBe(false);
     expect(canForceDistractionChannel("fireworks", { ...config, distractionFireworksEnabled: false })).toBe(false);
