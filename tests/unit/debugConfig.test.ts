@@ -13,6 +13,7 @@ describe("clampDebugConfig", () => {
         cameraDistance: 2,
         cameraLerp: 0.7,
         cameraFramingOffset: 9,
+        cameraYOffset: 99,
         baseWidth: 12,
         baseDepth: 1,
         slabHeight: 8,
@@ -57,6 +58,7 @@ describe("clampDebugConfig", () => {
         prebuiltLevels: 99,
         debrisLifetime: 0.1,
         debrisTumbleSpeed: -1,
+        placementShakeAmount: 99,
         gridVisible: true,
       }),
     ).toEqual({
@@ -64,6 +66,7 @@ describe("clampDebugConfig", () => {
       cameraDistance: 7,
       cameraLerp: 0.25,
       cameraFramingOffset: 4,
+      cameraYOffset: 6,
       baseWidth: 8,
       baseDepth: 2,
       slabHeight: 5,
@@ -108,6 +111,7 @@ describe("clampDebugConfig", () => {
       prebuiltLevels: 12,
       debrisLifetime: 0.4,
       debrisTumbleSpeed: 0.2,
+      placementShakeAmount: 1.5,
       gridVisible: true,
     });
   });

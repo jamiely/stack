@@ -105,27 +105,14 @@ body {
 
 .distraction-cloud {
   position: absolute;
+  top: 0;
+  left: 0;
   width: clamp(12rem, 30vw, 26rem);
   height: 6rem;
   border-radius: 999px;
   background: radial-gradient(circle at 50% 50%, rgba(244, 249, 255, 0.96), rgba(205, 224, 245, 0.62) 70%, rgba(143, 162, 194, 0.2));
   filter: blur(1px);
-}
-
-.distraction-cloud:nth-child(1) {
-  top: 16%;
-  left: 8%;
-}
-
-.distraction-cloud:nth-child(2) {
-  top: 48%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.distraction-cloud:nth-child(3) {
-  top: 65%;
-  left: 68%;
+  will-change: transform;
 }
 
 .distraction-tremor {

@@ -34,6 +34,7 @@ export interface DebugConfig {
   cameraDistance: number;
   cameraLerp: number;
   cameraFramingOffset: number;
+  cameraYOffset: number;
   baseWidth: number;
   baseDepth: number;
   slabHeight: number;
@@ -78,6 +79,7 @@ export interface DebugConfig {
   prebuiltLevels: number;
   debrisLifetime: number;
   debrisTumbleSpeed: number;
+  placementShakeAmount: number;
   gridVisible: boolean;
 }
 

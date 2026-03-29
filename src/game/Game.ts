@@ -1,6 +1,7 @@
 import {
   AmbientLight,
   BoxGeometry,
+  CanvasTexture,
   Color,
   DirectionalLight,
   GridHelper,
@@ -8,6 +9,9 @@ import {
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
+  PlaneGeometry,
+  RepeatWrapping,
+  Object3D,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -61,6 +65,13 @@ interface DebrisPiece {
   remainingLifetime: number;
 }
 
+interface CollapseVoxel {
+  mesh: Mesh;
+  velocity: { x: number; y: number; z: number };
+  angularVelocity: { x: number; y: number; z: number };
+  remainingLifetime: number;
+}
+
 interface PerformanceSnapshot {
   qualityPreset: QualityPreset;
   requestedPreset: QualityPreset;
@@ -87,6 +98,7 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   cameraDistance: { min: 7, max: 24, step: 0.25, label: "Camera Distance" },
   cameraLerp: { min: 0.02, max: 0.25, step: 0.01, label: "Camera Lerp" },
   cameraFramingOffset: { min: -1.5, max: 4, step: 0.05, label: "Camera Framing Offset" },
+  cameraYOffset: { min: -6, max: 6, step: 0.1, label: "Camera Y" },
   baseWidth: { min: 2, max: 8, step: 0.25, label: "Block Width" },
   baseDepth: { min: 2, max: 8, step: 0.25, label: "Block Length" },
   slabHeight: { min: 1, max: 5, step: 0.1, label: "Slab Height" },
@@ -121,6 +133,7 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   prebuiltLevels: { min: 1, max: 12, step: 1, label: "Starting Stack" },
   debrisLifetime: { min: 0.4, max: 4, step: 0.05, label: "Debris Lifetime" },
   debrisTumbleSpeed: { min: 0.2, max: 3, step: 0.05, label: "Debris Tumble" },
+  placementShakeAmount: { min: 0, max: 1.5, step: 0.01, label: "Placement Shake" },
 };
 
 const CAMERA_X = 8;
@@ -158,6 +171,10 @@ const CLOUD_SWAY_DISTANCE_PX = 120;
 const STACK_LOOK_AHEAD_Y = 1.05;
 const STARTUP_CAMERA_LIFT = 2.2;
 const STARTUP_CAMERA_LIFT_FADE_FLOORS = 10;
+const PLACEMENT_SHAKE_DURATION_SECONDS = 0.16;
+const COLLAPSE_VOXEL_SIZE = 0.45;
+const COLLAPSE_VOXEL_LIFETIME_SECONDS = 2.2;
+const COLLAPSE_VOXEL_MAX_COUNT = 560;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -235,6 +252,7 @@ export class Game {
   private readonly stackGroup = new Group();
   private readonly archivedGroup = new Group();
   private readonly debrisGroup = new Group();
+  private readonly collapseVoxelGroup = new Group();
   private readonly gridHelper = new GridHelper(28, 28, 0xd8b162, 0x28425f);
 
   private debugConfig: DebugConfig = defaultDebugConfig;
@@ -248,6 +266,7 @@ export class Game {
   private activeMesh: Mesh | null = null;
   private debrisPieces: DebrisPiece[] = [];
   private debrisPool: Mesh[] = [];
+  private collapseVoxels: CollapseVoxel[] = [];
   private oscillation: OscillationState | null = null;
   private lastFrameTime = 0;
   private gameState: GameState = "idle";
@@ -280,9 +299,14 @@ export class Game {
   private simulationElapsedSeconds = 0;
   private frameCounter = 0;
   private frameTimeMs = 0;
+  private placementShakeRemaining = 0;
   private averageFrameTimeMs = 0;
   private cameraLookAtY = STACK_LOOK_AHEAD_Y;
-  private readonly cameraTargetPosition = new Vector3(CAMERA_X, defaultDebugConfig.cameraHeight, defaultDebugConfig.cameraDistance);
+  private readonly cameraTargetPosition = new Vector3(
+    CAMERA_X,
+    defaultDebugConfig.cameraHeight + defaultDebugConfig.cameraFramingOffset + defaultDebugConfig.cameraYOffset,
+    defaultDebugConfig.cameraDistance,
+  );
   private activeQualityPreset: QualityPreset = toQualityPreset(defaultDebugConfig.performanceQualityPreset);
   private archivedLevelSet = new Set<number>();
   private archivedChunkCount = 0;
@@ -295,6 +319,9 @@ export class Game {
   private statusMessage = "Line up the moving slab and keep the tower alive.";
   private introExitTimeoutId: number | null = null;
   private introHideTimeoutId: number | null = null;
+  private readonly windowTexture = this.createWindowTexture();
+  private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
+  private cloudAnchorsInitialized = false;
 
   public constructor(container: HTMLDivElement) {
     this.container = container;
@@ -377,11 +404,11 @@ export class Game {
   private buildScene(): void {
     this.camera.position.set(
       CAMERA_X,
-      this.debugConfig.cameraHeight + this.debugConfig.cameraFramingOffset,
+      this.debugConfig.cameraHeight + this.debugConfig.cameraFramingOffset + this.debugConfig.cameraYOffset,
       this.debugConfig.cameraDistance,
     );
     this.gridHelper.position.y = -12;
-    this.scene.add(this.stackGroup, this.archivedGroup, this.debrisGroup, this.gridHelper);
+    this.scene.add(this.stackGroup, this.archivedGroup, this.debrisGroup, this.collapseVoxelGroup, this.gridHelper);
 
     const ambientLight = new AmbientLight(0xffffff, 1.8);
     const directionalLight = new DirectionalLight(0xfff0c8, 2.2);
@@ -492,7 +519,7 @@ export class Game {
     const fragment = document.createDocumentFragment();
     const title = document.createElement("h2");
     title.textContent = "Runtime Debug";
-    fragment.append(title, this.createDistractionLaunchControls());
+    fragment.append(title, this.createDistractionLaunchControls(), this.createNormalizeBlockControl());
 
     (Object.entries(DEBUG_RANGES) as [DebugNumberKey, (typeof DEBUG_RANGES)[DebugNumberKey]][]).forEach(
       ([key, meta]) => {
@@ -590,6 +617,36 @@ export class Game {
 
     distractionLaunch.append(launchGrid);
     return distractionLaunch;
+  }
+
+  private createNormalizeBlockControl(): HTMLElement {
+    const section = document.createElement("section");
+    section.className = "debug-panel__actions";
+
+    const title = document.createElement("h3");
+    title.className = "debug-panel__actions-title";
+    title.textContent = "Block Dimensions";
+
+    const normalizeButton = document.createElement("button");
+    normalizeButton.type = "button";
+    normalizeButton.className = "button button--secondary debug-panel__action";
+    normalizeButton.dataset.testid = "debug-normalize-block";
+    normalizeButton.textContent = "Normalize W/L/H";
+    normalizeButton.addEventListener("click", () => {
+      const averageDimension = Number(
+        ((this.debugConfig.baseWidth + this.debugConfig.baseDepth + this.debugConfig.slabHeight) / 3).toFixed(2),
+      );
+      this.applyDebugConfig({
+        ...this.debugConfig,
+        baseWidth: averageDimension,
+        baseDepth: averageDimension,
+        slabHeight: averageDimension,
+      });
+      this.renderHud();
+    });
+
+    section.append(title, normalizeButton);
+    return section;
   }
 
   private readonly handlePrimaryAction = (): void => {
@@ -705,6 +762,7 @@ export class Game {
     this.updateDistractionActors();
     this.updateActiveSlab(deltaSeconds);
     this.updateDebris(deltaSeconds);
+    this.updateCollapseVoxels(deltaSeconds);
     this.updateImpactPulse(deltaSeconds);
     this.updateCollapseSequence(deltaSeconds);
     this.updateCamera(deltaSeconds);
@@ -787,6 +845,7 @@ export class Game {
     this.recovery = createRecoveryState();
     this.lastPlacementOutcome = null;
     this.impactPulseRemaining = 0;
+    this.placementShakeRemaining = 0;
     this.seededRandom = this.testMode.seed === null ? null : createSeededRandom(this.testMode.seed);
     this.collapseSequence = null;
     this.collapseProgress = 0;
@@ -805,16 +864,20 @@ export class Game {
     this.shell.style.setProperty("--collapse-alpha", "0");
     this.stackGroup.rotation.set(0, 0, 0);
     this.stackGroup.position.set(0, 0, 0);
+    this.stackGroup.visible = true;
     this.archivedGroup.rotation.set(0, 0, 0);
     this.archivedGroup.position.set(0, 0, 0);
+    this.archivedGroup.visible = true;
     this.clearGroup(this.stackGroup, true);
     this.clearGroup(this.archivedGroup, true);
     this.clearGroup(this.debrisGroup, true);
+    this.clearGroup(this.collapseVoxelGroup, true);
     this.slabMeshes = new Map<number, Mesh>();
     this.archivedLevelSet = new Set<number>();
     this.archivedChunkCount = 0;
     this.debrisPieces = [];
     this.debrisPool = [];
+    this.collapseVoxels = [];
     this.activeMesh = null;
     this.activeSlab = null;
     this.oscillation = null;
@@ -822,6 +885,7 @@ export class Game {
     this.frameTimeMs = 0;
     this.averageFrameTimeMs = 0;
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
+    this.cloudAnchorsInitialized = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
 
@@ -840,11 +904,12 @@ export class Game {
       (topLandedSlab?.position.y ?? 0) +
       this.debugConfig.cameraHeight +
       this.debugConfig.cameraFramingOffset +
+      this.debugConfig.cameraYOffset +
       STARTUP_CAMERA_LIFT;
     this.cameraTargetPosition.set(CAMERA_X, initialTargetY, this.debugConfig.cameraDistance);
     this.cameraLookAtY = Math.max(
       1.2,
-      initialTargetY - this.debugConfig.cameraHeight - this.debugConfig.cameraFramingOffset + STACK_LOOK_AHEAD_Y,
+      initialTargetY - this.debugConfig.cameraHeight - this.debugConfig.cameraFramingOffset - this.debugConfig.cameraYOffset + STACK_LOOK_AHEAD_Y,
     );
   }
 
@@ -939,6 +1004,7 @@ export class Game {
     const rewardedLandedSlab = recoveryResolution.landedSlab;
 
     this.triggerImpactPulse(result.outcome === "perfect" ? 0.25 : 0.18);
+    this.triggerPlacementShake();
     this.landedSlabs.push(rewardedLandedSlab);
     const landedMesh = this.createSlabMesh(rewardedLandedSlab, false);
     this.slabMeshes.set(rewardedLandedSlab.level, landedMesh);
@@ -989,6 +1055,9 @@ export class Game {
     });
     this.feedbackManager.play(getFailureFeedbackPlan(trigger));
     this.triggerImpactPulse(0.36);
+    this.spawnCollapseVoxels();
+    this.stackGroup.visible = false;
+    this.archivedGroup.visible = false;
   }
 
   private triggerDebugDistraction(channel: DistractionChannel): void {
@@ -1162,7 +1231,8 @@ export class Game {
         const orbitPhase = this.distractionState.elapsedSeconds * UFO_ORBIT_ANGULAR_SPEED * this.debugConfig.distractionMotionSpeed;
         const orbitRadius = Math.max(3.2, this.debugConfig.baseWidth * 1.15 + snapshot.signals.ufo * 1.8);
         const orbitCenterX = topSlab?.position.x ?? 0;
-        const orbitCenterY = (topSlab?.position.y ?? 0) + 2.35 + Math.sin(orbitPhase * 1.9) * 0.5;
+        const minUfoY = (topSlab?.position.y ?? 0) + (topSlab?.dimensions.height ?? this.debugConfig.slabHeight) + 0.15;
+        const orbitCenterY = Math.max(minUfoY, (topSlab?.position.y ?? 0) + 2.35 + Math.sin(orbitPhase * 1.9) * 0.5);
         const orbitCenterZ = topSlab?.position.z ?? 0;
 
         const worldPoint = new Vector3(
@@ -1234,11 +1304,7 @@ export class Game {
     }
 
     if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {
-      const cloudOpacity = 0.34 + (snapshot.active.clouds ? snapshot.signals.clouds * 0.46 : 0.12);
-      const swayPhase = this.distractionState.elapsedSeconds * 0.85 * this.debugConfig.distractionMotionSpeed;
-      const cloudOffsetX = Math.sin(swayPhase) * CLOUD_SWAY_DISTANCE_PX;
-      this.cloudLayer.style.opacity = Math.min(0.92, cloudOpacity).toFixed(3);
-      this.cloudLayer.style.transform = `translateX(${cloudOffsetX.toFixed(2)}px)`;
+      this.updateCloudLayer(snapshot);
     }
 
     const contrastOpacity = snapshot.active.contrastWash ? snapshot.signals.contrastWash * 0.35 : 0;
@@ -1249,6 +1315,63 @@ export class Game {
       this.tremorPulse.style.opacity = (tremorStrength * 0.75).toFixed(3);
       this.tremorPulse.style.transform = `scale(${(1 + tremorStrength * 0.4).toFixed(3)})`;
     }
+  }
+
+  private updateCloudLayer(snapshot: DistractionSnapshot): void {
+    const cloudNodes = Array.from(this.cloudLayer.querySelectorAll<HTMLElement>(".distraction-cloud"));
+    if (cloudNodes.length === 0) {
+      return;
+    }
+
+    if (!snapshot.active.clouds) {
+      this.cloudLayer.style.opacity = "0";
+      this.cloudAnchorsInitialized = false;
+      return;
+    }
+
+    if (!this.cloudAnchorsInitialized) {
+      const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+      const topY = topSlab?.position.y ?? 0;
+      const baseX = topSlab?.position.x ?? 0;
+      const baseZ = topSlab?.position.z ?? 0;
+      const offsets = [
+        { x: -3.8, y: 2.6, z: -2.2 },
+        { x: 2.1, y: 0.9, z: 1.6 },
+        { x: -1.2, y: -0.5, z: 2.9 },
+      ];
+      this.cloudWorldAnchors = offsets.map(
+        (offset) =>
+          new Vector3(
+            baseX + offset.x,
+            topY + this.debugConfig.slabHeight * (1.2 + offset.y),
+            baseZ + offset.z,
+          ),
+      );
+      this.cloudAnchorsInitialized = true;
+    }
+
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight;
+    const swayPhase = this.distractionState.elapsedSeconds * 0.6 * this.debugConfig.distractionMotionSpeed;
+    const bobPhase = this.distractionState.elapsedSeconds * 0.28;
+
+    cloudNodes.forEach((cloudNode, index) => {
+      const anchor = this.cloudWorldAnchors[index] ?? this.cloudWorldAnchors[0] ?? new Vector3();
+      const swayMultiplier = index === 1 ? 1 : index === 2 ? -0.7 : 0.85;
+      const worldPoint = new Vector3(
+        anchor.x + Math.sin(swayPhase + index) * (0.55 + index * 0.2),
+        anchor.y + Math.cos(bobPhase + index * 0.75) * 0.22,
+        anchor.z + Math.cos(swayPhase * 0.65 + index) * 0.38,
+      );
+      const projected = worldPoint.project(this.camera);
+      const screenX = (projected.x * 0.5 + 0.5) * width + Math.sin(swayPhase + index * 0.35) * CLOUD_SWAY_DISTANCE_PX * swayMultiplier;
+      const screenY = (-projected.y * 0.5 + 0.5) * height;
+      cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%)`;
+    });
+
+    const cloudOpacity = 0.34 + snapshot.signals.clouds * 0.46;
+    this.cloudLayer.style.opacity = Math.min(0.92, cloudOpacity).toFixed(3);
+    this.cloudLayer.style.transform = "translateX(0px)";
   }
 
   private updateActiveSlab(deltaSeconds: number): void {
@@ -1307,9 +1430,41 @@ export class Game {
     }
   }
 
+  private updateCollapseVoxels(deltaSeconds: number): void {
+    if (this.collapseVoxels.length === 0) {
+      return;
+    }
+
+    const gravity = 17;
+    this.collapseVoxels = this.collapseVoxels.filter((voxel) => {
+      voxel.remainingLifetime -= deltaSeconds;
+      voxel.velocity.y -= gravity * deltaSeconds;
+      voxel.mesh.position.x += voxel.velocity.x * deltaSeconds;
+      voxel.mesh.position.y += voxel.velocity.y * deltaSeconds;
+      voxel.mesh.position.z += voxel.velocity.z * deltaSeconds;
+      voxel.mesh.rotation.x += voxel.angularVelocity.x * deltaSeconds;
+      voxel.mesh.rotation.y += voxel.angularVelocity.y * deltaSeconds;
+      voxel.mesh.rotation.z += voxel.angularVelocity.z * deltaSeconds;
+
+      const visible = voxel.remainingLifetime > 0 && voxel.mesh.position.y > -15;
+      if (!visible) {
+        this.collapseVoxelGroup.remove(voxel.mesh);
+        voxel.mesh.geometry.dispose();
+        if (voxel.mesh.material instanceof MeshStandardMaterial) {
+          voxel.mesh.material.dispose();
+        }
+      }
+      return visible;
+    });
+  }
+
   private triggerImpactPulse(durationSeconds: number): void {
     this.impactPulseRemaining = Math.max(this.impactPulseRemaining, durationSeconds);
     this.shell.style.setProperty("--impact-alpha", "0.5");
+  }
+
+  private triggerPlacementShake(): void {
+    this.placementShakeRemaining = Math.max(this.placementShakeRemaining, PLACEMENT_SHAKE_DURATION_SECONDS);
   }
 
   private updateImpactPulse(deltaSeconds: number): void {
@@ -1351,6 +1506,7 @@ export class Game {
       (topLandedSlab?.position.y ?? 0) +
       this.debugConfig.cameraHeight +
       this.debugConfig.cameraFramingOffset +
+      this.debugConfig.cameraYOffset +
       startupLift -
       (collapseFrame?.cameraDrop ?? 0);
     const targetZ = this.debugConfig.cameraDistance + (collapseFrame?.cameraPullback ?? 0);
@@ -1379,6 +1535,16 @@ export class Game {
       this.camera.position.y -= 0.06 * slamStrength;
     }
 
+    if (this.placementShakeRemaining > 0 && this.debugConfig.placementShakeAmount > 0) {
+      this.placementShakeRemaining = Math.max(0, this.placementShakeRemaining - safeDeltaSeconds);
+      const shakeStrength =
+        (this.placementShakeRemaining / PLACEMENT_SHAKE_DURATION_SECONDS) * this.debugConfig.placementShakeAmount;
+      const shakePhase = this.simulationElapsedSeconds * 78;
+      this.camera.position.x += Math.sin(shakePhase) * 0.08 * shakeStrength;
+      this.camera.position.y += Math.cos(shakePhase * 1.1) * 0.06 * shakeStrength;
+      this.camera.position.z += Math.sin(shakePhase * 0.9) * 0.04 * shakeStrength;
+    }
+
     if (this.integrityTelemetry.tier === "precarious") {
       const wobblePhase = this.simulationElapsedSeconds * 14;
       this.camera.position.x += Math.sin(wobblePhase) * this.integrityTelemetry.wobbleStrength;
@@ -1387,7 +1553,7 @@ export class Game {
 
     const lookAtTargetY = Math.max(
       1.2,
-      targetY - this.debugConfig.cameraHeight - this.debugConfig.cameraFramingOffset + STACK_LOOK_AHEAD_Y,
+      targetY - this.debugConfig.cameraHeight - this.debugConfig.cameraFramingOffset - this.debugConfig.cameraYOffset + STACK_LOOK_AHEAD_Y,
     );
     const lookAtLerp = Math.min(1, fpsAdjustedLerp * 1.25);
     this.cameraLookAtY += (lookAtTargetY - this.cameraLookAtY) * lookAtLerp;
@@ -1500,7 +1666,11 @@ export class Game {
       frameTimeMs: this.frameTimeMs,
       averageFrameTimeMs: this.averageFrameTimeMs,
       frameBudgetMs: this.debugConfig.performanceFrameBudgetMs,
-      activeObjects: this.stackGroup.children.length + this.archivedGroup.children.length + this.debrisGroup.children.length,
+      activeObjects:
+        this.stackGroup.children.length +
+        this.archivedGroup.children.length +
+        this.debrisGroup.children.length +
+        this.collapseVoxelGroup.children.length,
       visibleSlabs: this.stackGroup.children.length,
       archivedSlabs: this.archivedLevelSet.size,
       archivedChunks: this.archivedChunkCount,
@@ -1791,7 +1961,7 @@ export class Game {
     );
   }
 
-  private createSlabMesh(slab: SlabData, _isTop: boolean): Mesh {
+  private createSlabMesh(slab: SlabData, isTop: boolean): Mesh {
     const geometry = new BoxGeometry(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
     const material = new MeshStandardMaterial({
       color: this.getSlabColor(slab.level),
@@ -1802,7 +1972,80 @@ export class Game {
 
     const mesh = new Mesh(geometry, material);
     mesh.position.set(slab.position.x, slab.position.y, slab.position.z);
+
+    if (!isTop) {
+      this.decorateSlabWithWindows(mesh, slab);
+    }
+
     return mesh;
+  }
+
+  private createWindowTexture(): CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      const fallbackTexture = new CanvasTexture(canvas);
+      fallbackTexture.needsUpdate = true;
+      return fallbackTexture;
+    }
+
+    context.fillStyle = "rgba(18, 26, 38, 0.84)";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let row = 0; row < 6; row += 1) {
+      for (let column = 0; column < 6; column += 1) {
+        const offsetX = 10 + column * 19;
+        const offsetY = 10 + row * 19;
+        const lit = (row + column) % 3 !== 0;
+        context.fillStyle = lit ? "rgba(255, 227, 152, 0.86)" : "rgba(104, 122, 154, 0.42)";
+        context.fillRect(offsetX, offsetY, 10, 12);
+      }
+    }
+
+    const texture = new CanvasTexture(canvas);
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.repeat.set(1.6, 1.6);
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private decorateSlabWithWindows(mesh: Mesh, slab: SlabData): void {
+    if (slab.level < this.startingStackLevels || slab.dimensions.height < 0.9) {
+      return;
+    }
+
+    const sideMaterial = new MeshStandardMaterial({
+      color: new Color("#f3d28e"),
+      emissive: new Color("#5a4523"),
+      metalness: 0.02,
+      roughness: 0.85,
+      map: this.windowTexture,
+      transparent: true,
+      opacity: 0.84,
+    });
+
+    const xFacade = new Mesh(new PlaneGeometry(Math.max(0.4, slab.dimensions.depth * 0.92), Math.max(0.4, slab.dimensions.height * 0.86)), sideMaterial);
+    xFacade.position.set(slab.dimensions.width / 2 + 0.01, 0, 0);
+    xFacade.rotation.y = -Math.PI / 2;
+    mesh.add(xFacade);
+
+    const xFacadeOpposite = xFacade.clone();
+    xFacadeOpposite.position.x = -(slab.dimensions.width / 2 + 0.01);
+    xFacadeOpposite.rotation.y = Math.PI / 2;
+    mesh.add(xFacadeOpposite);
+
+    const zFacade = new Mesh(new PlaneGeometry(Math.max(0.4, slab.dimensions.width * 0.92), Math.max(0.4, slab.dimensions.height * 0.86)), sideMaterial.clone());
+    zFacade.position.set(0, 0, slab.dimensions.depth / 2 + 0.01);
+    zFacade.rotation.y = Math.PI;
+    mesh.add(zFacade);
+
+    const zFacadeOpposite = zFacade.clone();
+    zFacadeOpposite.position.z = -(slab.dimensions.depth / 2 + 0.01);
+    zFacadeOpposite.rotation.y = 0;
+    mesh.add(zFacadeOpposite);
   }
 
   private getSlabColor(level: number): string {
@@ -1815,24 +2058,109 @@ export class Game {
     return new Color().setHSL(hue / 360, 0.58, 0.16).getStyle();
   }
 
+  private spawnCollapseVoxels(): void {
+    this.clearGroup(this.collapseVoxelGroup, true);
+    this.collapseVoxels = [];
+
+    const random = this.seededRandom ?? Math.random;
+    const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+    const topCenter = topSlab?.position ?? { x: 0, y: 0, z: 0 };
+
+    for (let slabIndex = 0; slabIndex < this.landedSlabs.length; slabIndex += 1) {
+      const slab = this.landedSlabs[slabIndex]!;
+      const xCount = Math.max(1, Math.min(5, Math.round(slab.dimensions.width / COLLAPSE_VOXEL_SIZE)));
+      const yCount = Math.max(1, Math.min(2, Math.round(slab.dimensions.height / COLLAPSE_VOXEL_SIZE)));
+      const zCount = Math.max(1, Math.min(5, Math.round(slab.dimensions.depth / COLLAPSE_VOXEL_SIZE)));
+      const cellWidth = slab.dimensions.width / xCount;
+      const cellHeight = slab.dimensions.height / yCount;
+      const cellDepth = slab.dimensions.depth / zCount;
+
+      for (let xIndex = 0; xIndex < xCount; xIndex += 1) {
+        for (let yIndex = 0; yIndex < yCount; yIndex += 1) {
+          for (let zIndex = 0; zIndex < zCount; zIndex += 1) {
+            if (this.collapseVoxels.length >= COLLAPSE_VOXEL_MAX_COUNT) {
+              return;
+            }
+
+            const centerX = slab.position.x - slab.dimensions.width / 2 + cellWidth * (xIndex + 0.5);
+            const centerY = slab.position.y - slab.dimensions.height / 2 + cellHeight * (yIndex + 0.5);
+            const centerZ = slab.position.z - slab.dimensions.depth / 2 + cellDepth * (zIndex + 0.5);
+            const mesh = new Mesh(
+              new BoxGeometry(Math.max(0.12, cellWidth * 0.92), Math.max(0.12, cellHeight * 0.92), Math.max(0.12, cellDepth * 0.92)),
+              new MeshStandardMaterial({
+                color: this.getSlabColor(slab.level),
+                emissive: this.getSlabEmissive(slab.level),
+                metalness: 0.08,
+                roughness: 0.86,
+              }),
+            );
+            mesh.position.set(centerX, centerY, centerZ);
+            this.collapseVoxelGroup.add(mesh);
+
+            const burstDirection = new Vector3(centerX - topCenter.x, centerY - topCenter.y, centerZ - topCenter.z);
+            if (burstDirection.lengthSq() < 1e-6) {
+              burstDirection.set((random() - 0.5) * 0.2, 1, (random() - 0.5) * 0.2);
+            }
+            burstDirection.normalize();
+            const speed = 3.8 + random() * 3.1;
+
+            this.collapseVoxels.push({
+              mesh,
+              velocity: {
+                x: burstDirection.x * speed,
+                y: Math.max(2.8, burstDirection.y * speed + 2.6),
+                z: burstDirection.z * speed,
+              },
+              angularVelocity: {
+                x: (random() - 0.5) * 7,
+                y: (random() - 0.5) * 7,
+                z: (random() - 0.5) * 7,
+              },
+              remainingLifetime: COLLAPSE_VOXEL_LIFETIME_SECONDS,
+            });
+          }
+        }
+      }
+    }
+  }
+
   private spawnDebris(slab: SlabData, axis: SlabData["axis"], fullMiss: boolean): void {
     const mesh = this.getOrCreateDebrisMesh();
-    mesh.position.set(slab.position.x, slab.position.y, slab.position.z);
+    const towerTop = this.landedSlabs[this.landedSlabs.length - 1];
+
+    const pushSign = axis === "x"
+      ? Math.sign(slab.position.x - (towerTop?.position.x ?? 0)) || Math.sign(slab.position.x || 1) || 1
+      : Math.sign(slab.position.z - (towerTop?.position.z ?? 0)) || Math.sign(slab.position.z || 1) || 1;
+
+    const pushClearance = axis === "x"
+      ? ((towerTop?.dimensions.width ?? this.debugConfig.baseWidth) + slab.dimensions.width) / 2 + 0.08
+      : ((towerTop?.dimensions.depth ?? this.debugConfig.baseDepth) + slab.dimensions.depth) / 2 + 0.08;
+
+    const startX = axis === "x" ? (towerTop?.position.x ?? slab.position.x) + pushSign * pushClearance : slab.position.x;
+    const startZ = axis === "z" ? (towerTop?.position.z ?? slab.position.z) + pushSign * pushClearance : slab.position.z;
+
+    mesh.position.set(startX, slab.position.y, startZ);
     mesh.scale.set(slab.dimensions.width, slab.dimensions.height, slab.dimensions.depth);
     mesh.visible = true;
+
+    if (mesh.material instanceof MeshStandardMaterial) {
+      mesh.material.color.set(this.getSlabColor(slab.level));
+      mesh.material.emissive.set(this.getSlabEmissive(slab.level));
+    }
+
     this.debrisGroup.add(mesh);
 
-    const lateral = fullMiss ? 4.4 : 2.7;
-    const xVelocity = axis === "x" ? Math.sign(slab.position.x || 1) * lateral : 0.4;
-    const zVelocity = axis === "z" ? Math.sign(slab.position.z || 1) * lateral : 0.4;
+    const lateral = fullMiss ? 4.7 : 3.1;
+    const xVelocity = axis === "x" ? pushSign * lateral : 0;
+    const zVelocity = axis === "z" ? pushSign * lateral : 0;
 
     this.debrisPieces.push({
       mesh,
       velocity: { x: xVelocity, y: 1.8, z: zVelocity },
       angularVelocity: {
-        x: 1.4 * this.debugConfig.debrisTumbleSpeed,
-        y: 2.2 * this.debugConfig.debrisTumbleSpeed,
-        z: 1.1 * this.debugConfig.debrisTumbleSpeed,
+        x: 0,
+        y: 0,
+        z: 0,
       },
       remainingLifetime: this.debugConfig.debrisLifetime,
     });
@@ -1884,11 +2212,23 @@ export class Game {
     while (group.children.length > 0) {
       const child = group.children[0]!;
       group.remove(child);
-      if (disposeMeshes && child instanceof Mesh) {
-        child.geometry.dispose();
-        if (child.material instanceof MeshStandardMaterial) {
-          child.material.dispose();
-        }
+      if (disposeMeshes) {
+        this.disposeObject3DMeshes(child);
+      }
+    }
+  }
+
+  private disposeObject3DMeshes(node: Object3D): void {
+    node.children.forEach((child) => {
+      this.disposeObject3DMeshes(child);
+    });
+
+    if (node instanceof Mesh) {
+      node.geometry.dispose();
+      if (Array.isArray(node.material)) {
+        node.material.forEach((material) => material.dispose());
+      } else if (node.material instanceof MeshStandardMaterial) {
+        node.material.dispose();
       }
     }
   }

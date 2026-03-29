@@ -5,6 +5,7 @@ export const defaultDebugConfig: DebugConfig = {
   cameraDistance: 12,
   cameraLerp: 0.08,
   cameraFramingOffset: 1.25,
+  cameraYOffset: 0,
   baseWidth: 7,
   baseDepth: 7,
   slabHeight: 3,
@@ -49,6 +50,7 @@ export const defaultDebugConfig: DebugConfig = {
   prebuiltLevels: 5,
   debrisLifetime: 1.35,
   debrisTumbleSpeed: 1,
+  placementShakeAmount: 0.22,
   gridVisible: false,
 };
 
@@ -58,6 +60,7 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     cameraDistance: clamp(config.cameraDistance, 7, 24),
     cameraLerp: clamp(config.cameraLerp, 0.02, 0.25),
     cameraFramingOffset: clamp(config.cameraFramingOffset, -1.5, 4),
+    cameraYOffset: clamp(config.cameraYOffset, -6, 6),
     baseWidth: clamp(config.baseWidth, 2, 8),
     baseDepth: clamp(config.baseDepth, 2, 8),
     slabHeight: clamp(config.slabHeight, 1, 5),
@@ -108,6 +111,7 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     prebuiltLevels: Math.round(clamp(config.prebuiltLevels, 1, 12)),
     debrisLifetime: clamp(config.debrisLifetime, 0.4, 4),
     debrisTumbleSpeed: clamp(config.debrisTumbleSpeed, 0.2, 3),
+    placementShakeAmount: clamp(config.placementShakeAmount, 0, 1.5),
     gridVisible: config.gridVisible,
   };
 }
