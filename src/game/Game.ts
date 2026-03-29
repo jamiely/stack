@@ -366,7 +366,15 @@ export class Game {
     defaultDebugConfig.cameraDistance,
   );
   private readonly dayNightTargetSkyColor = new Color("#07101c");
-  private readonly dayNightStarMaterial = new PointsMaterial({
+  private readonly dayNightStarSmallMaterial = new PointsMaterial({
+    color: "#f6fbff",
+    transparent: true,
+    opacity: 0,
+    size: 1.6,
+    sizeAttenuation: false,
+    depthWrite: false,
+  });
+  private readonly dayNightStarMediumMaterial = new PointsMaterial({
     color: "#f6fbff",
     transparent: true,
     opacity: 0,
@@ -374,7 +382,17 @@ export class Game {
     sizeAttenuation: false,
     depthWrite: false,
   });
-  private readonly starField = this.createStarField(320);
+  private readonly dayNightStarLargeMaterial = new PointsMaterial({
+    color: "#f6fbff",
+    transparent: true,
+    opacity: 0,
+    size: 3.4,
+    sizeAttenuation: false,
+    depthWrite: false,
+  });
+  private readonly starFieldSmall = this.createStarField(220, this.dayNightStarSmallMaterial, -34, -10);
+  private readonly starFieldMedium = this.createStarField(130, this.dayNightStarMediumMaterial, -30, -8);
+  private readonly starFieldLarge = this.createStarField(65, this.dayNightStarLargeMaterial, -26, -6);
   private activeQualityPreset: QualityPreset = toQualityPreset(defaultDebugConfig.performanceQualityPreset);
   private archivedLevelSet = new Set<number>();
   private archivedChunkCount = 0;
@@ -483,8 +501,11 @@ export class Game {
       this.debugConfig.cameraDistance,
     );
     this.gridHelper.position.y = -12;
-    this.starField.position.set(0, 0, -64);
-    this.camera.add(this.starField);
+    this.starFieldSmall.position.set(0, 0, -64);
+    this.starFieldMedium.position.set(0, 0, -64);
+    this.starFieldLarge.position.set(0, 0, -64);
+    this.camera.add(this.starFieldSmall, this.starFieldMedium, this.starFieldLarge);
+    this.scene.add(this.camera);
     this.scene.add(
       this.stackGroup,
       this.archivedGroup,
@@ -1220,8 +1241,14 @@ export class Game {
 
     const starBlend = 1 - Math.exp(-Math.max(0, Math.min(0.2, deltaSeconds)) * DAY_NIGHT_STAR_LERP_SPEED);
     const targetStarOpacity = frame.starVisibility * DAY_NIGHT_STAR_MAX_OPACITY;
-    this.dayNightStarMaterial.opacity += (targetStarOpacity - this.dayNightStarMaterial.opacity) * starBlend;
-    this.starField.visible = this.dayNightStarMaterial.opacity > 0.01;
+
+    this.dayNightStarSmallMaterial.opacity += (targetStarOpacity * 0.6 - this.dayNightStarSmallMaterial.opacity) * starBlend;
+    this.dayNightStarMediumMaterial.opacity += (targetStarOpacity * 0.85 - this.dayNightStarMediumMaterial.opacity) * starBlend;
+    this.dayNightStarLargeMaterial.opacity += (targetStarOpacity - this.dayNightStarLargeMaterial.opacity) * starBlend;
+
+    this.starFieldSmall.visible = this.dayNightStarSmallMaterial.opacity > 0.01;
+    this.starFieldMedium.visible = this.dayNightStarMediumMaterial.opacity > 0.01;
+    this.starFieldLarge.visible = this.dayNightStarLargeMaterial.opacity > 0.01;
   }
 
   private updateDistractions(deltaSeconds: number): void {
@@ -3380,12 +3407,10 @@ export class Game {
     }
   }
 
-  private createStarField(starCount: number): Points {
+  private createStarField(starCount: number, material: PointsMaterial, minZ: number, maxZ: number): Points {
     const positions: number[] = [];
     const spreadX = 42;
     const spreadY = 26;
-    const minZ = -30;
-    const maxZ = -4;
 
     for (let index = 0; index < starCount; index += 1) {
       const x = (Math.random() * 2 - 1) * spreadX;
@@ -3397,7 +3422,7 @@ export class Game {
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
 
-    const stars = new Points(geometry, this.dayNightStarMaterial);
+    const stars = new Points(geometry, material);
     stars.frustumCulled = false;
     stars.renderOrder = -2;
     stars.visible = false;
