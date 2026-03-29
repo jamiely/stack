@@ -34,6 +34,7 @@ import {
   toQualityPreset,
 } from "./logic/performance";
 import { resolveIntegrityTelemetry } from "./logic/integrity";
+import { LEDGE_ANIMATION_DURATION_SECONDS, resolveLedgeDimensions, resolveLedgeFaceIndex, sampleLedgeAnimationScaleX } from "./logic/ledges";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
@@ -205,9 +206,6 @@ const SHUTTER_WINDOW_MIN_FACE_SPAN = 1.02;
 const WINDOW_EDGE_PADDING_MULTIPLIER = 0.62;
 const WINDOW_PAIR_GAP_MULTIPLIER = 1.18;
 const EAVE_CORNER_OVERLAP = 0.12;
-const LEDGE_MIN_WIDTH_RATIO = 0.25;
-const LEDGE_MAX_WIDTH_RATIO = 1;
-const LEDGE_ANIMATION_DURATION_SECONDS = 0.3;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -1685,11 +1683,9 @@ export class Game {
       }
 
       animation.elapsedSeconds = Math.min(animation.durationSeconds, animation.elapsedSeconds + deltaSeconds);
-      const progress = animation.durationSeconds <= 0 ? 1 : animation.elapsedSeconds / animation.durationSeconds;
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const scaleX = Math.max(0.01, animation.targetScaleX * eased);
-      animation.mesh.scale.x = scaleX;
-      return progress < 1;
+      const frame = sampleLedgeAnimationScaleX(animation.elapsedSeconds, animation.durationSeconds, animation.targetScaleX);
+      animation.mesh.scale.x = frame.scaleX;
+      return !frame.completed;
     });
   }
 
@@ -2845,17 +2841,22 @@ export class Game {
     }
 
     const faceNoise = this.sampleDecorNoise(slab.level * 0.77 + 2.13, 6.91);
-    const faceIndex = Math.min(visibleFaces.length - 1, Math.floor(faceNoise * visibleFaces.length));
+    const faceIndex = resolveLedgeFaceIndex(visibleFaces.length, faceNoise);
+    if (faceIndex === null) {
+      return;
+    }
+
     const face = visibleFaces[faceIndex];
     if (!face) {
       return;
     }
 
     const widthNoise = this.sampleDecorNoise(slab.level * 1.19 + face.noiseSalt, 8.37);
-    const widthRatio = LEDGE_MIN_WIDTH_RATIO + widthNoise * (LEDGE_MAX_WIDTH_RATIO - LEDGE_MIN_WIDTH_RATIO);
-    const ledgeWidth = Math.max(0.24, face.span * widthRatio);
-    const ledgeHeight = Math.max(0.1, slab.dimensions.height * 0.1);
-    const ledgeDepth = Math.max(0.24, Math.min(0.52, slab.dimensions.height * 0.18));
+    const { widthRatio, ledgeWidth, ledgeHeight, ledgeDepth, lipHeight, lipDepth } = resolveLedgeDimensions(
+      face.span,
+      slab.dimensions.height,
+      widthNoise,
+    );
 
     const slabBaseColor = new Color(this.getSlabColor(slab.level));
     const ledgeColor = slabBaseColor.clone().offsetHSL(0, -0.12, 0.14);
@@ -2874,8 +2875,6 @@ export class Game {
     ledge.position.set(position.x, ledgeY, position.z);
     ledge.rotation.y = face.rotationY;
 
-    const lipHeight = ledgeHeight * 0.34;
-    const lipDepth = Math.max(0.06, ledgeDepth * 0.22);
     const lip = new Mesh(
       new BoxGeometry(face.span, lipHeight, lipDepth),
       new MeshStandardMaterial({
