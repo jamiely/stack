@@ -374,7 +374,7 @@ export class Game {
     sizeAttenuation: false,
     depthWrite: false,
   });
-  private readonly starField = this.createStarField(180);
+  private readonly starField = this.createStarField(320);
   private activeQualityPreset: QualityPreset = toQualityPreset(defaultDebugConfig.performanceQualityPreset);
   private archivedLevelSet = new Set<number>();
   private archivedChunkCount = 0;
@@ -1221,7 +1221,7 @@ export class Game {
     const targetStarOpacity = frame.starVisibility * DAY_NIGHT_STAR_MAX_OPACITY;
     this.dayNightStarMaterial.opacity += (targetStarOpacity - this.dayNightStarMaterial.opacity) * starBlend;
     this.starField.visible = this.dayNightStarMaterial.opacity > 0.01;
-    this.starField.position.set(this.camera.position.x * 0.05, 0, this.camera.position.z * 0.05);
+    this.starField.position.set(this.camera.position.x * 0.05, this.camera.position.y * 0.45 - 4, this.camera.position.z * 0.05);
   }
 
   private updateDistractions(deltaSeconds: number): void {
@@ -3382,11 +3382,11 @@ export class Game {
 
   private createStarField(starCount: number): Points {
     const positions: number[] = [];
-    const spreadX = 62;
-    const minY = -6;
-    const maxY = 34;
-    const minZ = -72;
-    const maxZ = -30;
+    const spreadX = 26;
+    const minY = -10;
+    const maxY = 28;
+    const minZ = -70;
+    const maxZ = -26;
 
     for (let index = 0; index < starCount; index += 1) {
       const x = (Math.random() * 2 - 1) * spreadX;
