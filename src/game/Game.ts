@@ -2006,8 +2006,8 @@ export class Game {
 
   private createEavesTexture(): CanvasTexture {
     const canvas = document.createElement("canvas");
-    canvas.width = 96;
-    canvas.height = 24;
+    canvas.width = 128;
+    canvas.height = 40;
     const context = canvas.getContext("2d");
     if (!context) {
       const fallbackTexture = new CanvasTexture(canvas);
@@ -2016,21 +2016,25 @@ export class Game {
     }
 
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "rgba(20, 132, 58, 0.96)";
-    context.fillRect(0, 1, canvas.width, 6);
+    context.fillStyle = "rgba(255, 255, 255, 0.98)";
+    context.fillRect(0, 0, canvas.width, 4);
 
-    context.fillStyle = "rgba(16, 114, 49, 0.98)";
-    for (let x = -6; x <= canvas.width + 12; x += 14) {
+    const radius = 10.2;
+    const step = 15;
+    const centerY = 4.5;
+
+    context.fillStyle = "rgba(240, 240, 240, 0.99)";
+    for (let x = -12; x <= canvas.width + 18; x += step) {
       context.beginPath();
-      context.arc(x + 7, 7, 6.2, 0, Math.PI, false);
+      context.arc(x + step / 2, centerY, radius, 0, Math.PI, false);
       context.fill();
     }
 
-    context.strokeStyle = "rgba(12, 95, 42, 0.9)";
-    context.lineWidth = 1.4;
-    for (let x = -6; x <= canvas.width + 12; x += 14) {
+    context.strokeStyle = "rgba(166, 166, 166, 0.92)";
+    context.lineWidth = 1.35;
+    for (let x = -12; x <= canvas.width + 18; x += step) {
       context.beginPath();
-      context.arc(x + 7, 7, 6.2, 0.1, Math.PI - 0.1, false);
+      context.arc(x + step / 2, centerY, radius, 0.03, Math.PI - 0.03, false);
       context.stroke();
     }
 
@@ -2109,8 +2113,8 @@ export class Game {
       return;
     }
 
-    const eaveHeight = Math.max(0.14, Math.min(0.26, slab.dimensions.height * 0.1));
-    const elevationY = slab.dimensions.height / 2 - eaveHeight * 0.48;
+    const eaveHeight = Math.max(0.24, Math.min(0.48, slab.dimensions.height * 0.16));
+    const elevationY = slab.dimensions.height / 2 - eaveHeight * 0.32;
 
     const faces: Array<{
       span: number;
@@ -2147,16 +2151,20 @@ export class Game {
     const chosenFaces = faces.filter((face) => this.sampleDecorNoise(slab.level, face.faceIndex + 0.91) > 0.42);
     const finalFaces = chosenFaces.length > 0 ? chosenFaces : [faces[Math.floor(this.sampleDecorNoise(slab.level, 8.14) * faces.length)]!];
 
+    const slabBaseColor = new Color(this.getSlabColor(slab.level));
+    const eaveColor = slabBaseColor.clone().offsetHSL(0, -0.08, -0.06);
+    const eaveEmissive = new Color(this.getSlabEmissive(slab.level)).multiplyScalar(0.72);
+
     finalFaces.forEach((face) => {
       const material = new MeshStandardMaterial({
-        color: new Color("#2bd45d"),
-        emissive: new Color("#0f7d32"),
-        emissiveIntensity: 0.18,
+        color: eaveColor,
+        emissive: eaveEmissive,
+        emissiveIntensity: 0.16,
         metalness: 0.02,
         roughness: 0.74,
         map: this.eavesTexture,
         transparent: true,
-        opacity: 0.92,
+        opacity: 0.93,
         side: DoubleSide,
         depthWrite: false,
       });
