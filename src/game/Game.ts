@@ -230,7 +230,7 @@ const TENTACLE_BURST_CHANCE = 0.5;
 const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
-const EAVE_CORNER_OVERLAP = 0.12;
+const EAVE_CORNER_INSET = 0.02;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -2898,7 +2898,7 @@ export class Game {
         depthWrite: false,
       });
 
-      const eaveWidth = Math.max(0.4, face.span + EAVE_CORNER_OVERLAP);
+      const eaveWidth = Math.max(0.36, face.span - EAVE_CORNER_INSET);
       const eave = new Mesh(new PlaneGeometry(eaveWidth, eaveHeight), material);
       const position = face.createPosition();
       eave.position.set(position.x, position.y, position.z);
