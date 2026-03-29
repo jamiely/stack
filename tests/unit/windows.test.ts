@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   WINDOW_STYLES,
   getWindowHorizontalOffsets,
+  resolveTentacleOutDepth,
   resolveWindowCountForFace,
+  resolveWindowOutDepth,
   resolveWindowStyle,
   shouldRenderWindowsForFace,
 } from "../../src/game/logic/windows";
@@ -40,6 +42,18 @@ describe("window footprint decisions", () => {
     expect(resolveWindowCountForFace(faceSpan, "rectangular", windowWidth, frameThickness, -2)).toBe(1);
     expect(resolveWindowCountForFace(faceSpan, "rectangular", windowWidth, frameThickness, 0.9)).toBeGreaterThanOrEqual(1);
     expect(resolveWindowCountForFace(0.4, "rectangular", windowWidth, frameThickness, 0.5)).toBe(0);
+  });
+});
+
+describe("window depth helpers", () => {
+  it("positions tentacles farther out than window meshes", () => {
+    const frameDepth = 0.08;
+    const windowDepth = resolveWindowOutDepth(frameDepth);
+    const tentacleDepth = resolveTentacleOutDepth(frameDepth);
+
+    expect(windowDepth).toBeCloseTo(0.06, 6);
+    expect(tentacleDepth).toBeGreaterThan(windowDepth);
+    expect(tentacleDepth - windowDepth).toBeGreaterThanOrEqual(0.03);
   });
 });
 

@@ -76,6 +76,14 @@ export function getWindowHorizontalOffsets(
   return Array.from({ length: count }, (_, index) => -usedWidth / 2 + spacing * index);
 }
 
+export function resolveWindowOutDepth(frameDepth: number): number {
+  return frameDepth / 2 + 0.02;
+}
+
+export function resolveTentacleOutDepth(frameDepth: number): number {
+  return resolveWindowOutDepth(frameDepth) + Math.max(0.03, frameDepth * 0.6);
+}
+
 function getWindowFootprintWidth(style: WindowStyle, outerWidth: number, frameThickness: number): number {
   if (style === "shuttered") {
     const shutterWidth = Math.max(frameThickness * 1.8, outerWidth * 0.22);

@@ -50,7 +50,14 @@ import {
 } from "./logic/performance";
 import { resolveIntegrityTelemetry } from "./logic/integrity";
 import { LEDGE_ANIMATION_DURATION_SECONDS, resolveLedgeDimensions, resolveLedgeFaceIndex, sampleLedgeAnimationScaleX } from "./logic/ledges";
-import { getWindowHorizontalOffsets, resolveWindowCountForFace, resolveWindowStyle, shouldRenderWindowsForFace } from "./logic/windows";
+import {
+  getWindowHorizontalOffsets,
+  resolveTentacleOutDepth,
+  resolveWindowCountForFace,
+  resolveWindowOutDepth,
+  resolveWindowStyle,
+  shouldRenderWindowsForFace,
+} from "./logic/windows";
 import {
   UFO_ORBIT_ANGULAR_SPEED,
   canForceDistractionChannel,
@@ -1496,7 +1503,7 @@ export class Game {
 
     offsets.forEach((localOffset, index) => {
       const root = new Group();
-      const outDepth = frameDepth / 2 + 0.04;
+      const outDepth = resolveTentacleOutDepth(frameDepth);
       const position = face.createPosition(localOffset, outDepth);
       root.position.set(slab.position.x + position.x, slab.position.y + position.y, slab.position.z + position.z);
       root.rotation.y = face.rotationY;
@@ -2317,7 +2324,7 @@ export class Game {
           glassHeight,
         });
 
-        const outDepth = frameDepth / 2 + 0.02;
+        const outDepth = resolveWindowOutDepth(frameDepth);
         const position = face.createPosition(localOffset, outDepth);
         windowGroup.position.set(position.x, position.y, position.z);
         windowGroup.rotation.y = face.rotationY;
