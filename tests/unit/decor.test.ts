@@ -3,6 +3,7 @@ import {
   FACE_ROTATION,
   filterFacesByVisibility,
   isFaceHiddenFromCamera,
+  resolveEaveWidth,
   resolveSlabHue,
   resolveTentacleSegmentOffset,
   resolveWindowCountNoise,
@@ -103,6 +104,17 @@ describe("tentacle segment offsets", () => {
     const offset = resolveTentacleSegmentOffset(3, 2, 0.3, 0.25);
     expect(Math.abs(offset.x)).toBeLessThanOrEqual(0.3 * 0.22 + 1e-9);
     expect(Math.abs(offset.y)).toBeLessThanOrEqual(0.25 * 0.24 + 1e-9);
+  });
+});
+
+describe("eave helpers", () => {
+  it("adds a small corner overlap to close visible seams", () => {
+    expect(resolveEaveWidth(1.2)).toBeCloseTo(1.23, 6);
+    expect(resolveEaveWidth(2.4) - 2.4).toBeLessThanOrEqual(0.04);
+  });
+
+  it("respects a minimum renderable eave width", () => {
+    expect(resolveEaveWidth(0.08)).toBeCloseTo(0.36, 6);
   });
 });
 

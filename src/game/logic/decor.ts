@@ -23,6 +23,9 @@ export const FACE_ROTATION = {
   negZ: Math.PI,
 } as const;
 
+const EAVE_MIN_WIDTH = 0.36;
+const EAVE_CORNER_OVERLAP = 0.03;
+
 export function sampleDecorNoise(level: number, salt: number): number {
   const value = Math.sin(level * 12.9898 + salt * 78.233) * 43758.5453123;
   return value - Math.floor(value);
@@ -70,6 +73,10 @@ export function filterFacesByVisibility<T extends FaceRotationDescriptor>(
 
 export function shouldUseDarkWindowTrim(level: number): boolean {
   return sampleDecorNoise(level * 0.97 + 3.7, 12.61) < 0.34;
+}
+
+export function resolveEaveWidth(span: number): number {
+  return Math.max(EAVE_MIN_WIDTH, span + EAVE_CORNER_OVERLAP);
 }
 
 export function resolveWindowCountNoise(level: number, faceNoiseSalt: number): number {
