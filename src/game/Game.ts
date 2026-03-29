@@ -22,6 +22,7 @@ import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
 import {
+  FACE_ROTATION,
   filterFacesByVisibility,
   resolveSlabHue,
   resolveWindowMetrics,
@@ -2330,25 +2331,25 @@ export class Game {
       {
         span: slab.dimensions.depth,
         createPosition: (offset, outDepth) => ({ x: slab.dimensions.width / 2 + outDepth, y: 0, z: offset }),
-        rotationY: Math.PI / 2,
+        rotationY: FACE_ROTATION.posX,
         noiseSalt: 1.7,
       },
       {
         span: slab.dimensions.depth,
         createPosition: (offset, outDepth) => ({ x: -(slab.dimensions.width / 2 + outDepth), y: 0, z: offset }),
-        rotationY: -Math.PI / 2,
+        rotationY: FACE_ROTATION.negX,
         noiseSalt: 2.9,
       },
       {
         span: slab.dimensions.width,
         createPosition: (offset, outDepth) => ({ x: offset, y: 0, z: slab.dimensions.depth / 2 + outDepth }),
-        rotationY: 0,
+        rotationY: FACE_ROTATION.posZ,
         noiseSalt: 4.3,
       },
       {
         span: slab.dimensions.width,
         createPosition: (offset, outDepth) => ({ x: offset, y: 0, z: -(slab.dimensions.depth / 2 + outDepth) }),
-        rotationY: Math.PI,
+        rotationY: FACE_ROTATION.negZ,
         noiseSalt: 5.6,
       },
     ];
@@ -2704,22 +2705,22 @@ export class Game {
       {
         span: slab.dimensions.depth,
         createPosition: () => ({ x: slab.dimensions.width / 2 + 0.022, y: elevationY, z: 0 }),
-        rotationY: -Math.PI / 2,
+        rotationY: FACE_ROTATION.posX,
       },
       {
         span: slab.dimensions.depth,
         createPosition: () => ({ x: -(slab.dimensions.width / 2 + 0.022), y: elevationY, z: 0 }),
-        rotationY: Math.PI / 2,
+        rotationY: FACE_ROTATION.negX,
       },
       {
         span: slab.dimensions.width,
         createPosition: () => ({ x: 0, y: elevationY, z: slab.dimensions.depth / 2 + 0.022 }),
-        rotationY: 0,
+        rotationY: FACE_ROTATION.posZ,
       },
       {
         span: slab.dimensions.width,
         createPosition: () => ({ x: 0, y: elevationY, z: -(slab.dimensions.depth / 2 + 0.022) }),
-        rotationY: Math.PI,
+        rotationY: FACE_ROTATION.negZ,
       },
     ];
 
@@ -2843,22 +2844,22 @@ export class Game {
       {
         span: slab.dimensions.depth,
         createPosition: () => ({ x: slab.dimensions.width / 2 + 0.028, y: elevationY, z: 0 }),
-        rotationY: -Math.PI / 2,
+        rotationY: FACE_ROTATION.posX,
       },
       {
         span: slab.dimensions.depth,
         createPosition: () => ({ x: -(slab.dimensions.width / 2 + 0.028), y: elevationY, z: 0 }),
-        rotationY: Math.PI / 2,
+        rotationY: FACE_ROTATION.negX,
       },
       {
         span: slab.dimensions.width,
         createPosition: () => ({ x: 0, y: elevationY, z: slab.dimensions.depth / 2 + 0.028 }),
-        rotationY: 0,
+        rotationY: FACE_ROTATION.posZ,
       },
       {
         span: slab.dimensions.width,
         createPosition: () => ({ x: 0, y: elevationY, z: -(slab.dimensions.depth / 2 + 0.028) }),
-        rotationY: Math.PI,
+        rotationY: FACE_ROTATION.negZ,
       },
     ];
 

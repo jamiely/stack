@@ -16,6 +16,13 @@ export interface FaceRotationDescriptor {
   rotationY: number;
 }
 
+export const FACE_ROTATION = {
+  posX: Math.PI / 2,
+  negX: -Math.PI / 2,
+  posZ: 0,
+  negZ: Math.PI,
+} as const;
+
 export function sampleDecorNoise(level: number, salt: number): number {
   const value = Math.sin(level * 12.9898 + salt * 78.233) * 43758.5453123;
   return value - Math.floor(value);

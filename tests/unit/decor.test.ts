@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  FACE_ROTATION,
   filterFacesByVisibility,
   isFaceHiddenFromCamera,
   resolveSlabHue,
@@ -61,6 +62,21 @@ describe("isFaceHiddenFromCamera", () => {
   });
 
   it("filters descriptors by visible or hidden faces", () => {
+    expect(
+      isFaceHiddenFromCamera(
+        { x: 0, z: 0 },
+        { x: 10, z: 0 },
+        FACE_ROTATION.posX,
+      ),
+    ).toBe(false);
+    expect(
+      isFaceHiddenFromCamera(
+        { x: 0, z: 0 },
+        { x: 10, z: 0 },
+        FACE_ROTATION.negX,
+      ),
+    ).toBe(true);
+
     const faces = [
       { id: "front", rotationY: 0 },
       { id: "back", rotationY: Math.PI },
