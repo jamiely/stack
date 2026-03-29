@@ -37,6 +37,17 @@ export function shouldTriggerCollapse(outcome: TrimResult["outcome"], integrityT
   return outcome === "miss" || integrityTier === "unstable";
 }
 
+export function resolveSupplementalCollapseBurstSlabs<T>(
+  trigger: CollapseTrigger,
+  options: { missedActiveSlab?: T | null },
+): T[] {
+  if (trigger === "miss") {
+    return [];
+  }
+
+  return options.missedActiveSlab ? [options.missedActiveSlab] : [];
+}
+
 export function createCollapseSequence(
   trigger: CollapseTrigger,
   offset: IntegrityTelemetry["offset"],

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   advanceCollapseSequence,
   createCollapseSequence,
+  resolveSupplementalCollapseBurstSlabs,
   sampleCollapseFrame,
   shouldTriggerCollapse,
 } from "../../src/game/logic/collapse";
@@ -72,6 +73,13 @@ describe("collapse logic", () => {
     expect(completeFrame.progress).toBe(1);
     expect(completeFrame.stackDropY).toBeCloseTo(3, 6);
     expect(completeFrame.cameraPullback).toBeCloseTo(5, 6);
+  });
+
+  it("does not include the unplaced missed slab in collapse voxel bursts", () => {
+    expect(resolveSupplementalCollapseBurstSlabs("miss", { missedActiveSlab: { id: "active" } })).toEqual([]);
+    expect(resolveSupplementalCollapseBurstSlabs("instability", { missedActiveSlab: { id: "active" } })).toEqual([
+      { id: "active" },
+    ]);
   });
 
   it("ignores negative delta time while sampling still clamps to the valid range", () => {

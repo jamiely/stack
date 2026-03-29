@@ -21,10 +21,23 @@ import {
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
-import { isFaceHiddenFromCamera, resolveSlabHue, resolveWindowMetrics, sampleDecorNoise, shouldRenderWeathering } from "./logic/decor";
+import {
+  filterFacesByVisibility,
+  resolveSlabHue,
+  resolveWindowMetrics,
+  resolveWindowShutterPalette,
+  sampleDecorNoise,
+  shouldRenderWeathering,
+  shouldUseDarkWindowTrim,
+} from "./logic/decor";
 import { advanceOscillation } from "./logic/oscillation";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
-import { advanceCollapseSequence, createCollapseSequence, sampleCollapseFrame } from "./logic/collapse";
+import {
+  advanceCollapseSequence,
+  createCollapseSequence,
+  resolveSupplementalCollapseBurstSlabs,
+  sampleCollapseFrame,
+} from "./logic/collapse";
 import { createCollapseVoxelSeeds, isProjectedSlabNearViewport } from "./logic/collapseVoxels";
 import {
   collectArchivableLevels,
@@ -977,13 +990,16 @@ export class Game {
         x: missedSlab.position.x - target.position.x,
         z: missedSlab.position.z - target.position.z,
       };
+      const supplementalBurstSlabs = resolveSupplementalCollapseBurstSlabs("miss", {
+        missedActiveSlab: missedSlab,
+      });
       this.activeSlab = null;
       this.activeMesh = null;
       this.oscillation = null;
       this.lastPlacementOutcome = result.outcome;
       this.combo = updateComboState(this.combo, result.outcome);
       this.feedbackManager.play(getPlacementFeedbackPlan(result.outcome));
-      this.beginCollapseSequence("miss", missOffset, [missedSlab]);
+      this.beginCollapseSequence("miss", missOffset, supplementalBurstSlabs);
       this.gameState = "game_over";
       this.statusMessage = "Hard miss! Tower collapse sequence triggered.";
       this.renderHud();
@@ -1393,14 +1409,14 @@ export class Game {
       return;
     }
 
-    const hiddenFaces = this.getHiddenFaceDescriptors(slab);
-    if (hiddenFaces.length > 0) {
+    const visibleFaces = this.getVisibleFaceDescriptors(slab);
+    if (visibleFaces.length > 0) {
       const cycle = Math.floor(this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * TENTACLE_SIDE_SWITCH_SPEED);
       const cycleNoise = sampleDecorNoise(slab.level * 0.29 + cycle * 0.91, 24.8);
       if (cycleNoise < TENTACLE_BURST_CHANCE) {
         const sideNoise = sampleDecorNoise(slab.level * 0.43 + cycle * 0.67, 18.3);
-        const hiddenFaceIndex = Math.min(hiddenFaces.length - 1, Math.floor(sideNoise * hiddenFaces.length));
-        const face = hiddenFaces[hiddenFaceIndex];
+        const visibleFaceIndex = Math.min(visibleFaces.length - 1, Math.floor(sideNoise * visibleFaces.length));
+        const face = visibleFaces[visibleFaceIndex];
         const burstKey = `${slab.level}:${face?.noiseSalt ?? -1}`;
         if (face && !this.tentacleBurstKeys.includes(burstKey)) {
           const created = this.createTentacleBurstForFace(slab, face);
@@ -2228,12 +2244,13 @@ export class Game {
       slab.dimensions.height,
     );
 
+    const darkTrim = shouldUseDarkWindowTrim(slab.level);
     const frameMaterial = new MeshStandardMaterial({
-      color: new Color("#f2f6ff"),
-      emissive: new Color("#222e40"),
-      emissiveIntensity: 0.12,
+      color: darkTrim ? new Color("#171c24") : new Color("#f2f6ff"),
+      emissive: darkTrim ? new Color("#0a0f18") : new Color("#222e40"),
+      emissiveIntensity: darkTrim ? 0.2 : 0.12,
       metalness: 0.06,
-      roughness: 0.64,
+      roughness: darkTrim ? 0.54 : 0.64,
     });
 
     const glassMaterial = new MeshStandardMaterial({
@@ -2249,18 +2266,18 @@ export class Game {
     });
 
     const sillMaterial = new MeshStandardMaterial({
-      color: new Color("#e7edf9"),
-      emissive: new Color("#28364a"),
-      emissiveIntensity: 0.14,
+      color: darkTrim ? new Color("#303846") : new Color("#e7edf9"),
+      emissive: darkTrim ? new Color("#0e131b") : new Color("#28364a"),
+      emissiveIntensity: darkTrim ? 0.1 : 0.14,
       metalness: 0.04,
       roughness: 0.66,
     });
 
+    const shutterPalette = resolveWindowShutterPalette(slab.level);
+    const shutterMaterial = this.createShutterMaterial(shutterPalette);
     const windowStyle = this.getWindowStyleForSlab(slab);
 
-    this.getWindowFaceDescriptors(slab)
-      .filter((face) => !this.isFaceHiddenFromCamera(slab, face.rotationY))
-      .forEach((face, faceIndex) => {
+    this.getVisibleFaceDescriptors(slab).forEach((face, faceIndex) => {
       if (!shouldRenderWindowsForFace(face.span, windowStyle, windowWidth, frameThickness)) {
         return;
       }
@@ -2290,6 +2307,7 @@ export class Game {
           frameMaterial,
           glassMaterial,
           sillMaterial,
+          shutterMaterial,
           frameDepth,
           frameThickness,
           outerWidth,
@@ -2336,15 +2354,12 @@ export class Game {
     ];
   }
 
-  private getHiddenFaceDescriptors(slab: SlabData): WindowFaceDescriptor[] {
-    return this.getWindowFaceDescriptors(slab).filter((face) => this.isFaceHiddenFromCamera(slab, face.rotationY));
-  }
-
-  private isFaceHiddenFromCamera(slab: SlabData, rotationY: number): boolean {
-    return isFaceHiddenFromCamera(
+  private getVisibleFaceDescriptors(slab: SlabData): WindowFaceDescriptor[] {
+    return filterFacesByVisibility(
+      this.getWindowFaceDescriptors(slab),
       { x: slab.position.x, z: slab.position.z },
       { x: this.camera.position.x, z: this.camera.position.z },
-      rotationY,
+      "visible",
     );
   }
 
@@ -2360,6 +2375,7 @@ export class Game {
       frameMaterial: MeshStandardMaterial;
       glassMaterial: MeshStandardMaterial;
       sillMaterial: MeshStandardMaterial;
+      shutterMaterial: MeshStandardMaterial;
       frameDepth: number;
       frameThickness: number;
       outerWidth: number;
@@ -2372,6 +2388,7 @@ export class Game {
       frameMaterial,
       glassMaterial,
       sillMaterial,
+      shutterMaterial,
       frameDepth,
       frameThickness,
       outerWidth,
@@ -2389,7 +2406,9 @@ export class Game {
     } else if (style === "planter") {
       this.addPlanterBox(windowGroup, sillMaterial, frameDepth, frameThickness, outerWidth, outerHeight);
     } else if (style === "shuttered") {
-      this.addShutters(windowGroup, frameMaterial, frameDepth, frameThickness, outerWidth, outerHeight);
+      this.addShutters(windowGroup, frameMaterial, shutterMaterial, frameDepth, frameThickness, outerWidth, outerHeight);
+    } else if (style === "bay") {
+      this.addBayWindow(windowGroup, frameMaterial, glassMaterial, frameDepth, frameThickness, outerWidth, outerHeight, glassWidth, glassHeight);
     }
   }
 
@@ -2551,6 +2570,7 @@ export class Game {
   private addShutters(
     windowGroup: Group,
     frameMaterial: MeshStandardMaterial,
+    shutterMaterial: MeshStandardMaterial,
     frameDepth: number,
     frameThickness: number,
     outerWidth: number,
@@ -2561,14 +2581,6 @@ export class Game {
     const shutterDepth = frameDepth * 0.52;
     const offsetX = outerWidth / 2 + shutterWidth * 0.5;
 
-    const shutterMaterial = new MeshStandardMaterial({
-      color: new Color("#d8e2f2"),
-      emissive: new Color("#1d2938"),
-      emissiveIntensity: 0.08,
-      metalness: 0.05,
-      roughness: 0.68,
-    });
-
     const leftShutter = new Mesh(new BoxGeometry(shutterWidth, shutterHeight, shutterDepth), shutterMaterial);
     leftShutter.position.set(-offsetX, 0, -frameDepth * 0.08);
     const rightShutter = new Mesh(new BoxGeometry(shutterWidth, shutterHeight, shutterDepth), shutterMaterial);
@@ -2578,6 +2590,58 @@ export class Game {
     latch.position.set(0, 0, -frameDepth * 0.08);
 
     windowGroup.add(leftShutter, rightShutter, latch);
+  }
+
+  private createShutterMaterial(palette: ReturnType<typeof resolveWindowShutterPalette>): MeshStandardMaterial {
+    const tones: Record<ReturnType<typeof resolveWindowShutterPalette>, { color: string; emissive: string }> = {
+      slate: { color: "#d3deef", emissive: "#1d2938" },
+      teal: { color: "#bddfe3", emissive: "#163642" },
+      plum: { color: "#dac9ea", emissive: "#332248" },
+      sand: { color: "#e8dcc3", emissive: "#3d3220" },
+    };
+
+    const tone = tones[palette];
+    return new MeshStandardMaterial({
+      color: new Color(tone.color),
+      emissive: new Color(tone.emissive),
+      emissiveIntensity: 0.08,
+      metalness: 0.05,
+      roughness: 0.68,
+    });
+  }
+
+  private addBayWindow(
+    windowGroup: Group,
+    frameMaterial: MeshStandardMaterial,
+    glassMaterial: MeshStandardMaterial,
+    frameDepth: number,
+    frameThickness: number,
+    outerWidth: number,
+    outerHeight: number,
+    glassWidth: number,
+    glassHeight: number,
+  ): void {
+    const wingWidth = Math.max(frameThickness * 1.2, outerWidth * 0.22);
+    const wingDepth = frameDepth * 0.9;
+    const centerDepth = frameDepth * 0.78;
+    const bayOffsetZ = frameDepth * 0.33;
+
+    const centerGlass = new Mesh(new BoxGeometry(Math.max(0.08, glassWidth * 0.82), glassHeight * 0.74, centerDepth), glassMaterial);
+    centerGlass.position.set(0, 0, bayOffsetZ - frameDepth * 0.08);
+
+    const leftWing = new Mesh(new BoxGeometry(wingWidth, outerHeight * 0.92, wingDepth), frameMaterial);
+    leftWing.position.set(-outerWidth / 2 + wingWidth / 2, 0, bayOffsetZ);
+
+    const rightWing = new Mesh(new BoxGeometry(wingWidth, outerHeight * 0.92, wingDepth), frameMaterial);
+    rightWing.position.set(outerWidth / 2 - wingWidth / 2, 0, bayOffsetZ);
+
+    const canopy = new Mesh(new BoxGeometry(outerWidth * 0.88, frameThickness * 1.05, frameDepth * 0.75), frameMaterial);
+    canopy.position.set(0, outerHeight / 2 - frameThickness * 0.3, bayOffsetZ + frameDepth * 0.05);
+
+    const baySill = new Mesh(new BoxGeometry(outerWidth * 0.92, frameThickness * 1.3, frameDepth * 1.15), frameMaterial);
+    baySill.position.set(0, -outerHeight / 2 + frameThickness * 0.2, bayOffsetZ + frameDepth * 0.1);
+
+    windowGroup.add(centerGlass, leftWing, rightWing, canopy, baySill);
   }
 
   private createWeatheringTexture(): CanvasTexture {
@@ -2659,9 +2723,12 @@ export class Game {
       },
     ];
 
-    faces
-      .filter((face) => !this.isFaceHiddenFromCamera(slab, face.rotationY))
-      .forEach((face) => {
+    filterFacesByVisibility(
+      faces,
+      { x: slab.position.x, z: slab.position.z },
+      { x: this.camera.position.x, z: this.camera.position.z },
+      "visible",
+    ).forEach((face) => {
       const material = new MeshStandardMaterial({
         color: weatheringColor,
         emissive: new Color("#080a0f"),
@@ -2688,7 +2755,7 @@ export class Game {
       return;
     }
 
-    const visibleFaces = this.getWindowFaceDescriptors(slab).filter((face) => !this.isFaceHiddenFromCamera(slab, face.rotationY));
+    const visibleFaces = this.getVisibleFaceDescriptors(slab);
     if (visibleFaces.length === 0) {
       return;
     }
@@ -2795,7 +2862,12 @@ export class Game {
       },
     ];
 
-    const finalFaces = faces.filter((face) => !this.isFaceHiddenFromCamera(slab, face.rotationY));
+    const finalFaces = filterFacesByVisibility(
+      faces,
+      { x: slab.position.x, z: slab.position.z },
+      { x: this.camera.position.x, z: this.camera.position.z },
+      "visible",
+    );
 
     const slabBaseColor = new Color(this.getSlabColor(slab.level));
     const eaveColor = slabBaseColor.clone().offsetHSL(0, -0.08, -0.06);

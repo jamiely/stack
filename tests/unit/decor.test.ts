@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterFacesByVisibility,
   isFaceHiddenFromCamera,
   resolveSlabHue,
   resolveWindowMetrics,
+  resolveWindowShutterPalette,
   sampleDecorNoise,
   shouldRenderWeathering,
+  shouldUseDarkWindowTrim,
 } from "../../src/game/logic/decor";
 
 describe("sampleDecorNoise", () => {
@@ -56,6 +59,21 @@ describe("isFaceHiddenFromCamera", () => {
       ),
     ).toBe(true);
   });
+
+  it("filters descriptors by visible or hidden faces", () => {
+    const faces = [
+      { id: "front", rotationY: 0 },
+      { id: "back", rotationY: Math.PI },
+      { id: "right", rotationY: Math.PI / 2 },
+    ];
+
+    const visible = filterFacesByVisibility(faces, { x: 0, z: 0 }, { x: 6, z: 6 }, "visible");
+    const hidden = filterFacesByVisibility(faces, { x: 0, z: 0 }, { x: 6, z: 6 }, "hidden");
+
+    expect(visible.some((face) => face.id === "front")).toBe(true);
+    expect(visible.some((face) => face.id === "right")).toBe(true);
+    expect(hidden.some((face) => face.id === "back")).toBe(true);
+  });
 });
 
 describe("weathering and hue helpers", () => {
@@ -69,5 +87,16 @@ describe("weathering and hue helpers", () => {
     expect(resolveSlabHue(0)).toBe(42);
     expect(resolveSlabHue(1)).toBe(73);
     expect(resolveSlabHue(12)).toBe((42 + 12 * 31) % 360);
+  });
+
+  it("deterministically varies trim darkness and shutter palettes", () => {
+    expect(shouldUseDarkWindowTrim(8)).toBe(shouldUseDarkWindowTrim(8));
+    const darkSamples = Array.from({ length: 24 }, (_, level) => shouldUseDarkWindowTrim(level));
+    expect(darkSamples.some((value) => value)).toBe(true);
+    expect(darkSamples.some((value) => !value)).toBe(true);
+
+    const palette = resolveWindowShutterPalette(4);
+    expect(["slate", "teal", "plum", "sand"]).toContain(palette);
+    expect(resolveWindowShutterPalette(4)).toBe(palette);
   });
 });
