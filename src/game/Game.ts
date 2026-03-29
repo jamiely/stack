@@ -79,7 +79,7 @@ import {
 } from "./logic/runtime";
 import { resolveFacadeStyle } from "./logic/facade";
 import { sampleGorillaClimbPosition } from "./logic/gorilla";
-import { resolveCloudSpawnNdcX, shouldRespawnCloud } from "./logic/clouds";
+import { resolveCloudSpawnNdcX, resolveCloudVerticalVelocity, shouldRespawnCloud } from "./logic/clouds";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
@@ -421,6 +421,7 @@ export class Game {
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudSpawnFromTop: boolean[] = [false, false, false];
   private cloudSizeScales: number[] = [1, 1, 1];
+  private cloudVerticalVelocity: number[] = [0, 0, 0];
   private cloudAnchorsInitialized = false;
   private cloudRespawnCursor = 0;
   private cloudLastLevelRespawn = -1;
@@ -879,7 +880,7 @@ export class Game {
       this.runSimulationStep(deltaSeconds);
     } else {
       this.updateImpactPulse(deltaSeconds);
-      this.updateDistractionActors();
+      this.updateDistractionActors(deltaSeconds);
       this.updateCamera(deltaSeconds);
     }
 
@@ -894,7 +895,7 @@ export class Game {
     this.tickGorillaSlam(deltaSeconds);
     this.refreshQualityPreset();
     this.updateDistractions(deltaSeconds);
-    this.updateDistractionActors();
+    this.updateDistractionActors(deltaSeconds);
     this.updateDayNightCycle(deltaSeconds);
     this.updateActiveSlab(deltaSeconds);
     this.updateDebris(deltaSeconds);
@@ -1027,6 +1028,7 @@ export class Game {
     this.cloudAnchorsInitialized = false;
     this.cloudSpawnFromTop = [false, false, false];
     this.cloudSizeScales = [1, 1, 1];
+    this.cloudVerticalVelocity = [0, 0, 0];
     this.cloudRespawnCursor = 0;
     this.cloudLastLevelRespawn = -1;
     this.tentacleBurstKeys = [];
@@ -1041,7 +1043,7 @@ export class Game {
 
     this.syncArchivedRepresentation();
     this.refreshIntegrityTelemetry();
-    this.updateDistractionActors();
+    this.updateDistractionActors(0);
 
     const topLandedSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? null;
     const initialFocusY =
@@ -1207,7 +1209,7 @@ export class Game {
         : DEBUG_DISTRACTION_LAUNCH_DURATION_SECONDS;
 
     this.forcedDistractionTimers[channel] = durationSeconds;
-    this.updateDistractionActors();
+    this.updateDistractionActors(0);
   }
 
   private getUfoOrbitDurationSeconds(): number {
@@ -1327,7 +1329,7 @@ export class Game {
     );
   }
 
-  private updateDistractionActors(): void {
+  private updateDistractionActors(deltaSeconds: number): void {
     const snapshot = this.getEffectiveDistractionSnapshot();
     const scalars = getQualityScalars(this.activeQualityPreset);
     const lodNear = Math.round(this.debugConfig.lodNearDistance * scalars.lodDistanceMultiplier);
@@ -1499,7 +1501,7 @@ export class Game {
     }
 
     if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {
-      this.updateCloudLayer(snapshot);
+      this.updateCloudLayer(snapshot, deltaSeconds);
     }
 
     if (snapshot.active.fireworks) {
@@ -1546,7 +1548,7 @@ export class Game {
     this.ufoActor.style.width = `${(ufoHeightPx * 2.35).toFixed(1)}px`;
   }
 
-  private updateCloudLayer(snapshot: DistractionSnapshot): void {
+  private updateCloudLayer(snapshot: DistractionSnapshot, deltaSeconds: number): void {
     const cloudNodes = Array.from(this.cloudLayer.querySelectorAll<HTMLElement>(".distraction-cloud"));
     if (cloudNodes.length === 0) {
       return;
@@ -1558,6 +1560,7 @@ export class Game {
       this.cloudAnchorsInitialized = false;
       this.cloudSpawnFromTop = cloudNodes.map(() => false);
       this.cloudSizeScales = cloudNodes.map(() => 1);
+      this.cloudVerticalVelocity = cloudNodes.map(() => 0);
       this.cloudRespawnCursor = 0;
       this.cloudLastLevelRespawn = -1;
       return;
@@ -1573,6 +1576,7 @@ export class Game {
       this.cloudWorldAnchors = cloudNodes.map((_, index) => this.createCloudAnchor(topSlab, index, 0, false));
       this.cloudSpawnFromTop = cloudNodes.map(() => false);
       this.cloudSizeScales = cloudNodes.map((_, index) => this.sampleCloudSizeScale(topSlab.level, index, 0));
+      this.cloudVerticalVelocity = cloudNodes.map((_, index) => this.sampleCloudVerticalVelocity(topSlab.level, index, 0, false));
       this.cloudAnchorsInitialized = true;
       this.cloudRespawnCursor = 0;
       this.cloudLastLevelRespawn = topSlab.level;
@@ -1584,6 +1588,7 @@ export class Game {
       this.cloudWorldAnchors[respawnIndex] = this.createCloudAnchor(topSlab, respawnIndex, respawnSalt, true);
       this.cloudSpawnFromTop[respawnIndex] = true;
       this.cloudSizeScales[respawnIndex] = this.sampleCloudSizeScale(topSlab.level, respawnIndex, respawnSalt);
+      this.cloudVerticalVelocity[respawnIndex] = this.sampleCloudVerticalVelocity(topSlab.level, respawnIndex, respawnSalt, true);
       this.cloudRespawnCursor = (this.cloudRespawnCursor + 1) % cloudNodes.length;
       this.cloudLastLevelRespawn = topSlab.level;
     }
@@ -1596,6 +1601,7 @@ export class Game {
     cloudNodes.forEach((cloudNode, index) => {
       const anchor = this.cloudWorldAnchors[index] ?? this.createCloudAnchor(topSlab, index, this.frameCounter, false);
       this.cloudWorldAnchors[index] = anchor;
+      anchor.y += (this.cloudVerticalVelocity[index] ?? 0) * Math.max(0, deltaSeconds);
 
       const worldPoint = new Vector3(
         anchor.x + Math.sin(swayPhase + index) * (0.55 + index * 0.2),
@@ -1610,6 +1616,7 @@ export class Game {
         this.cloudWorldAnchors[index] = respawnAnchor;
         this.cloudSpawnFromTop[index] = true;
         this.cloudSizeScales[index] = this.sampleCloudSizeScale(topSlab.level, index, respawnSalt);
+        this.cloudVerticalVelocity[index] = this.sampleCloudVerticalVelocity(topSlab.level, index, respawnSalt, true);
       }
 
       const stableAnchor = this.cloudWorldAnchors[index] ?? anchor;
@@ -1651,6 +1658,11 @@ export class Game {
   private sampleCloudSizeScale(level: number, index: number, salt: number): number {
     const sizeNoise = sampleDecorNoise(level * 0.31 + index * 0.77 + salt * 0.005, 71.3);
     return 0.78 + sizeNoise * 0.48;
+  }
+
+  private sampleCloudVerticalVelocity(level: number, index: number, salt: number, spawnFromTop: boolean): number {
+    const driftNoise = sampleDecorNoise(level * 0.27 + index * 0.93 + salt * 0.007, 12.1);
+    return resolveCloudVerticalVelocity(driftNoise, spawnFromTop);
   }
 
   private createCloudAnchor(topSlab: SlabData, index: number, salt: number, spawnFromTop: boolean): Vector3 {
@@ -2217,7 +2229,7 @@ export class Game {
       this.landedSlabs.length - 1,
       this.debugConfig,
     );
-    this.updateDistractionActors();
+    this.updateDistractionActors(0);
 
     if (!this.debugConfig.performanceAutoQualityEnabled) {
       this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
