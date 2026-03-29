@@ -71,12 +71,15 @@ describe("getWindowHorizontalOffsets", () => {
   });
 
   it("prevents excessive spacing by clamping pair gaps while staying centered", () => {
-    const offsets = getWindowHorizontalOffsets(12, 3, "rectangular", 0.2, 0.05);
+    const windowWidth = 0.2;
+    const frameThickness = 0.05;
+    const offsets = getWindowHorizontalOffsets(12, 3, "rectangular", windowWidth, frameThickness);
     const leftGap = Math.abs(offsets[1] - offsets[0]);
     const rightGap = Math.abs(offsets[2] - offsets[1]);
+    const decoratedFootprint = (windowWidth + frameThickness * 2) * 1.3;
 
     expect(leftGap).toBeCloseTo(rightGap, 6);
-    expect(leftGap).toBeLessThan(0.7);
+    expect(leftGap).toBeLessThanOrEqual(decoratedFootprint * 2.05);
     expect(offsets[0]).toBeCloseTo(-offsets[2], 6);
   });
 
@@ -92,12 +95,12 @@ describe("getWindowHorizontalOffsets", () => {
     const span = 1.5;
     const windowWidth = 0.2;
     const frameThickness = 0.05;
-    const footprint = windowWidth + frameThickness * 2;
+    const decoratedFootprint = (windowWidth + frameThickness * 2) * 1.3;
     const offsets = getWindowHorizontalOffsets(span, 3, "rectangular", windowWidth, frameThickness);
     const maxOffset = Math.max(...offsets.map((value) => Math.abs(value)));
-    const edgeClearance = span / 2 - maxOffset - footprint / 2;
+    const edgeClearance = span / 2 - maxOffset - decoratedFootprint / 2;
 
-    expect(edgeClearance).toBeGreaterThanOrEqual(0.12);
+    expect(edgeClearance).toBeGreaterThanOrEqual(0.1799);
   });
 
   it("keeps at least half-window edge padding", () => {
@@ -106,5 +109,15 @@ describe("getWindowHorizontalOffsets", () => {
     const edgePadding = resolveWindowEdgePadding("rectangular", windowWidth, frameThickness);
 
     expect(edgePadding).toBeGreaterThanOrEqual((windowWidth + frameThickness * 2) * 0.5);
+  });
+
+  it("accounts for sill/decor overhang in edge padding", () => {
+    const windowWidth = 0.2;
+    const frameThickness = 0.05;
+    const outerWidth = windowWidth + frameThickness * 2;
+    const decoratedFootprint = outerWidth * 1.3;
+    const edgePadding = resolveWindowEdgePadding("rectangular", windowWidth, frameThickness);
+
+    expect(edgePadding).toBeGreaterThanOrEqual(decoratedFootprint / 2 + 0.18);
   });
 });

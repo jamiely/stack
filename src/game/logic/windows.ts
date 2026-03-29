@@ -6,8 +6,9 @@ const WINDOW_MIN_FACE_SPAN = 0.86;
 const SHUTTER_WINDOW_MIN_FACE_SPAN = 1.02;
 const BAY_WINDOW_MIN_FACE_SPAN = 1.18;
 const WINDOW_EDGE_PADDING_MULTIPLIER = 0.72;
-const WINDOW_MIN_EDGE_CLEARANCE = 0.12;
+const WINDOW_MIN_EDGE_CLEARANCE = 0.18;
 const WINDOW_EDGE_PADDING_MIN_HALF_WINDOW = 0.5;
+const WINDOW_DECOR_FOOTPRINT_MULTIPLIER = 1.3;
 const WINDOW_PAIR_GAP_MULTIPLIER = 1.18;
 const WINDOW_MAX_PAIR_GAP_MULTIPLIER = 2.05;
 
@@ -94,17 +95,19 @@ export function resolveWindowEdgePadding(style: WindowStyle, windowWidth: number
 }
 
 function getWindowFootprintWidth(style: WindowStyle, outerWidth: number, frameThickness: number): number {
+  const sillFootprint = Math.max(outerWidth, outerWidth * WINDOW_DECOR_FOOTPRINT_MULTIPLIER);
+
   if (style === "shuttered") {
     const shutterWidth = Math.max(frameThickness * 1.8, outerWidth * 0.22);
-    return outerWidth + shutterWidth * 2;
+    return Math.max(sillFootprint, outerWidth + shutterWidth * 2);
   }
 
   if (style === "bay") {
     const wingWidth = Math.max(frameThickness * 1.2, outerWidth * 0.22);
-    return outerWidth + wingWidth * 2;
+    return Math.max(sillFootprint, outerWidth + wingWidth * 2);
   }
 
-  return outerWidth;
+  return sillFootprint;
 }
 
 function getMaxWindowCountByFootprint(

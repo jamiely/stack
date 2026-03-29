@@ -84,7 +84,7 @@ Runtime tuning panel includes:
 
 - Test mode can start paused by default
 - `&paused=0` starts test mode unpaused
-- `&seed=<int>` sets deterministic seeded spawn offsets/directions for active slabs
+- `&seed=<int>` sets deterministic seeded simulation/distraction state (active-slab spawn placement is geometry-driven and seed-independent)
 - Fixed-step size is configurable via query (`step`), clamped for safety
 - Guarded test API is exposed at `window.__towerStackerTestApi`
 
