@@ -86,4 +86,16 @@ describe("getWindowHorizontalOffsets", () => {
 
     expect(maxOffset).toBeLessThan(span / 2 - 0.25);
   });
+
+  it("enforces a minimum distance from face edges", () => {
+    const span = 1.5;
+    const windowWidth = 0.2;
+    const frameThickness = 0.05;
+    const footprint = windowWidth + frameThickness * 2;
+    const offsets = getWindowHorizontalOffsets(span, 3, "rectangular", windowWidth, frameThickness);
+    const maxOffset = Math.max(...offsets.map((value) => Math.abs(value)));
+    const edgeClearance = span / 2 - maxOffset - footprint / 2;
+
+    expect(edgeClearance).toBeGreaterThanOrEqual(0.12);
+  });
 });

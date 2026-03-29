@@ -6,6 +6,7 @@ const WINDOW_MIN_FACE_SPAN = 0.86;
 const SHUTTER_WINDOW_MIN_FACE_SPAN = 1.02;
 const BAY_WINDOW_MIN_FACE_SPAN = 1.18;
 const WINDOW_EDGE_PADDING_MULTIPLIER = 0.72;
+const WINDOW_MIN_EDGE_CLEARANCE = 0.12;
 const WINDOW_PAIR_GAP_MULTIPLIER = 1.18;
 const WINDOW_MAX_PAIR_GAP_MULTIPLIER = 2.05;
 
@@ -63,7 +64,7 @@ export function getWindowHorizontalOffsets(
 ): number[] {
   const outerWidth = windowWidth + frameThickness * 2;
   const footprint = getWindowFootprintWidth(style, outerWidth, frameThickness);
-  const edgePadding = footprint * WINDOW_EDGE_PADDING_MULTIPLIER;
+  const edgePadding = Math.max(footprint * WINDOW_EDGE_PADDING_MULTIPLIER, footprint / 2 + WINDOW_MIN_EDGE_CLEARANCE);
   if (count === 1) {
     return [0];
   }
@@ -105,7 +106,7 @@ function getMaxWindowCountByFootprint(
   frameThickness: number,
 ): number {
   const footprint = getWindowFootprintWidth(style, outerWidth, frameThickness);
-  const edgePadding = footprint * WINDOW_EDGE_PADDING_MULTIPLIER;
+  const edgePadding = Math.max(footprint * WINDOW_EDGE_PADDING_MULTIPLIER, footprint / 2 + WINDOW_MIN_EDGE_CLEARANCE);
   const minimumPairGap = footprint * WINDOW_PAIR_GAP_MULTIPLIER;
 
   for (let count = 7; count >= 1; count -= 1) {
