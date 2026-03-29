@@ -368,6 +368,7 @@ export class Game {
   private readonly dayNightTargetSkyColor = new Color("#07101c");
   private readonly dayNightStarSmallMaterial = new PointsMaterial({
     color: "#f6fbff",
+    vertexColors: true,
     transparent: true,
     opacity: 0,
     size: 1.6,
@@ -376,6 +377,7 @@ export class Game {
   });
   private readonly dayNightStarMediumMaterial = new PointsMaterial({
     color: "#f6fbff",
+    vertexColors: true,
     transparent: true,
     opacity: 0,
     size: 2.4,
@@ -384,6 +386,7 @@ export class Game {
   });
   private readonly dayNightStarLargeMaterial = new PointsMaterial({
     color: "#f6fbff",
+    vertexColors: true,
     transparent: true,
     opacity: 0,
     size: 3.4,
@@ -3409,18 +3412,24 @@ export class Game {
 
   private createStarField(starCount: number, material: PointsMaterial, minZ: number, maxZ: number): Points {
     const positions: number[] = [];
-    const spreadX = 42;
-    const spreadY = 26;
+    const colors: number[] = [];
+    const spreadX = 44;
+    const spreadY = 34;
 
     for (let index = 0; index < starCount; index += 1) {
       const x = (Math.random() * 2 - 1) * spreadX;
       const y = (Math.random() * 2 - 1) * spreadY;
       const z = minZ + Math.random() * (maxZ - minZ);
       positions.push(x, y, z);
+
+      const normalizedY = (y + spreadY) / (spreadY * 2);
+      const brightness = 0.25 + normalizedY * 0.75;
+      colors.push(brightness, brightness, brightness);
     }
 
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
 
     const stars = new Points(geometry, material);
     stars.frustumCulled = false;
