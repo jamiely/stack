@@ -5,6 +5,7 @@ import {
   isFaceHiddenFromCamera,
   resolveSlabHue,
   resolveTentacleSegmentOffset,
+  resolveWindowCountNoise,
   resolveWindowMetrics,
   resolveWindowShutterPalette,
   sampleDecorNoise,
@@ -116,6 +117,17 @@ describe("weathering and hue helpers", () => {
     expect(resolveSlabHue(0)).toBe(42);
     expect(resolveSlabHue(1)).toBe(73);
     expect(resolveSlabHue(12)).toBe((42 + 12 * 31) % 360);
+  });
+
+  it("resolves deterministic window-count noise per face", () => {
+    const a = resolveWindowCountNoise(12, 1.7);
+    const b = resolveWindowCountNoise(12, 1.7);
+    const c = resolveWindowCountNoise(12, 2.9);
+
+    expect(a).toBeCloseTo(b, 12);
+    expect(a).not.toBe(c);
+    expect(a).toBeGreaterThanOrEqual(0);
+    expect(a).toBeLessThan(1);
   });
 
   it("deterministically varies trim darkness and shutter palettes", () => {

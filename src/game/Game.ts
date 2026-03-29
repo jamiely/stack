@@ -26,6 +26,7 @@ import {
   filterFacesByVisibility,
   resolveSlabHue,
   resolveTentacleSegmentOffset,
+  resolveWindowCountNoise,
   resolveWindowMetrics,
   resolveWindowShutterPalette,
   sampleDecorNoise,
@@ -1450,8 +1451,8 @@ export class Game {
   }
 
   private animateTentacles(signal: number): void {
-    this.tentacleGroup.children.forEach((burstRoot, burstIndex) => {
-      burstRoot.children.forEach((tentacle, index) => {
+    this.tentacleGroup.children.forEach((burstRoot) => {
+      burstRoot.children.forEach((tentacle) => {
         const phase = typeof tentacle.userData.phase === "number" ? tentacle.userData.phase : 0;
         const baseRotationY = typeof tentacle.userData.baseRotationY === "number" ? tentacle.userData.baseRotationY : 0;
         const wiggle = (Math.sin(this.distractionState.elapsedSeconds * 6.2 + phase) + 1) / 2;
@@ -1460,7 +1461,7 @@ export class Game {
         tentacle.scale.x = 0.92 + signal * 0.22;
         tentacle.scale.y = 0.92 + signal * 0.18;
         tentacle.rotation.x = Math.sin(this.distractionState.elapsedSeconds * 4.7 + phase) * 0.2;
-        tentacle.rotation.y = baseRotationY + Math.cos(this.distractionState.elapsedSeconds * 3.9 + phase + (burstIndex + index) * 0.4) * 0.12;
+        tentacle.rotation.y = baseRotationY;
 
         tentacle.children.forEach((segment) => {
           const baseY = typeof segment.userData.baseY === "number" ? segment.userData.baseY : segment.position.y;
@@ -1482,8 +1483,7 @@ export class Game {
       return false;
     }
 
-    const faceIndex = this.getWindowFaceDescriptors(slab).findIndex((candidate) => candidate.noiseSalt === face.noiseSalt);
-    const countNoise = sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + Math.max(0, faceIndex) * 0.73);
+    const countNoise = resolveWindowCountNoise(slab.level, face.noiseSalt);
     const windowCount = resolveWindowCountForFace(face.span, windowStyle, windowWidth, frameThickness, countNoise);
     if (windowCount < 1) {
       return false;
@@ -2283,12 +2283,12 @@ export class Game {
     const shutterMaterial = this.createShutterMaterial(shutterPalette);
     const windowStyle = this.getWindowStyleForSlab(slab);
 
-    this.getVisibleFaceDescriptors(slab).forEach((face, faceIndex) => {
+    this.getVisibleFaceDescriptors(slab).forEach((face) => {
       if (!shouldRenderWindowsForFace(face.span, windowStyle, windowWidth, frameThickness)) {
         return;
       }
 
-      const countNoise = sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + faceIndex * 0.73);
+      const countNoise = resolveWindowCountNoise(slab.level, face.noiseSalt);
       const windowCount = resolveWindowCountForFace(face.span, windowStyle, windowWidth, frameThickness, countNoise);
       if (windowCount < 1) {
         return;

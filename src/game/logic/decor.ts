@@ -72,6 +72,10 @@ export function shouldUseDarkWindowTrim(level: number): boolean {
   return sampleDecorNoise(level * 0.97 + 3.7, 12.61) < 0.34;
 }
 
+export function resolveWindowCountNoise(level: number, faceNoiseSalt: number): number {
+  return sampleDecorNoise(level * 0.91 + faceNoiseSalt, 7.31 + faceNoiseSalt * 0.73);
+}
+
 export function resolveWindowShutterPalette(level: number): "slate" | "teal" | "plum" | "sand" {
   const noise = sampleDecorNoise(level * 1.41 + 6.12, 14.07);
   if (noise < 0.25) {
