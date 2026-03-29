@@ -101,7 +101,7 @@ Runtime tuning panel includes:
 
 ## Automated Verification
 
-- Unit tests cover non-rendering modules (trim/spawn/oscillation/feedback/distraction/integrity/performance/recovery/collapse/ledge-planning logic, config clamping, and non-rendering runtime services such as feedback orchestration)
+- Unit tests cover non-rendering modules (trim/spawn/oscillation/feedback/distraction/integrity/performance/recovery/collapse/ledge/window-layout logic, config clamping, and non-rendering runtime services such as feedback orchestration)
 - Playwright end-to-end tests cover:
   - Title boot autostart flow with intro title-card exit animation
   - Debug-panel and status-surface query gating
