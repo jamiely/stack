@@ -2018,9 +2018,9 @@ export class Game {
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     const radiusX = 6.2;
-    const radiusY = 11.8;
+    const radiusY = 14.8;
     const step = 10.8;
-    const centerY = 0.35;
+    const centerY = 0;
 
     context.fillStyle = "rgba(255, 255, 255, 0.98)";
     for (let x = -12; x <= canvas.width + 14; x += step) {
@@ -2115,8 +2115,8 @@ export class Game {
       return;
     }
 
-    const eaveHeight = Math.max(0.34, Math.min(0.66, slab.dimensions.height * 0.22));
-    const elevationY = slab.dimensions.height / 2 - eaveHeight * 0.32;
+    const eaveHeight = Math.max(0.44, Math.min(0.78, slab.dimensions.height * 0.26));
+    const elevationY = slab.dimensions.height / 2 - eaveHeight * 0.42;
 
     const faces: Array<{
       span: number;
