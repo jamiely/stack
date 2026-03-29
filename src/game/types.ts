@@ -33,6 +33,7 @@ export interface DebugConfig {
   cameraHeight: number;
   cameraDistance: number;
   cameraLerp: number;
+  cameraFramingOffset: number;
   baseWidth: number;
   baseDepth: number;
   slabHeight: number;

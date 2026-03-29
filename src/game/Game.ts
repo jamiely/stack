@@ -86,6 +86,7 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   cameraHeight: { min: 4, max: 20, step: 0.25, label: "Camera Height" },
   cameraDistance: { min: 7, max: 24, step: 0.25, label: "Camera Distance" },
   cameraLerp: { min: 0.02, max: 0.25, step: 0.01, label: "Camera Lerp" },
+  cameraFramingOffset: { min: -1.5, max: 4, step: 0.05, label: "Camera Framing Offset" },
   baseWidth: { min: 2, max: 8, step: 0.25, label: "Block Width" },
   baseDepth: { min: 2, max: 8, step: 0.25, label: "Block Length" },
   slabHeight: { min: 1, max: 5, step: 0.1, label: "Slab Height" },
@@ -374,7 +375,11 @@ export class Game {
   }
 
   private buildScene(): void {
-    this.camera.position.set(CAMERA_X, this.debugConfig.cameraHeight, this.debugConfig.cameraDistance);
+    this.camera.position.set(
+      CAMERA_X,
+      this.debugConfig.cameraHeight + this.debugConfig.cameraFramingOffset,
+      this.debugConfig.cameraDistance,
+    );
     this.gridHelper.position.y = -12;
     this.scene.add(this.stackGroup, this.archivedGroup, this.debrisGroup, this.gridHelper);
 
@@ -831,9 +836,16 @@ export class Game {
     this.updateDistractionActors();
 
     const topLandedSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? null;
-    const initialTargetY = (topLandedSlab?.position.y ?? 0) + this.debugConfig.cameraHeight + STARTUP_CAMERA_LIFT;
+    const initialTargetY =
+      (topLandedSlab?.position.y ?? 0) +
+      this.debugConfig.cameraHeight +
+      this.debugConfig.cameraFramingOffset +
+      STARTUP_CAMERA_LIFT;
     this.cameraTargetPosition.set(CAMERA_X, initialTargetY, this.debugConfig.cameraDistance);
-    this.cameraLookAtY = Math.max(1.2, initialTargetY - this.debugConfig.cameraHeight + STACK_LOOK_AHEAD_Y);
+    this.cameraLookAtY = Math.max(
+      1.2,
+      initialTargetY - this.debugConfig.cameraHeight - this.debugConfig.cameraFramingOffset + STACK_LOOK_AHEAD_Y,
+    );
   }
 
   private spawnNextActive(): void {
@@ -1338,6 +1350,7 @@ export class Game {
     const targetY =
       (topLandedSlab?.position.y ?? 0) +
       this.debugConfig.cameraHeight +
+      this.debugConfig.cameraFramingOffset +
       startupLift -
       (collapseFrame?.cameraDrop ?? 0);
     const targetZ = this.debugConfig.cameraDistance + (collapseFrame?.cameraPullback ?? 0);
@@ -1372,7 +1385,10 @@ export class Game {
       this.camera.position.z += Math.cos(wobblePhase * 0.85) * this.integrityTelemetry.wobbleStrength * 0.4;
     }
 
-    const lookAtTargetY = Math.max(1.2, targetY - this.debugConfig.cameraHeight + STACK_LOOK_AHEAD_Y);
+    const lookAtTargetY = Math.max(
+      1.2,
+      targetY - this.debugConfig.cameraHeight - this.debugConfig.cameraFramingOffset + STACK_LOOK_AHEAD_Y,
+    );
     const lookAtLerp = Math.min(1, fpsAdjustedLerp * 1.25);
     this.cameraLookAtY += (lookAtTargetY - this.cameraLookAtY) * lookAtLerp;
     this.camera.lookAt(0, this.cameraLookAtY, 0);

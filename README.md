@@ -17,7 +17,7 @@ The repo now includes a playable early milestone:
 - V4.1 structural integrity telemetry with deterministic center-of-mass approximation, `stable/precarious/unstable` tiering, and precarious camera wobble feedback
 - V4.2 collapse fail sequence: hard misses or unstable integrity now trigger a deterministic tower-topple presentation with failure camera pullback and collapse feedback cues
 - V5.1 performance/scalability pass: distant slab archival into static chunk proxies, distraction LOD throttling, strict debris pooling/caps, and runtime perf diagnostics
-- Upward camera follow with frame-rate-independent smoothing + eased look-target tracking, score/player-built-height HUD (excluding prebuilt starter slabs), impact flash feedback, and falling debris
+- Upward camera follow with frame-rate-independent smoothing + eased look-target tracking + tunable framing offset, score/player-built-height HUD (excluding prebuilt starter slabs), impact flash feedback, and falling debris
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on the logic layer
 - Playwright coverage for autostart boot flow, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
@@ -52,7 +52,7 @@ The dev server runs on `http://127.0.0.1:4173`.
 - Visit `/?debug` to expose the runtime tuning panel
 - In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
 - Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused; optional `&seed=<int>` drives deterministic seeded active-slab spawn states and is surfaced through test-state snapshots
-- Debug panel controls: tune camera, block dimensions (width/length) plus slab height (default 3.0 with a 1.0–5.0 runtime range so 3.0 sits at slider center; dimension/prebuilt-level edits rebuild the world immediately for live visual feedback), movement speed/ramp, perfect tolerance, combo target, recovery growth/slowdown behavior, audio/haptics enablement, distraction toggles/thresholds/speed, launch distraction channels on demand (tentacle/gorilla/tremor/ufo/contrast/clouds), integrity thresholds/wobble strength, collapse duration/tilt/pullback/drop, quality preset + auto fallback + frame budget, archival/LOD/debris perf knobs, starting stack size (default raised so base extends below screen), debris lifetime/tumble, and grid visibility (now off by default)
+- Debug panel controls: tune camera (height/distance/lerp + framing offset), block dimensions (width/length) plus slab height (default 3.0 with a 1.0–5.0 runtime range so 3.0 sits at slider center; dimension/prebuilt-level edits rebuild the world immediately for live visual feedback), movement speed/ramp, perfect tolerance, combo target, recovery growth/slowdown behavior, audio/haptics enablement, distraction toggles/thresholds/speed, launch distraction channels on demand (tentacle/gorilla/tremor/ufo/contrast/clouds), integrity thresholds/wobble strength, collapse duration/tilt/pullback/drop, quality preset + auto fallback + frame budget, archival/LOD/debris perf knobs, starting stack size (default raised so base extends below screen), debris lifetime/tumble, and grid visibility (now off by default)
 - HUD includes a combo card (`current/target`) so perfect streak progress is visible even outside debug mode
 
 ## Notes

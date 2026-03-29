@@ -27,7 +27,7 @@ This document tracks implemented gameplay features and notable behavior decision
 
 ## Visual and Camera Behavior
 
-- Camera follows landed tower height (instead of the just-spawned active slab) with configurable distance/lerp, frame-rate-independent damping, and a smoothed look target so post-placement climbs feel fluid even during frame-time spikes; startup framing applies a short-lived lift so the initial stack starts lower in the viewport and then eases toward normal framing as floors are added
+- Camera follows landed tower height (instead of the just-spawned active slab) with configurable distance/lerp plus a tunable framing offset, frame-rate-independent damping, and a smoothed look target so post-placement climbs feel fluid even during frame-time spikes; startup framing applies a short-lived lift so the initial stack starts lower in the viewport and then eases toward normal framing as floors are added
 - Successful placements trigger a brief impact flash pulse
 - Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer), contrast wash intensity, and camera tremor pulse effects; cloud motion now continuously sways left↔right (no hard reset) with stronger opacity and guaranteed mid-screen stack occlusion
 - Precarious integrity tier introduces deterministic camera wobble scaled by configurable instability strength
@@ -53,7 +53,7 @@ Debug mode also enables developer-facing HUD/overlay diagnostics that are hidden
 
 Runtime tuning panel includes:
 
-- Camera: height, distance, lerp
+- Camera: height, distance, lerp, framing offset
 - Slab dimensions: block width, block length, slab height (default 3.0; runtime range 1.0–5.0 so the default is centered) with immediate visual world rebuild while sliders change
 - Motion: range, base speed, speed ramp
 - Placement: perfect tolerance, combo target length
