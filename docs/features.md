@@ -34,11 +34,11 @@ This document tracks implemented gameplay features and notable behavior decision
 - Cloud layer keeps at least one cloud visible on screen while enabled and no longer hard-disappears when cloud distraction activity drops
 - Precarious integrity tier introduces deterministic camera wobble scaled by configurable instability strength
 - Active collapse sequence applies deterministic tower tilt/drop presentation and camera pullback progression
-- Collapse now also spawns a deterministic voxelized explosion burst from tower slabs for game-over presentation
+- Collapse now also spawns a deterministic voxelized explosion burst from tower slabs for game-over presentation, including the unplaced slab that caused a hard miss
 - Trimmed overhang pieces become animated debris and despawn by lifetime/threshold
 - Debris pieces inherit the parent slab color, push away from the tower with deterministic lateral motion, and no longer use rotational tumble spin
-- Landed (non-active) slabs (including the prebuilt starting stack) add procedural slit-window facades with vertically centered window placement regardless of slab height so each floor reads like a tower segment
-- Landed slabs can also render deterministic randomized scalloped eave trims near top edges for arcade-style architectural variation
+- Landed (non-active) slabs (including the prebuilt starting stack) add procedural 3D window facades with body-framed windows, protruding sills, deterministic per-side window-count variation, and mixed standard/pointed-top window styles while keeping windows vertically centered
+- Landed slabs can also render deterministic randomized scalloped eave trims near top edges for arcade-style architectural variation, with per-face width variation capped at 100% of that face span
 - Landed slabs can render deterministic randomized bottom-half weathering overlays to add façade wear variation
 - Slab color palette varies by slab level (hue progression)
 - **Color stability rule:** a slab keeps its color when it transitions from active to landed (no post-placement recolor)

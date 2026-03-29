@@ -965,18 +965,19 @@ export class Game {
     this.scene.remove(this.activeMesh);
 
     if (result.outcome === "miss") {
+      const missedSlab = this.activeSlab;
       const missOffset = {
-        x: this.activeSlab.position.x - target.position.x,
-        z: this.activeSlab.position.z - target.position.z,
+        x: missedSlab.position.x - target.position.x,
+        z: missedSlab.position.z - target.position.z,
       };
-      this.spawnDebris(this.activeSlab, this.activeSlab.axis, true);
+      this.spawnDebris(missedSlab, missedSlab.axis, true);
       this.activeSlab = null;
       this.activeMesh = null;
       this.oscillation = null;
       this.lastPlacementOutcome = result.outcome;
       this.combo = updateComboState(this.combo, result.outcome);
       this.feedbackManager.play(getPlacementFeedbackPlan(result.outcome));
-      this.beginCollapseSequence("miss", missOffset);
+      this.beginCollapseSequence("miss", missOffset, [missedSlab]);
       this.gameState = "game_over";
       this.statusMessage = "Hard miss! Tower collapse sequence triggered.";
       this.renderHud();
@@ -1039,7 +1040,11 @@ export class Game {
     this.renderHud();
   }
 
-  private beginCollapseSequence(trigger: CollapseTrigger, offset: { x: number; z: number }): void {
+  private beginCollapseSequence(
+    trigger: CollapseTrigger,
+    offset: { x: number; z: number },
+    additionalBurstSlabs: SlabData[] = [],
+  ): void {
     this.collapseSequence = createCollapseSequence(trigger, offset, {
       durationSeconds: this.debugConfig.collapseDurationSeconds,
       tiltStrength: this.debugConfig.collapseTiltStrength,
@@ -1048,7 +1053,7 @@ export class Game {
     });
     this.feedbackManager.play(getFailureFeedbackPlan(trigger));
     this.triggerImpactPulse(0.36);
-    this.spawnCollapseVoxels();
+    this.spawnCollapseVoxels(additionalBurstSlabs);
     this.stackGroup.visible = false;
     this.archivedGroup.visible = false;
   }
@@ -2054,60 +2059,136 @@ export class Game {
       return;
     }
 
-    const windowHeight = Math.max(0.48, Math.min(0.86, slab.dimensions.height * 0.32));
-    const windowWidth = Math.max(0.13, windowHeight * 0.34);
-    const elevationY = 0;
-    const windowMaterial = new MeshStandardMaterial({
-      color: new Color("#dce4f2"),
-      emissive: new Color("#38506a"),
-      emissiveIntensity: 0.22,
-      metalness: 0.03,
-      roughness: 0.72,
+    const windowHeight = Math.max(0.5, Math.min(0.92, slab.dimensions.height * 0.36));
+    const windowWidth = Math.max(0.16, windowHeight * 0.42);
+    const frameDepth = Math.max(0.045, Math.min(0.08, windowWidth * 0.3));
+    const frameThickness = Math.max(0.03, Math.min(0.09, windowWidth * 0.2));
+    const sillHeight = Math.max(0.03, frameThickness * 0.6);
+    const sillDepth = frameDepth * 1.9;
+
+    const frameMaterial = new MeshStandardMaterial({
+      color: new Color("#f2f6ff"),
+      emissive: new Color("#222e40"),
+      emissiveIntensity: 0.12,
+      metalness: 0.06,
+      roughness: 0.64,
+    });
+
+    const glassMaterial = new MeshStandardMaterial({
+      color: new Color("#ced8ea"),
+      emissive: new Color("#3d5674"),
+      emissiveIntensity: 0.2,
+      metalness: 0.04,
+      roughness: 0.44,
       map: this.windowTexture,
       transparent: true,
-      opacity: 0.96,
-      side: DoubleSide,
+      opacity: 0.94,
       depthWrite: false,
+    });
+
+    const sillMaterial = new MeshStandardMaterial({
+      color: new Color("#e7edf9"),
+      emissive: new Color("#28364a"),
+      emissiveIntensity: 0.14,
+      metalness: 0.04,
+      roughness: 0.66,
     });
 
     const faces: Array<{
       span: number;
-      createPosition: (offset: number) => { x: number; y: number; z: number };
+      createPosition: (offset: number, outDepth: number) => { x: number; y: number; z: number };
       rotationY: number;
+      noiseSalt: number;
     }> = [
       {
         span: slab.dimensions.depth,
-        createPosition: (offset) => ({ x: slab.dimensions.width / 2 + 0.025, y: elevationY, z: offset }),
+        createPosition: (offset, outDepth) => ({ x: slab.dimensions.width / 2 + outDepth, y: 0, z: offset }),
         rotationY: -Math.PI / 2,
+        noiseSalt: 1.7,
       },
       {
         span: slab.dimensions.depth,
-        createPosition: (offset) => ({ x: -(slab.dimensions.width / 2 + 0.025), y: elevationY, z: offset }),
+        createPosition: (offset, outDepth) => ({ x: -(slab.dimensions.width / 2 + outDepth), y: 0, z: offset }),
         rotationY: Math.PI / 2,
+        noiseSalt: 2.9,
       },
       {
         span: slab.dimensions.width,
-        createPosition: (offset) => ({ x: offset, y: elevationY, z: slab.dimensions.depth / 2 + 0.025 }),
+        createPosition: (offset, outDepth) => ({ x: offset, y: 0, z: slab.dimensions.depth / 2 + outDepth }),
         rotationY: 0,
+        noiseSalt: 4.3,
       },
       {
         span: slab.dimensions.width,
-        createPosition: (offset) => ({ x: offset, y: elevationY, z: -(slab.dimensions.depth / 2 + 0.025) }),
+        createPosition: (offset, outDepth) => ({ x: offset, y: 0, z: -(slab.dimensions.depth / 2 + outDepth) }),
         rotationY: Math.PI,
+        noiseSalt: 5.6,
       },
     ];
 
-    faces.forEach((face) => {
-      const windowCount = Math.max(1, Math.min(5, Math.round(face.span / 1.25)));
+    faces.forEach((face, faceIndex) => {
+      const maxCountBySpan = Math.max(1, Math.min(7, Math.floor(face.span / 0.8)));
+      const countNoise = this.sampleDecorNoise(slab.level * 0.91 + face.noiseSalt, 7.31 + faceIndex * 0.73);
+      const windowCount = Math.max(1, Math.min(maxCountBySpan, 1 + Math.floor(countNoise * maxCountBySpan)));
       const spacing = face.span / (windowCount + 1);
 
       for (let index = 0; index < windowCount; index += 1) {
         const localOffset = -face.span / 2 + spacing * (index + 1);
-        const windowMesh = new Mesh(new PlaneGeometry(windowWidth, windowHeight), windowMaterial.clone());
-        const position = face.createPosition(localOffset);
-        windowMesh.position.set(position.x, position.y, position.z);
-        windowMesh.rotation.y = face.rotationY;
-        mesh.add(windowMesh);
+        const styleNoise = this.sampleDecorNoise(slab.level * 1.27 + face.noiseSalt + index * 0.61, 8.17);
+        const pointedTop = styleNoise > 0.58;
+
+        const windowGroup = new Group();
+        const outerWidth = windowWidth + frameThickness * 2;
+        const outerHeight = windowHeight + frameThickness * 2;
+        const glassWidth = Math.max(0.08, windowWidth * 0.9);
+        const glassHeight = Math.max(0.14, windowHeight * 0.9);
+
+        const sideFrameGeometry = new BoxGeometry(frameThickness, outerHeight, frameDepth);
+        const topBottomFrameGeometry = new BoxGeometry(outerWidth, frameThickness, frameDepth);
+
+        const leftFrame = new Mesh(sideFrameGeometry, frameMaterial);
+        leftFrame.position.x = -outerWidth / 2 + frameThickness / 2;
+        const rightFrame = new Mesh(sideFrameGeometry, frameMaterial);
+        rightFrame.position.x = outerWidth / 2 - frameThickness / 2;
+        const topFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
+        topFrame.position.y = outerHeight / 2 - frameThickness / 2;
+        const bottomFrame = new Mesh(topBottomFrameGeometry, frameMaterial);
+        bottomFrame.position.y = -outerHeight / 2 + frameThickness / 2;
+
+        const glass = new Mesh(new BoxGeometry(glassWidth, glassHeight, frameDepth * 0.48), glassMaterial);
+        glass.position.z = -frameDepth * 0.16;
+
+        const sillWidth = Math.min(face.span, Math.max(outerWidth * 1.3, 0.22));
+        const sill = new Mesh(new BoxGeometry(sillWidth, sillHeight, sillDepth), sillMaterial);
+        sill.position.y = -outerHeight / 2 - sillHeight * 0.55;
+        sill.position.z = sillDepth / 2 - frameDepth * 0.5;
+
+        windowGroup.add(leftFrame, rightFrame, topFrame, bottomFrame, glass, sill);
+
+        if (pointedTop) {
+          const gableRise = Math.max(frameThickness * 1.2, outerHeight * 0.2);
+          const gableRun = outerWidth / 2;
+          const gableLength = Math.sqrt(gableRun * gableRun + gableRise * gableRise);
+          const gableBeamGeometry = new BoxGeometry(gableLength, frameThickness * 0.9, frameDepth);
+
+          const leftGable = new Mesh(gableBeamGeometry, frameMaterial);
+          leftGable.position.set(-gableRun / 2, outerHeight / 2 + gableRise / 2, 0);
+          leftGable.rotation.z = Math.atan2(gableRise, gableRun);
+
+          const rightGable = new Mesh(gableBeamGeometry, frameMaterial);
+          rightGable.position.set(gableRun / 2, outerHeight / 2 + gableRise / 2, 0);
+          rightGable.rotation.z = -Math.atan2(gableRise, gableRun);
+
+          const cap = new Mesh(new BoxGeometry(frameThickness, frameThickness * 1.1, frameDepth), frameMaterial);
+          cap.position.set(0, outerHeight / 2 + gableRise, 0);
+          windowGroup.add(leftGable, rightGable, cap);
+        }
+
+        const outDepth = frameDepth / 2 + 0.02;
+        const position = face.createPosition(localOffset, outDepth);
+        windowGroup.position.set(position.x, position.y, position.z);
+        windowGroup.rotation.y = face.rotationY;
+        mesh.add(windowGroup);
       }
     });
   }
@@ -2246,7 +2327,7 @@ export class Game {
     const eaveColor = slabBaseColor.clone().offsetHSL(0, -0.08, -0.06);
     const eaveEmissive = new Color(this.getSlabEmissive(slab.level)).multiplyScalar(0.72);
 
-    finalFaces.forEach((face) => {
+    finalFaces.forEach((face, faceIndex) => {
       const material = new MeshStandardMaterial({
         color: eaveColor,
         emissive: eaveEmissive,
@@ -2260,8 +2341,18 @@ export class Game {
         depthWrite: false,
       });
 
-      const eave = new Mesh(new PlaneGeometry(Math.max(0.5, face.span + 0.08), eaveHeight), material);
+      const widthRatio = 0.45 + this.sampleDecorNoise(slab.level * 1.11 + faceIndex * 0.77, 2.41) * 0.55;
+      const eaveWidth = Math.max(0.4, Math.min(face.span, face.span * widthRatio));
+      const maxOffset = Math.max(0, (face.span - eaveWidth) / 2);
+      const centeredOffset = (this.sampleDecorNoise(slab.level * 1.37 + faceIndex * 1.19, 9.53) - 0.5) * 2 * maxOffset;
+
+      const eave = new Mesh(new PlaneGeometry(eaveWidth, eaveHeight), material);
       const position = face.createPosition();
+      if (Math.abs(face.rotationY) < 0.001 || Math.abs(Math.abs(face.rotationY) - Math.PI) < 0.001) {
+        position.x += centeredOffset;
+      } else {
+        position.z += centeredOffset;
+      }
       eave.position.set(position.x, position.y, position.z);
       eave.rotation.y = face.rotationY;
       mesh.add(eave);
@@ -2291,16 +2382,17 @@ export class Game {
     return new Color().setHSL(hue / 360, 0.58, 0.16).getStyle();
   }
 
-  private spawnCollapseVoxels(): void {
+  private spawnCollapseVoxels(additionalBurstSlabs: SlabData[] = []): void {
     this.clearGroup(this.collapseVoxelGroup, true);
     this.collapseVoxels = [];
 
     const random = this.seededRandom ?? Math.random;
-    const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+    const burstSlabs = [...this.landedSlabs, ...additionalBurstSlabs];
+    const topSlab = burstSlabs[burstSlabs.length - 1];
     const topCenter = topSlab?.position ?? { x: 0, y: 0, z: 0 };
 
-    for (let slabIndex = 0; slabIndex < this.landedSlabs.length; slabIndex += 1) {
-      const slab = this.landedSlabs[slabIndex]!;
+    for (let slabIndex = 0; slabIndex < burstSlabs.length; slabIndex += 1) {
+      const slab = burstSlabs[slabIndex]!;
       const xCount = Math.max(1, Math.min(5, Math.round(slab.dimensions.width / COLLAPSE_VOXEL_SIZE)));
       const yCount = Math.max(1, Math.min(2, Math.round(slab.dimensions.height / COLLAPSE_VOXEL_SIZE)));
       const zCount = Math.max(1, Math.min(5, Math.round(slab.dimensions.depth / COLLAPSE_VOXEL_SIZE)));

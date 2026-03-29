@@ -1,8 +1,7 @@
 # TODO
 
-- [x] Landed slabs render tower-window facades to sell building progression
-- [x] Removed instability-only game-over; runs now end on hard misses
-- [x] Removed visible "Restart Run" button from game-over overlay
-- [x] UFO orbit altitude now tracks one slab-height above the tower top
-- [x] Keep at least one cloud visible on screen while cloud layer is enabled
-- [x] Clouds no longer pop out when distraction activation drops; they persist onscreen
+- [x] make windows more 3d, give them sills, and window frames that are bodies
+- [x] add another window style whose top ends in a point. randomly choose between window styles.
+- [x] when the game ends, the block that we have not placed should also explode into voxels
+- [x] increase ledge maximum width to 100% block length
+- [x] randomize the number of windows that appear on each side of the block
