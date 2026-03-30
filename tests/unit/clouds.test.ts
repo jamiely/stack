@@ -33,11 +33,11 @@ describe("cloud logic", () => {
     expect(fast).toBe(0);
   });
 
-  it("gives top-spawn clouds a positive entry drift", () => {
+  it("does not apply world-y drift while top-entry animation runs", () => {
     const low = resolveCloudVerticalVelocity(0, true);
     const high = resolveCloudVerticalVelocity(1, true);
-    expect(low).toBeGreaterThan(0);
-    expect(high).toBeGreaterThan(low);
+    expect(low).toBe(0);
+    expect(high).toBe(0);
   });
 
   it("clamps vertical drift noise input", () => {

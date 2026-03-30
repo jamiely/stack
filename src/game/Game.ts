@@ -420,6 +420,8 @@ export class Game {
   private readonly sidingTexture = this.createSidingTexture();
   private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
   private cloudSpawnFromTop: boolean[] = [false, false, false];
+  private cloudEntryProgress: number[] = [1, 1, 1];
+  private cloudEntryScreenY: number[] = [0, 0, 0];
   private cloudSizeScales: number[] = [1, 1, 1];
   private cloudVerticalVelocity: number[] = [0, 0, 0];
   private cloudAnchorsInitialized = false;
@@ -1027,6 +1029,8 @@ export class Game {
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.cloudAnchorsInitialized = false;
     this.cloudSpawnFromTop = [false, false, false];
+    this.cloudEntryProgress = [1, 1, 1];
+    this.cloudEntryScreenY = [0, 0, 0];
     this.cloudSizeScales = [1, 1, 1];
     this.cloudVerticalVelocity = [0, 0, 0];
     this.cloudRespawnCursor = 0;
@@ -1559,6 +1563,8 @@ export class Game {
       this.cloudLayer.style.opacity = "0";
       this.cloudAnchorsInitialized = false;
       this.cloudSpawnFromTop = cloudNodes.map(() => false);
+      this.cloudEntryProgress = cloudNodes.map(() => 1);
+      this.cloudEntryScreenY = cloudNodes.map(() => 0);
       this.cloudSizeScales = cloudNodes.map(() => 1);
       this.cloudVerticalVelocity = cloudNodes.map(() => 0);
       this.cloudRespawnCursor = 0;
@@ -1575,6 +1581,8 @@ export class Game {
     if (!this.cloudAnchorsInitialized) {
       this.cloudWorldAnchors = cloudNodes.map((_, index) => this.createCloudAnchor(topSlab, index, 0, false));
       this.cloudSpawnFromTop = cloudNodes.map(() => false);
+      this.cloudEntryProgress = cloudNodes.map(() => 1);
+      this.cloudEntryScreenY = cloudNodes.map(() => 0);
       this.cloudSizeScales = cloudNodes.map((_, index) => this.sampleCloudSizeScale(topSlab.level, index, 0));
       this.cloudVerticalVelocity = cloudNodes.map((_, index) => this.sampleCloudVerticalVelocity(topSlab.level, index, 0, false));
       this.cloudAnchorsInitialized = true;
@@ -1587,6 +1595,8 @@ export class Game {
       const respawnSalt = this.frameCounter + topSlab.level * 13;
       this.cloudWorldAnchors[respawnIndex] = this.createCloudAnchor(topSlab, respawnIndex, respawnSalt, true);
       this.cloudSpawnFromTop[respawnIndex] = true;
+      this.cloudEntryProgress[respawnIndex] = 0;
+      this.cloudEntryScreenY[respawnIndex] = -80 - respawnIndex * 24;
       this.cloudSizeScales[respawnIndex] = this.sampleCloudSizeScale(topSlab.level, respawnIndex, respawnSalt);
       this.cloudVerticalVelocity[respawnIndex] = this.sampleCloudVerticalVelocity(topSlab.level, respawnIndex, respawnSalt, true);
       this.cloudRespawnCursor = (this.cloudRespawnCursor + 1) % cloudNodes.length;
@@ -1615,6 +1625,8 @@ export class Game {
         const respawnAnchor = this.createCloudAnchor(topSlab, index, respawnSalt, true);
         this.cloudWorldAnchors[index] = respawnAnchor;
         this.cloudSpawnFromTop[index] = true;
+        this.cloudEntryProgress[index] = 0;
+        this.cloudEntryScreenY[index] = -80 - index * 24;
         this.cloudSizeScales[index] = this.sampleCloudSizeScale(topSlab.level, index, respawnSalt);
         this.cloudVerticalVelocity[index] = this.sampleCloudVerticalVelocity(topSlab.level, index, respawnSalt, true);
       }
@@ -1627,22 +1639,37 @@ export class Game {
       );
       const stableProjected = stablePoint.project(this.camera);
       const screenX = (stableProjected.x * 0.5 + 0.5) * width;
-      const screenY = (-stableProjected.y * 0.5 + 0.5) * height;
+      const projectedScreenY = (-stableProjected.y * 0.5 + 0.5) * height;
       const depthFromStack = new Vector3().subVectors(stableAnchor, new Vector3(topSlab.position.x, topSlab.position.y, topSlab.position.z));
       const towardCamera = new Vector3(this.camera.position.x - topSlab.position.x, 0, this.camera.position.z - topSlab.position.z).normalize();
       const frontBack = depthFromStack.dot(towardCamera);
       const sizeScale = this.cloudSizeScales[index] ?? 1;
       const depthScale = frontBack >= 0 ? 1.05 : 0.72;
       const scale = sizeScale * depthScale;
-      cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
 
       const enteringFromTop = this.cloudSpawnFromTop[index] === true;
+      const previousProgress = this.cloudEntryProgress[index] ?? 1;
+      const nextProgress = enteringFromTop
+        ? Math.min(1, previousProgress + Math.max(0, deltaSeconds) * 1.8)
+        : 1;
+      this.cloudEntryProgress[index] = nextProgress;
+
+      const entryStartY = -80 - index * 24;
+      const targetEntryY = entryStartY + (projectedScreenY - entryStartY) * nextProgress;
+      const previousEntryY = this.cloudEntryScreenY[index] ?? entryStartY;
+      const minimumDownwardY = previousEntryY + Math.max(0, deltaSeconds) * 56;
+      const screenY = enteringFromTop
+        ? Math.max(targetEntryY, minimumDownwardY)
+        : projectedScreenY;
+      this.cloudEntryScreenY[index] = screenY;
+
+      cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
+
       if (!enteringFromTop) {
         cloudNode.style.opacity = "1";
       } else {
-        const entryAlpha = Math.min(1, Math.max(0, (stableProjected.y + 1.18) / 0.34));
-        cloudNode.style.opacity = entryAlpha.toFixed(3);
-        if (entryAlpha >= 0.995) {
+        cloudNode.style.opacity = nextProgress.toFixed(3);
+        if (nextProgress >= 0.995) {
           this.cloudSpawnFromTop[index] = false;
           this.cloudVerticalVelocity[index] = 0;
         }
