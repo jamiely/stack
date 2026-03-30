@@ -258,6 +258,8 @@ const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
 const CLOUD_RESPAWN_LEVEL_INTERVAL = 2;
+const CLOUD_ENTRY_PROGRESS_PER_SECOND = 0.65;
+const CLOUD_ENTRY_MIN_FALL_PX_PER_SECOND = 18;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -1650,14 +1652,14 @@ export class Game {
       const enteringFromTop = this.cloudSpawnFromTop[index] === true;
       const previousProgress = this.cloudEntryProgress[index] ?? 1;
       const nextProgress = enteringFromTop
-        ? Math.min(1, previousProgress + Math.max(0, deltaSeconds) * 1.8)
+        ? Math.min(1, previousProgress + Math.max(0, deltaSeconds) * CLOUD_ENTRY_PROGRESS_PER_SECOND)
         : 1;
       this.cloudEntryProgress[index] = nextProgress;
 
       const entryStartY = -80 - index * 24;
       const targetEntryY = entryStartY + (projectedScreenY - entryStartY) * nextProgress;
       const previousEntryY = this.cloudEntryScreenY[index] ?? entryStartY;
-      const minimumDownwardY = previousEntryY + Math.max(0, deltaSeconds) * 56;
+      const minimumDownwardY = previousEntryY + Math.max(0, deltaSeconds) * CLOUD_ENTRY_MIN_FALL_PX_PER_SECOND;
       const screenY = enteringFromTop
         ? Math.max(targetEntryY, minimumDownwardY)
         : projectedScreenY;
