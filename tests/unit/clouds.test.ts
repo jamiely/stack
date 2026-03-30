@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveCloudSpawnNdcX, resolveCloudVerticalVelocity, shouldRespawnCloud } from "../../src/game/logic/clouds";
+import { resolveCloudSpawnNdcX, shouldRespawnCloud } from "../../src/game/logic/clouds";
 
 describe("cloud logic", () => {
   it("respawns clouds that fall below the viewport", () => {
@@ -26,22 +26,4 @@ describe("cloud logic", () => {
     expect(resolveCloudSpawnNdcX(9)).toBeCloseTo(0.95, 6);
   });
 
-  it("keeps persistent clouds stationary in world Y", () => {
-    const slow = resolveCloudVerticalVelocity(0, false);
-    const fast = resolveCloudVerticalVelocity(1, false);
-    expect(slow).toBe(0);
-    expect(fast).toBe(0);
-  });
-
-  it("does not apply world-y drift while top-entry animation runs", () => {
-    const low = resolveCloudVerticalVelocity(0, true);
-    const high = resolveCloudVerticalVelocity(1, true);
-    expect(low).toBe(0);
-    expect(high).toBe(0);
-  });
-
-  it("clamps vertical drift noise input", () => {
-    expect(resolveCloudVerticalVelocity(-2, true)).toBeCloseTo(resolveCloudVerticalVelocity(0, true), 6);
-    expect(resolveCloudVerticalVelocity(4, false)).toBeCloseTo(resolveCloudVerticalVelocity(1, false), 6);
-  });
 });

@@ -19,10 +19,6 @@ export function resolveCloudSpawnNdcX(noise: number): number {
   return -0.95 + clampedNoise * 1.9;
 }
 
-export function resolveCloudVerticalVelocity(_noise: number, _spawnFromTop: boolean): number {
-  return 0;
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
