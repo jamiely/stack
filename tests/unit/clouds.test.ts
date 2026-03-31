@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { resolveCloudSpawnNdcX, shouldRespawnCloud } from "../../src/game/logic/clouds";
+import {
+  initializeCloudState,
+  resolveCloudSpawnNdcX,
+  shouldRespawnCloud,
+  stepCloudState,
+  type CloudCameraFrame,
+  type CloudSimulationConfig,
+} from "../../src/game/logic/clouds";
+
+const baseConfig: CloudSimulationConfig = {
+  count: 4,
+  horizontalDriftSpeed: 0,
+  spawnBandAboveCamera: 4,
+  despawnBandBelowCamera: 3,
+  laneRatioFront: 0.5,
+  laneDepthFront: 12,
+  laneDepthBack: 24,
+};
+
+const baseCameraFrame: CloudCameraFrame = {
+  viewTopY: 100,
+  viewBottomY: 80,
+  visibleWorldXMin: -10,
+  visibleWorldXMax: 10,
+};
 
 describe("cloud logic", () => {
   it("respawns clouds that fall below the viewport", () => {
@@ -25,5 +49,160 @@ describe("cloud logic", () => {
     expect(resolveCloudSpawnNdcX(-5)).toBeCloseTo(-0.95, 6);
     expect(resolveCloudSpawnNdcX(9)).toBeCloseTo(0.95, 6);
   });
+});
 
+describe("cloud simulation state", () => {
+  it("initializes deterministically for the same seed", () => {
+    const first = initializeCloudState({ seed: 42, config: baseConfig, cameraFrame: baseCameraFrame });
+    const second = initializeCloudState({ seed: 42, config: baseConfig, cameraFrame: baseCameraFrame });
+
+    expect(first).toEqual(second);
+  });
+
+  it("varies at least one cloud across different seeds", () => {
+    const first = initializeCloudState({ seed: 1, config: baseConfig, cameraFrame: baseCameraFrame });
+    const second = initializeCloudState({ seed: 2, config: baseConfig, cameraFrame: baseCameraFrame });
+
+    expect(first.clouds).toHaveLength(baseConfig.count);
+    expect(second.clouds).toHaveLength(baseConfig.count);
+    expect(first.clouds.some((cloud, index) => {
+      const other = second.clouds[index];
+      return cloud.x !== other.x || cloud.y !== other.y || cloud.z !== other.z || cloud.lane !== other.lane;
+    })).toBe(true);
+  });
+
+  it("creates unique ids and finite coordinates", () => {
+    const state = initializeCloudState({ seed: 777, config: baseConfig, cameraFrame: baseCameraFrame });
+    const ids = new Set(state.clouds.map((cloud) => cloud.id));
+
+    expect(ids.size).toBe(state.clouds.length);
+    for (const cloud of state.clouds) {
+      expect(Number.isFinite(cloud.x)).toBe(true);
+      expect(Number.isFinite(cloud.y)).toBe(true);
+      expect(Number.isFinite(cloud.z)).toBe(true);
+    }
+  });
+
+  it("steps deterministically from the same prior snapshot", () => {
+    const initial = initializeCloudState({ seed: 99, config: baseConfig, cameraFrame: baseCameraFrame });
+
+    const firstStep = stepCloudState({
+      previousState: initial,
+      config: baseConfig,
+      cameraFrame: baseCameraFrame,
+      deltaSeconds: 1 / 60,
+    });
+    const secondStep = stepCloudState({
+      previousState: initial,
+      config: baseConfig,
+      cameraFrame: baseCameraFrame,
+      deltaSeconds: 1 / 60,
+    });
+
+    expect(firstStep).toEqual(secondStep);
+  });
+
+  it("does not recycle before crossing the despawn threshold", () => {
+    const config: CloudSimulationConfig = {
+      ...baseConfig,
+      spawnBandAboveCamera: 6,
+      despawnBandBelowCamera: 4,
+    };
+    const initial = initializeCloudState({ seed: 1234, config, cameraFrame: baseCameraFrame });
+    const cloud = initial.clouds[0];
+    const thresholdY = baseCameraFrame.viewBottomY - config.despawnBandBelowCamera;
+
+    const anchoredCloudY = thresholdY + 0.25;
+    const nextState = stepCloudState({
+      previousState: {
+        ...initial,
+        clouds: [
+          {
+            ...cloud,
+            y: anchoredCloudY,
+            recycleCount: 0,
+          },
+        ],
+      },
+      config,
+      cameraFrame: baseCameraFrame,
+      deltaSeconds: 1 / 60,
+    });
+
+    expect(nextState.clouds[0].recycleCount).toBe(0);
+    expect(nextState.clouds[0].y).toBeCloseTo(anchoredCloudY, 6);
+  });
+
+  it("recycles after threshold crossing into the spawn-above band", () => {
+    const config: CloudSimulationConfig = {
+      ...baseConfig,
+      spawnBandAboveCamera: 5,
+      despawnBandBelowCamera: 3,
+    };
+    const initial = initializeCloudState({ seed: 5678, config, cameraFrame: baseCameraFrame });
+    const cloud = initial.clouds[0];
+    const thresholdY = baseCameraFrame.viewBottomY - config.despawnBandBelowCamera;
+
+    const previousState = {
+      ...initial,
+      clouds: [
+        {
+          ...cloud,
+          y: thresholdY - 0.001,
+          recycleCount: 0,
+        },
+      ],
+    };
+
+    const nextState = stepCloudState({
+      previousState,
+      config,
+      cameraFrame: baseCameraFrame,
+      deltaSeconds: 1 / 60,
+    });
+
+    const recycled = nextState.clouds[0];
+    expect(recycled.recycleCount).toBe(1);
+    expect(recycled.y).toBeGreaterThanOrEqual(baseCameraFrame.viewTopY);
+    expect(recycled.y).toBeLessThanOrEqual(baseCameraFrame.viewTopY + config.spawnBandAboveCamera);
+  });
+
+  it("replays recycle transitions deterministically across fixed steps", () => {
+    const config: CloudSimulationConfig = {
+      ...baseConfig,
+      count: 1,
+      spawnBandAboveCamera: 3,
+      despawnBandBelowCamera: 2,
+    };
+
+    const runSequence = () => {
+      let state = initializeCloudState({ seed: 999, config, cameraFrame: baseCameraFrame });
+      state = {
+        ...state,
+        clouds: [
+          {
+            ...state.clouds[0],
+            y: baseCameraFrame.viewBottomY - config.despawnBandBelowCamera - 0.01,
+          },
+        ],
+      };
+
+      for (let index = 0; index < 3; index += 1) {
+        state = stepCloudState({
+          previousState: state,
+          config,
+          cameraFrame: baseCameraFrame,
+          deltaSeconds: 1 / 60,
+        });
+      }
+
+      return state;
+    };
+
+    const first = runSequence();
+    const second = runSequence();
+
+    expect(first).toEqual(second);
+    expect(first.clouds[0].recycleCount).toBeGreaterThanOrEqual(1);
+  });
 });
