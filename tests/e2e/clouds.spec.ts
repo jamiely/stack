@@ -203,3 +203,106 @@ test("cloud layer toggle off/on cleanly gates simulation mapping", async ({ page
   expect(reenabledSnapshot.transform.length).toBeGreaterThan(0);
   expect(reenabledSnapshot.opacity).toBeGreaterThan(0);
 });
+
+test("cloud debug controls apply on the next simulation step", async ({ page }) => {
+  await page.goto("/?debug&test&paused=1&seed=42");
+  await expect(page.getByTestId("debug-panel")).toBeVisible();
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        stepSimulation: (steps?: number) => void;
+        applyDebugConfig: (config: Partial<Record<string, number | boolean>>) => void;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.startGame();
+    (api as { setPaused?: (paused: boolean) => void }).setPaused?.(true);
+    api.applyDebugConfig({
+      distractionCloudStartLevel: 0,
+      distractionCloudEnabled: true,
+      distractionCloudCount: 2,
+      distractionCloudDriftSpeed: 0,
+    });
+    api.stepSimulation(2);
+  });
+
+  const beforeUpdate = await page.evaluate(() => {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>(".distraction-cloud"));
+    return {
+      count: nodes.length,
+      firstTransform: nodes[0]?.style.transform ?? "",
+    };
+  });
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        applyDebugConfig: (config: Partial<Record<string, number | boolean>>) => void;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.applyDebugConfig({
+      distractionCloudCount: 9,
+      distractionCloudDriftSpeed: -1.75,
+      distractionCloudSpawnBandAbove: 1,
+      distractionCloudDespawnBandBelow: 3,
+    });
+  });
+
+  const beforeStep = await page.evaluate(() => {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>(".distraction-cloud"));
+    return {
+      count: nodes.length,
+      firstTransform: nodes[0]?.style.transform ?? "",
+    };
+  });
+
+  expect(beforeStep.count).toBe(beforeUpdate.count);
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        stepSimulation: (steps?: number) => void;
+        getState: () => { debugConfig: Record<string, number> };
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.stepSimulation(1);
+  });
+
+  const afterStep = await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        getState: () => { debugConfig: Record<string, number> };
+      };
+    }).__towerStackerTestApi;
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>(".distraction-cloud"));
+
+    return {
+      count: nodes.length,
+      firstTransform: nodes[0]?.style.transform ?? "",
+      debugConfig: api?.getState().debugConfig ?? null,
+    };
+  });
+
+  expect(afterStep.count).toBe(9);
+  expect(afterStep.firstTransform.length).toBeGreaterThan(0);
+  expect(afterStep.debugConfig).not.toBeNull();
+  expect(afterStep.debugConfig!.distractionCloudSpawnBandAbove).toBeGreaterThanOrEqual(
+    afterStep.debugConfig!.distractionCloudDespawnBandBelow + 0.5,
+  );
+});

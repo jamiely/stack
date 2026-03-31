@@ -1,3 +1,4 @@
+import { sanitizeCloudLifecycleBands } from "./logic/clouds";
 import type { DebugConfig } from "./types";
 
 export const defaultDebugConfig: DebugConfig = {
@@ -33,6 +34,10 @@ export const defaultDebugConfig: DebugConfig = {
   distractionContrastEnabled: true,
   distractionCloudEnabled: true,
   distractionCloudStartLevel: 32,
+  distractionCloudCount: 3,
+  distractionCloudDriftSpeed: -0.3,
+  distractionCloudSpawnBandAbove: 7.5,
+  distractionCloudDespawnBandBelow: 4.5,
   distractionFireworksEnabled: true,
   distractionFireworksStartLevel: 18,
   dayNightCycleBlocks: 20,
@@ -61,6 +66,12 @@ export const defaultDebugConfig: DebugConfig = {
 };
 
 export function clampDebugConfig(config: DebugConfig): DebugConfig {
+  const cloudLifecycleBands = sanitizeCloudLifecycleBands({
+    spawnBandAboveCamera: clamp(config.distractionCloudSpawnBandAbove, 0, 30),
+    despawnBandBelowCamera: clamp(config.distractionCloudDespawnBandBelow, 0, 29.5),
+    minimumSeparation: 0.5,
+  });
+
   return {
     cameraHeight: clamp(config.cameraHeight, 4, 20),
     cameraDistance: clamp(config.cameraDistance, 7, 24),
@@ -94,6 +105,10 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     distractionContrastEnabled: config.distractionContrastEnabled,
     distractionCloudEnabled: config.distractionCloudEnabled,
     distractionCloudStartLevel: Math.round(clamp(config.distractionCloudStartLevel, 0, 120)),
+    distractionCloudCount: Math.round(clamp(config.distractionCloudCount, 0, 12)),
+    distractionCloudDriftSpeed: clamp(config.distractionCloudDriftSpeed, -4, 4),
+    distractionCloudSpawnBandAbove: cloudLifecycleBands.spawnBandAboveCamera,
+    distractionCloudDespawnBandBelow: cloudLifecycleBands.despawnBandBelowCamera,
     distractionFireworksEnabled: config.distractionFireworksEnabled,
     distractionFireworksStartLevel: Math.round(clamp(config.distractionFireworksStartLevel, 0, 120)),
     dayNightCycleBlocks: Math.round(clamp(config.dayNightCycleBlocks, 4, 80)),

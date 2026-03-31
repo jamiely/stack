@@ -184,6 +184,10 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   distractionUfoStartLevel: { min: 0, max: 100, step: 1, label: "UFO Start" },
   distractionBatStartLevel: { min: 0, max: 120, step: 1, label: "Bat Start" },
   distractionCloudStartLevel: { min: 0, max: 120, step: 1, label: "Cloud Start" },
+  distractionCloudCount: { min: 0, max: 12, step: 1, label: "Cloud Count" },
+  distractionCloudDriftSpeed: { min: -4, max: 4, step: 0.05, label: "Cloud Drift" },
+  distractionCloudSpawnBandAbove: { min: 0, max: 30, step: 0.1, label: "Cloud Spawn Above" },
+  distractionCloudDespawnBandBelow: { min: 0, max: 29.5, step: 0.1, label: "Cloud Despawn Below" },
   distractionFireworksStartLevel: { min: 0, max: 120, step: 1, label: "Fireworks Start" },
   dayNightCycleBlocks: { min: 4, max: 80, step: 1, label: "Day/Night Blocks" },
   integrityPrecariousThreshold: { min: 0.35, max: 0.85, step: 0.01, label: "Precarious Threshold" },
@@ -258,7 +262,7 @@ const TENTACLE_BURST_CHANCE = 0.5;
 const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
-const CLOUD_DEFAULT_COUNT = 3;
+const CLOUD_DEFAULT_COUNT = defaultDebugConfig.distractionCloudCount;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -684,6 +688,7 @@ export class Game {
             "maxActiveDebris",
             "debrisPoolLimit",
             "distractionBatStartLevel",
+            "distractionCloudCount",
             "distractionFireworksStartLevel",
             "dayNightCycleBlocks",
           ];
@@ -1555,6 +1560,10 @@ export class Game {
       return;
     }
 
+    if (deltaSeconds <= 0) {
+      return;
+    }
+
     const simulationConfig = this.buildCloudSimulationConfig();
     const cameraFrame = this.createCloudCameraFrame(topSlab);
     const cloudNodes = this.syncCloudNodePool(simulationConfig.count);
@@ -1629,13 +1638,11 @@ export class Game {
   }
 
   private buildCloudSimulationConfig(): CloudSimulationConfig {
-    const motionSpeed = Math.max(0, this.debugConfig.distractionMotionSpeed);
-
     return {
-      count: CLOUD_DEFAULT_COUNT,
-      horizontalDriftSpeed: -0.3 * motionSpeed,
-      spawnBandAboveCamera: Math.max(2, this.debugConfig.cameraHeight * 1.1),
-      despawnBandBelowCamera: Math.max(1.5, this.debugConfig.cameraHeight * 0.7),
+      count: this.debugConfig.distractionCloudCount,
+      horizontalDriftSpeed: this.debugConfig.distractionCloudDriftSpeed,
+      spawnBandAboveCamera: this.debugConfig.distractionCloudSpawnBandAbove,
+      despawnBandBelowCamera: this.debugConfig.distractionCloudDespawnBandBelow,
       laneRatioFront: 0.5,
       laneDepthFront: -2.2,
       laneDepthBack: 1.8,
@@ -2144,9 +2151,12 @@ export class Game {
     };
   }
 
-  private applyDebugConfig(config: DebugConfig): void {
+  private applyDebugConfig(config: Partial<DebugConfig>): void {
     const previousConfig = this.debugConfig;
-    this.debugConfig = clampDebugConfig(config);
+    this.debugConfig = clampDebugConfig({
+      ...this.debugConfig,
+      ...config,
+    });
     this.gridHelper.visible = this.debugConfig.gridVisible;
     this.feedbackManager.updateConfig({
       audioEnabled: this.debugConfig.feedbackAudioEnabled,
@@ -2282,6 +2292,7 @@ export class Game {
         "maxActiveDebris",
         "debrisPoolLimit",
         "distractionBatStartLevel",
+        "distractionCloudCount",
         "distractionFireworksStartLevel",
         "dayNightCycleBlocks",
       ];

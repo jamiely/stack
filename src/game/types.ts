@@ -62,6 +62,10 @@ export interface DebugConfig {
   distractionContrastEnabled: boolean;
   distractionCloudEnabled: boolean;
   distractionCloudStartLevel: number;
+  distractionCloudCount: number;
+  distractionCloudDriftSpeed: number;
+  distractionCloudSpawnBandAbove: number;
+  distractionCloudDespawnBandBelow: number;
   distractionFireworksEnabled: boolean;
   distractionFireworksStartLevel: number;
   dayNightCycleBlocks: number;
@@ -219,7 +223,7 @@ export interface TestApi {
   stopActiveSlab(): void;
   restartGame(): void;
   returnToTitle(): void;
-  applyDebugConfig(config: DebugConfig): void;
+  applyDebugConfig(config: Partial<DebugConfig>): void;
   stepSimulation(steps?: number): void;
   setPaused(paused: boolean): void;
   setActiveOffset(offset: number): boolean;

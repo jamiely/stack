@@ -41,6 +41,10 @@ describe("clampDebugConfig", () => {
         distractionContrastEnabled: false,
         distractionCloudEnabled: true,
         distractionCloudStartLevel: 999,
+        distractionCloudCount: 999,
+        distractionCloudDriftSpeed: 99,
+        distractionCloudSpawnBandAbove: -4,
+        distractionCloudDespawnBandBelow: 99,
         distractionFireworksEnabled: false,
         distractionFireworksStartLevel: 999,
         dayNightCycleBlocks: 1,
@@ -100,6 +104,10 @@ describe("clampDebugConfig", () => {
       distractionContrastEnabled: false,
       distractionCloudEnabled: true,
       distractionCloudStartLevel: 120,
+      distractionCloudCount: 12,
+      distractionCloudDriftSpeed: 4,
+      distractionCloudSpawnBandAbove: 30,
+      distractionCloudDespawnBandBelow: 29.5,
       distractionFireworksEnabled: false,
       distractionFireworksStartLevel: 120,
       dayNightCycleBlocks: 4,
@@ -126,5 +134,17 @@ describe("clampDebugConfig", () => {
       tremorShakeAmount: 3,
       gridVisible: true,
     });
+  });
+
+  it("sanitizes cloud lifecycle controls and preserves explicit zero drift", () => {
+    const clamped = clampDebugConfig({
+      ...defaultDebugConfig,
+      distractionCloudDriftSpeed: 0,
+      distractionCloudSpawnBandAbove: 1,
+      distractionCloudDespawnBandBelow: 3,
+    });
+
+    expect(clamped.distractionCloudDriftSpeed).toBe(0);
+    expect(clamped.distractionCloudSpawnBandAbove).toBeGreaterThanOrEqual(clamped.distractionCloudDespawnBandBelow + 0.5);
   });
 });
