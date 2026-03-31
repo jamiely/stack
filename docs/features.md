@@ -32,8 +32,8 @@ This document tracks implemented gameplay features and notable behavior decision
 
 - Camera follows landed tower height (instead of the just-spawned active slab) with configurable distance/lerp plus a tunable framing offset, frame-rate-independent damping, and a smoothed look target so post-placement climbs feel fluid even during frame-time spikes; startup framing applies a short-lived lift so the initial stack starts lower in the viewport and then eases toward normal framing as floors are added, and `Camera Height` now adjusts eye elevation independently from the focal-point `Camera Y` offset
 - Successful placements trigger a brief impact flash pulse plus a configurable camera shake burst (`Placement Shake` debug control); tremor pulses include a subtle vertical camera component
-- Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer, fireworks), contrast wash intensity, and camera tremor pulse effects; cloud rendering is world-projected so vertical cloud position tracks world space instead of appearing pinned to screen coordinates, and the cloud adapter now maps deterministic lane/variant metadata to rounded-lobe silhouettes with subtle front/back depth styling
-- Cloud layer keeps at least one cloud visible on screen while enabled and no longer hard-disappears when cloud distraction activity drops
+- Active distraction channels now drive visible overlay actors (gorilla, UFO, cloud layer, fireworks), contrast wash intensity, and camera tremor pulse effects; cloud rendering is world-projected so vertical cloud position tracks world space instead of appearing pinned to screen coordinates, and the cloud adapter maps deterministic lane/variant metadata to rounded-lobe silhouettes with subtle front/back depth styling.
+- Cloud lifecycle is simulation-driven and camera-relative (despawn below threshold, recycle above camera spawn band) with deterministic in-place recycle metadata; by default tuning keeps on-screen coverage while enabled, but cloud count debug controls can intentionally reduce the layer to zero nodes.
 - Precarious integrity tier introduces deterministic camera wobble scaled by configurable instability strength
 - Active collapse sequence applies deterministic tower tilt/drop presentation and camera pullback progression
 - Collapse now also spawns a deterministic voxelized explosion burst from landed tower slabs for game-over presentation plus any still-visible trimmed debris pieces from earlier cuts (excluding the final unplaced missed slab); voxels are generated with more even cube-like sizing, distributed across slab heights so upper blocks remain represented, and capped to slabs within roughly two block-heights outside the current screen bounds
@@ -71,7 +71,7 @@ Runtime tuning panel includes:
 - Placement: perfect tolerance, combo target length
 - Recovery rewards: growth multiplier, slowdown factor, slowdown floors
 - Feedback: audio enable toggle, haptics enable toggle
-- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud/fireworks), deterministic motion speed, level-start thresholds for tentacle/gorilla/ufo/cloud/fireworks gating, cloud-specific simulation controls (count, horizontal drift speed including explicit zero-drift, spawn-above band, despawn-below band with ordered sanitization), and on-demand launch buttons for each distraction channel
+- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud/fireworks), deterministic motion speed, level-start thresholds for tentacle/gorilla/ufo/cloud/fireworks gating, cloud-specific simulation controls (count, horizontal drift speed including explicit zero-drift, spawn-above band, despawn-below band with ordered sanitization and minimum separation), and on-demand launch buttons for each distraction channel
 - Integrity: precarious threshold, unstable threshold, and camera wobble strength
 - Collapse: fail-sequence duration, tilt strength, camera pullback distance, and drop distance
 - Performance: quality preset (`0` low / `1` medium / `2` high), auto-quality toggle, frame-budget target, archival keep-level/chunk sizing, distraction LOD near/far distances, active debris cap, and debris pool limit
@@ -94,7 +94,7 @@ Runtime tuning panel includes:
 - `stopActiveSlab()`
 - `restartGame()`
 - `returnToTitle()`
-- `applyDebugConfig(config)`
+- `applyDebugConfig(config)` (partial patches supported; in paused deterministic mode, cloud/distraction simulation effects apply on the next `stepSimulation(...)`)
 - `stepSimulation(steps?)`
 - `setPaused(paused)`
 - `setActiveOffset(offset)`
