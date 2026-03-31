@@ -1,13 +1,11 @@
 # TODO
 
-All requested items are now implemented and unit tested.
+make sure there are unit tests to cover these:
 
-- [x] windows should not appear too close to the edge of a block
-- [x] tentacles and windows shouldn't spawn on the hidden faces of the tower
-- [x] the last block that doesn't get placed onto the stack doesn't explode into voxels when the game is over
-- [x] avoid excessive space between windows; windows stay horizontally centered as a grouped set
-- [x] when there are eaves on a block, they render on all visible sides
-- [x] tentacles and windows should not appear on hidden sides
-- [x] add bay window style
-- [x] vary window shutter colors
-- [x] vary window trim color to sometimes black
+* when there is earthquake/tremor then add a larger shake in the y direction. Add debug control for magnitude of shake
+* add a camera shake effect when a block is placed. add debug control for amount of screenshake
+* the firework effect should be a sphere that is launched, when it reaches a zenith, then it explodes creating the starburst. it launches new spheres from the center of the explosion, which fall and fade away getting smaller. Make it burst closer to the stack.
+* based on what I'm seeing with the camera, the ufo position seems relative to the viewport/screen rather than consistent world coordinates
+* make the gorilla climb up the building, and across the blocks. right now it is kind of jumping randomly in the air
+* the day night cycle should be based on stack height. And there should be a full cycle of day/night every 20 blocks.
+* add a bat as an alternative distraction, similar to ufo. there should also be a debug button for it.

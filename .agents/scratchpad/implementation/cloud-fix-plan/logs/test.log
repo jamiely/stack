@@ -1,0 +1,46 @@
+
+> tower-stacker@0.1.0 test:unit
+> vitest run
+
+
+ RUN  v4.1.2 /Users/jamiely/code/stack
+
+
+ Test Files  22 passed (22)
+      Tests  146 passed (146)
+   Start at  11:00:34
+   Duration  656ms (transform 551ms, setup 0ms, import 864ms, tests 93ms, environment 1ms)
+
+
+> tower-stacker@0.1.0 test:e2e
+> playwright test
+
+
+Running 24 tests using 3 workers
+
+  ✓   3 tests/e2e/gameplay.spec.ts:142:1 › test API is only exposed in test mode and supports deterministic stepping (595ms)
+  ✓   4 tests/e2e/gameplay.spec.ts:191:1 › test mode paused boot can be toggled with query params (554ms)
+  ✓   1 tests/e2e/clouds.spec.ts:15:1 › cloud layer renders and captures entry screenshots (1.3s)
+  ✓   5 tests/e2e/gameplay.spec.ts:225:1 › seeded startup produces stable active-slab spawn states (266ms)
+  ✓   6 tests/e2e/clouds.spec.ts:140:1 › cloud layer toggle off/on cleanly gates simulation mapping (235ms)
+  ✓   8 tests/e2e/clouds.spec.ts:245:1 › cloud debug controls apply on the next simulation step (190ms)
+  ✓   2 tests/e2e/smoke.spec.ts:3:1 › run autostarts and title card briefly animates out (1.8s)
+  ✓   7 tests/e2e/gameplay.spec.ts:270:1 › scripted placement sequence is deterministic across runs (447ms)
+  ✓  10 tests/e2e/smoke.spec.ts:17:1 › debug controls and status surfaces render only with the debug query param (320ms)
+  ✓   9 tests/e2e/clouds.spec.ts:348:1 › test API exposes per-cloud diagnostics and stays stable under adversarial cloud thresholds (439ms)
+  ✓  11 tests/e2e/gameplay.spec.ts:315:1 › combo milestone triggers recovery reward growth + slowdown (320ms)
+  ✓  12 tests/e2e/gameplay.spec.ts:349:1 › keyboard and pointer input both stop slabs (199ms)
+  ✓  13 tests/e2e/gameplay.spec.ts:380:1 › space or touch input restarts immediately from game over (208ms)
+  ✓  14 tests/e2e/gameplay.spec.ts:420:1 › miss transitions to game over and restart resets state (210ms)
+  ✓  15 tests/e2e/gameplay.spec.ts:459:1 › debug controls can tune movement speed at runtime (161ms)
+  ✓  16 tests/e2e/gameplay.spec.ts:524:1 › debug combo target + growth tuning changes recovery behavior (175ms)
+  ✓  17 tests/e2e/gameplay.spec.ts:568:1 › debug distraction launch buttons can trigger channels on demand (451ms)
+  ✓  18 tests/e2e/gameplay.spec.ts:646:1 › gorilla/ufo/cloud actors are level-gated and core placement still works while active (305ms)
+  ✓  19 tests/e2e/gameplay.spec.ts:782:1 › integrity telemetry reports deterministic stable/precarious/unstable transitions (179ms)
+  ✓  20 tests/e2e/gameplay.spec.ts:847:1 › unstable integrity no longer ends the run without a hard miss (180ms)
+  ✓  21 tests/e2e/gameplay.spec.ts:909:1 › audio/haptics toggles gate runtime feedback emission (188ms)
+  ✓  22 tests/e2e/gameplay.spec.ts:1009:1 › high-start-stack perf profile keeps input responsive with archival + quality controls (302ms)
+  ✓  23 tests/e2e/gameplay.spec.ts:1062:1 › optimization toggles preserve deterministic scripted outcomes (214ms)
+  ✓  24 tests/e2e/gameplay.spec.ts:1128:3 › mobile touch pass › tap input on a mobile-sized viewport stops the active slab (189ms)
+
+  24 passed (6.7s)
