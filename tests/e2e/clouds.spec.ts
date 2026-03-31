@@ -4,6 +4,8 @@ type CloudSnapshot = {
   x: number;
   y: number;
   opacity: number;
+  cloudId: string | null;
+  lane: string | null;
 };
 
 test("cloud layer renders and captures entry screenshots", async ({ page }, testInfo) => {
@@ -67,6 +69,8 @@ test("cloud layer renders and captures entry screenshots", async ({ page }, test
           x: match ? Number.parseFloat(match[1]) : Number.NaN,
           y: match ? Number.parseFloat(match[2]) : Number.NaN,
           opacity: Number.parseFloat(element.style.opacity || "1"),
+          cloudId: element.dataset.cloudId ?? null,
+          lane: element.dataset.cloudLane ?? null,
         };
       }),
     );
@@ -74,6 +78,10 @@ test("cloud layer renders and captures entry screenshots", async ({ page }, test
   const beforeClouds = await readClouds();
   const beforeVisible = beforeClouds.filter((cloud) => Number.isFinite(cloud.x) && Number.isFinite(cloud.y));
   expect(beforeVisible.length).toBeGreaterThan(0);
+  beforeVisible.forEach((cloud) => {
+    expect(cloud.cloudId).toMatch(/^cloud-/);
+    expect(["front", "back"]).toContain(cloud.lane);
+  });
 
   const beforePath = testInfo.outputPath("cloud-entry-before.png");
   await page.screenshot({ path: beforePath, fullPage: true });
@@ -105,4 +113,93 @@ test("cloud layer renders and captures entry screenshots", async ({ page }, test
   await testInfo.attach("cloud-entry-after", { path: afterPath, contentType: "image/png" });
 
   expect(afterVisible.length).toBeGreaterThan(0);
+  afterVisible.forEach((cloud) => {
+    expect(cloud.cloudId).toMatch(/^cloud-/);
+    expect(["front", "back"]).toContain(cloud.lane);
+  });
+});
+
+test("cloud layer toggle off/on cleanly gates simulation mapping", async ({ page }) => {
+  await page.goto("/?debug&test&paused=1&seed=42");
+  await expect(page.getByTestId("debug-panel")).toBeVisible();
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        stepSimulation: (steps?: number) => void;
+        applyDebugConfig: (config: Partial<Record<string, number | boolean>>) => void;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.startGame();
+    api.applyDebugConfig({ distractionCloudStartLevel: 0, distractionCloudEnabled: true });
+    api.stepSimulation(2);
+  });
+
+  const enabledSnapshot = await page.locator(".distraction-cloud").first().evaluate((node) => {
+    const element = node as HTMLElement;
+    return {
+      transform: element.style.transform,
+      cloudId: element.dataset.cloudId ?? null,
+      lane: element.dataset.cloudLane ?? null,
+    };
+  });
+
+  expect(enabledSnapshot.cloudId).toMatch(/^cloud-/);
+  expect(["front", "back"]).toContain(enabledSnapshot.lane);
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        applyDebugConfig: (config: Partial<Record<string, number | boolean>>) => void;
+        stepSimulation: (steps?: number) => void;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.applyDebugConfig({ distractionCloudEnabled: false });
+    api.stepSimulation(1);
+  });
+
+  const disabledOpacity = await page.getByTestId("actor-clouds").evaluate((node) => (node as HTMLElement).style.opacity || "0");
+  expect(Number.parseFloat(disabledOpacity)).toBe(0);
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        applyDebugConfig: (config: Partial<Record<string, number | boolean>>) => void;
+        stepSimulation: (steps?: number) => void;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return;
+    }
+
+    api.applyDebugConfig({ distractionCloudEnabled: true });
+    api.stepSimulation(2);
+  });
+
+  const reenabledSnapshot = await page.locator(".distraction-cloud").first().evaluate((node) => {
+    const element = node as HTMLElement;
+    return {
+      transform: element.style.transform,
+      opacity: Number.parseFloat(element.style.opacity || "0"),
+      cloudId: element.dataset.cloudId ?? null,
+      lane: element.dataset.cloudLane ?? null,
+    };
+  });
+
+  expect(reenabledSnapshot.cloudId).toMatch(/^cloud-/);
+  expect(["front", "back"]).toContain(reenabledSnapshot.lane);
+  expect(reenabledSnapshot.transform.length).toBeGreaterThan(0);
+  expect(reenabledSnapshot.opacity).toBeGreaterThan(0);
 });

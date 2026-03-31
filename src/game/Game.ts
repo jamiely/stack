@@ -79,7 +79,7 @@ import {
 } from "./logic/runtime";
 import { resolveFacadeStyle } from "./logic/facade";
 import { sampleGorillaClimbPosition } from "./logic/gorilla";
-import { resolveCloudSpawnNdcX, shouldRespawnCloud } from "./logic/clouds";
+import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
@@ -92,6 +92,7 @@ import type { IntegrityTelemetry } from "./logic/integrity";
 import type { OscillationState } from "./logic/oscillation";
 import type { DistractionLodTier, QualityPreset } from "./logic/performance";
 import type { WindowStyle } from "./logic/windows";
+import type { CloudCameraFrame, CloudSimulationConfig, CloudState } from "./logic/clouds";
 import type { DebugConfig, GameState, PublicGameState, SlabData, TestApi, TestModeOptions, TrimResult } from "./types";
 
 type DebugToggleKey =
@@ -257,7 +258,7 @@ const TENTACLE_BURST_CHANCE = 0.5;
 const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
-const CLOUD_RESPAWN_LEVEL_INTERVAL = 2;
+const CLOUD_DEFAULT_COUNT = 3;
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -418,12 +419,8 @@ export class Game {
   private readonly weatheringTexture = this.createWeatheringTexture();
   private readonly brickTexture = this.createBrickTexture();
   private readonly sidingTexture = this.createSidingTexture();
-  private cloudWorldAnchors: Vector3[] = [new Vector3(), new Vector3(), new Vector3()];
-  private cloudSpawnFromTop: boolean[] = [false, false, false];
-  private cloudSizeScales: number[] = [1, 1, 1];
-  private cloudAnchorsInitialized = false;
-  private cloudRespawnCursor = 0;
-  private cloudLastLevelRespawn = -1;
+  private cloudState: CloudState | null = null;
+  private cloudSimulationSeed = 0;
   private tentacleBurstKeys: string[] = [];
 
   public constructor(container: HTMLDivElement) {
@@ -621,7 +618,7 @@ export class Game {
 
     this.cloudLayer.className = "distraction-clouds";
     this.cloudLayer.dataset.testid = "actor-clouds";
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; index < CLOUD_DEFAULT_COUNT; index += 1) {
       const cloud = document.createElement("span");
       cloud.className = "distraction-cloud";
       this.cloudLayer.append(cloud);
@@ -1024,11 +1021,8 @@ export class Game {
     this.frameTimeMs = 0;
     this.averageFrameTimeMs = 0;
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
-    this.cloudAnchorsInitialized = false;
-    this.cloudSpawnFromTop = [false, false, false];
-    this.cloudSizeScales = [1, 1, 1];
-    this.cloudRespawnCursor = 0;
-    this.cloudLastLevelRespawn = -1;
+    this.cloudState = null;
+    this.cloudSimulationSeed = (distractionSeed ^ 0x9e3779b9) >>> 0;
     this.tentacleBurstKeys = [];
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
@@ -1546,102 +1540,66 @@ export class Game {
     this.ufoActor.style.width = `${(ufoHeightPx * 2.35).toFixed(1)}px`;
   }
 
-  private updateCloudLayer(snapshot: DistractionSnapshot, _deltaSeconds: number): void {
-    const cloudNodes = Array.from(this.cloudLayer.querySelectorAll<HTMLElement>(".distraction-cloud"));
-    if (cloudNodes.length === 0) {
-      return;
-    }
-
+  private updateCloudLayer(snapshot: DistractionSnapshot, deltaSeconds: number): void {
     const cloudChannelEnabled = this.debugConfig.distractionsEnabled && this.debugConfig.distractionCloudEnabled;
     if (!cloudChannelEnabled) {
       this.cloudLayer.style.opacity = "0";
-      this.cloudAnchorsInitialized = false;
-      this.cloudSpawnFromTop = cloudNodes.map(() => false);
-      this.cloudSizeScales = cloudNodes.map(() => 1);
-      this.cloudRespawnCursor = 0;
-      this.cloudLastLevelRespawn = -1;
+      this.cloudState = null;
       return;
     }
 
     const topSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
     if (!topSlab) {
       this.cloudLayer.style.opacity = "0";
+      this.cloudState = null;
       return;
     }
 
-    if (!this.cloudAnchorsInitialized) {
-      this.cloudWorldAnchors = cloudNodes.map((_, index) => this.createCloudAnchor(topSlab, index, 0, false));
-      this.cloudSpawnFromTop = cloudNodes.map(() => false);
-      this.cloudSizeScales = cloudNodes.map((_, index) => this.sampleCloudSizeScale(topSlab.level, index, 0));
-      this.cloudAnchorsInitialized = true;
-      this.cloudRespawnCursor = 0;
-      this.cloudLastLevelRespawn = topSlab.level;
+    const simulationConfig = this.buildCloudSimulationConfig();
+    const cameraFrame = this.createCloudCameraFrame(topSlab);
+    const cloudNodes = this.syncCloudNodePool(simulationConfig.count);
+
+    if (!this.cloudState || this.cloudState.clouds.length !== simulationConfig.count) {
+      this.cloudState = initializeCloudState({
+        seed: this.cloudSimulationSeed,
+        config: simulationConfig,
+        cameraFrame,
+      });
     }
 
-    if (topSlab.level - this.cloudLastLevelRespawn >= CLOUD_RESPAWN_LEVEL_INTERVAL) {
-      const respawnIndex = this.cloudRespawnCursor % cloudNodes.length;
-      const respawnSalt = this.frameCounter + topSlab.level * 13;
-      this.cloudWorldAnchors[respawnIndex] = this.createCloudAnchor(topSlab, respawnIndex, respawnSalt, true);
-      this.cloudSpawnFromTop[respawnIndex] = true;
-      this.cloudSizeScales[respawnIndex] = this.sampleCloudSizeScale(topSlab.level, respawnIndex, respawnSalt);
-      this.cloudRespawnCursor = (this.cloudRespawnCursor + 1) % cloudNodes.length;
-      this.cloudLastLevelRespawn = topSlab.level;
-    }
+    this.cloudState = stepCloudState({
+      previousState: this.cloudState,
+      config: simulationConfig,
+      cameraFrame,
+      deltaSeconds,
+    });
 
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
-    const swayPhase = this.distractionState.elapsedSeconds * 0.6 * this.debugConfig.distractionMotionSpeed;
-    const bobPhase = this.distractionState.elapsedSeconds * 0.28;
 
-    cloudNodes.forEach((cloudNode, index) => {
-      const anchor = this.cloudWorldAnchors[index] ?? this.createCloudAnchor(topSlab, index, this.frameCounter, false);
-      this.cloudWorldAnchors[index] = anchor;
-
-      const worldPoint = new Vector3(
-        anchor.x + Math.sin(swayPhase + index) * (0.55 + index * 0.2),
-        anchor.y + Math.cos(bobPhase + index * 0.75) * 0.22,
-        anchor.z + Math.cos(swayPhase * 0.65 + index) * 0.38,
-      );
-      const projected = worldPoint.project(this.camera);
-
-      if (shouldRespawnCloud(projected)) {
-        const respawnSalt = this.frameCounter + index * 37;
-        const respawnAnchor = this.createCloudAnchor(topSlab, index, respawnSalt, true);
-        this.cloudWorldAnchors[index] = respawnAnchor;
-        this.cloudSpawnFromTop[index] = true;
-        this.cloudSizeScales[index] = this.sampleCloudSizeScale(topSlab.level, index, respawnSalt);
+    this.cloudState.clouds.forEach((cloud, index) => {
+      const cloudNode = cloudNodes[index];
+      if (!cloudNode) {
+        return;
       }
 
-      const stableAnchor = this.cloudWorldAnchors[index] ?? anchor;
-      const stablePoint = new Vector3(
-        stableAnchor.x + Math.sin(swayPhase + index) * (0.55 + index * 0.2),
-        stableAnchor.y + Math.cos(bobPhase + index * 0.75) * 0.22,
-        stableAnchor.z + Math.cos(swayPhase * 0.65 + index) * 0.38,
-      );
-      const stableProjected = stablePoint.project(this.camera);
-      const screenX = (stableProjected.x * 0.5 + 0.5) * width;
-      const projectedScreenY = (-stableProjected.y * 0.5 + 0.5) * height;
-      const depthFromStack = new Vector3().subVectors(stableAnchor, new Vector3(topSlab.position.x, topSlab.position.y, topSlab.position.z));
-      const towardCamera = new Vector3(this.camera.position.x - topSlab.position.x, 0, this.camera.position.z - topSlab.position.z).normalize();
-      const frontBack = depthFromStack.dot(towardCamera);
-      const sizeScale = this.cloudSizeScales[index] ?? 1;
-      const depthScale = frontBack >= 0 ? 1.05 : 0.72;
-      const scale = sizeScale * depthScale;
+      const projected = new Vector3(cloud.x, cloud.y, topSlab.position.z + cloud.z).project(this.camera);
+      if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y) || !Number.isFinite(projected.z)) {
+        cloudNode.style.opacity = "0";
+        return;
+      }
 
-      const enteringFromTop = this.cloudSpawnFromTop[index] === true;
-      const screenY = projectedScreenY;
+      const screenX = (projected.x * 0.5 + 0.5) * width;
+      const screenY = (-projected.y * 0.5 + 0.5) * height;
+      const variantScale = 0.82 + cloud.styleVariant * 0.09;
+      const laneScale = cloud.lane === "front" ? 1.02 : 0.78;
+      const scale = variantScale * laneScale;
 
       cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
-
-      if (!enteringFromTop) {
-        cloudNode.style.opacity = "1";
-      } else {
-        const entryAlpha = Math.min(1, Math.max(0, (stableProjected.y + 1.12) / 0.3));
-        cloudNode.style.opacity = entryAlpha.toFixed(3);
-        if (entryAlpha >= 0.995) {
-          this.cloudSpawnFromTop[index] = false;
-        }
-      }
+      cloudNode.style.opacity = (cloud.lane === "front" ? 1 : 0.88).toFixed(3);
+      cloudNode.dataset.cloudId = cloud.id;
+      cloudNode.dataset.cloudLane = cloud.lane;
+      cloudNode.dataset.cloudRecycleCount = String(cloud.recycleCount);
     });
 
     const baselineCloudOpacity = 0.28;
@@ -1651,56 +1609,54 @@ export class Game {
     this.cloudLayer.style.transform = "translateX(0px)";
   }
 
-  private sampleCloudSizeScale(level: number, index: number, salt: number): number {
-    const sizeNoise = sampleDecorNoise(level * 0.31 + index * 0.77 + salt * 0.005, 71.3);
-    return 0.78 + sizeNoise * 0.48;
-  }
+  private syncCloudNodePool(count: number): HTMLElement[] {
+    const targetCount = Math.max(0, Math.floor(count));
+    const cloudNodes = Array.from(this.cloudLayer.querySelectorAll<HTMLElement>(".distraction-cloud"));
 
-  private createCloudAnchor(topSlab: SlabData, index: number, salt: number, spawnFromTop: boolean): Vector3 {
-    const slabHeight = Math.max(0.5, this.debugConfig.slabHeight);
-    const topCenter = new Vector3(topSlab.position.x, topSlab.position.y, topSlab.position.z);
-    const toCamera = new Vector3(this.camera.position.x - topCenter.x, 0, this.camera.position.z - topCenter.z);
-    if (toCamera.lengthSq() < 0.0001) {
-      toCamera.set(1, 0, 0);
-    } else {
-      toCamera.normalize();
+    while (cloudNodes.length < targetCount) {
+      const cloudNode = document.createElement("span");
+      cloudNode.className = "distraction-cloud";
+      this.cloudLayer.append(cloudNode);
+      cloudNodes.push(cloudNode);
     }
 
-    const sideNoise = sampleDecorNoise(topSlab.level * 0.41 + salt * 0.23 + index * 1.31, 9.4);
-    const depthNoise = sampleDecorNoise(topSlab.level * 0.37 + salt * 0.19 + index * 1.91, 23.5);
-    const xNoise = sampleDecorNoise(topSlab.level * 0.53 + salt * 0.17 + index * 0.83, 41.2);
-    const heightNoise = sampleDecorNoise(topSlab.level * 0.29 + salt * 0.21 + index * 0.59, 63.7);
-
-    const alternatingSign = (index + Math.floor(Math.abs(salt) * 0.5)) % 2 === 0 ? 1 : -1;
-    const frontSign = sideNoise > 0.65 ? 1 : sideNoise < 0.35 ? -1 : alternatingSign;
-    const depthDistance = spawnFromTop ? 1.6 + depthNoise * 3.2 : 2.2 + depthNoise * 5.4;
-    const travelY = topSlab.position.y + slabHeight * (1 + heightNoise * 2.8 + index * 0.25);
-    const spawnY = this.camera.position.y + this.debugConfig.cameraHeight * (1.25 + heightNoise * 0.35);
-    const anchorY = spawnFromTop ? spawnY : travelY;
-
-    const targetNdcX = resolveCloudSpawnNdcX(xNoise);
-    const targetNdcY = spawnFromTop ? 0.08 : 0.28 - heightNoise * 0.75;
-    const screenAnchored = this.sampleWorldPointForScreenTarget(targetNdcX, targetNdcY, travelY, topCenter);
-
-    return new Vector3(
-      screenAnchored.x + toCamera.x * depthDistance * frontSign,
-      anchorY,
-      screenAnchored.z + toCamera.z * depthDistance * frontSign,
-    );
-  }
-
-  private sampleWorldPointForScreenTarget(ndcX: number, ndcY: number, targetY: number, fallbackCenter: Vector3): Vector3 {
-    const origin = this.camera.position.clone();
-    const projected = new Vector3(ndcX, ndcY, 0.5).unproject(this.camera);
-    const direction = projected.sub(origin);
-    const safeY = Math.abs(direction.y) > 0.0001 ? direction.y : direction.y >= 0 ? 0.0001 : -0.0001;
-    const t = (targetY - origin.y) / safeY;
-
-    if (!Number.isFinite(t) || t <= 0) {
-      return new Vector3(fallbackCenter.x, targetY, fallbackCenter.z);
+    while (cloudNodes.length > targetCount) {
+      const cloudNode = cloudNodes.pop();
+      cloudNode?.remove();
     }
 
-    return origin.add(direction.multiplyScalar(t));
+    return cloudNodes;
+  }
+
+  private buildCloudSimulationConfig(): CloudSimulationConfig {
+    const motionSpeed = Math.max(0, this.debugConfig.distractionMotionSpeed);
+
+    return {
+      count: CLOUD_DEFAULT_COUNT,
+      horizontalDriftSpeed: -0.3 * motionSpeed,
+      spawnBandAboveCamera: Math.max(2, this.debugConfig.cameraHeight * 1.1),
+      despawnBandBelowCamera: Math.max(1.5, this.debugConfig.cameraHeight * 0.7),
+      laneRatioFront: 0.5,
+      laneDepthFront: -2.2,
+      laneDepthBack: 1.8,
+    };
+  }
+
+  private createCloudCameraFrame(topSlab: SlabData): CloudCameraFrame {
+    const reference = new Vector3(topSlab.position.x, topSlab.position.y, topSlab.position.z).project(this.camera);
+    const depth = Math.max(-1, Math.min(1, reference.z));
+
+    const topPoint = new Vector3(0, 1, depth).unproject(this.camera);
+    const bottomPoint = new Vector3(0, -1, depth).unproject(this.camera);
+    const leftPoint = new Vector3(-1, 0, depth).unproject(this.camera);
+    const rightPoint = new Vector3(1, 0, depth).unproject(this.camera);
+
+    return {
+      viewTopY: Math.max(topPoint.y, bottomPoint.y),
+      viewBottomY: Math.min(topPoint.y, bottomPoint.y),
+      visibleWorldXMin: Math.min(leftPoint.x, rightPoint.x),
+      visibleWorldXMax: Math.max(leftPoint.x, rightPoint.x),
+    };
   }
 
   private updateTentacleBursts(snapshot: DistractionSnapshot): void {
