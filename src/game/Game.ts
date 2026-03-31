@@ -879,7 +879,7 @@ export class Game {
       this.runSimulationStep(deltaSeconds);
     } else {
       this.updateImpactPulse(deltaSeconds);
-      this.updateDistractionActors(deltaSeconds);
+      this.updateDistractionActors(0);
       this.updateCamera(deltaSeconds);
     }
 
@@ -1558,6 +1558,12 @@ export class Game {
       return;
     }
 
+    const baselineCloudOpacity = 0.28;
+    const cloudSignalOpacity = snapshot.active.clouds ? snapshot.signals.clouds * 0.46 : 0;
+    const cloudOpacity = baselineCloudOpacity + cloudSignalOpacity;
+    this.cloudLayer.style.opacity = Math.min(0.92, cloudOpacity).toFixed(3);
+    this.cloudLayer.style.transform = "translateX(0px)";
+
     if (deltaSeconds <= 0) {
       return;
     }
@@ -1609,14 +1615,7 @@ export class Game {
       cloudNode.dataset.cloudLane = cloud.lane;
       cloudNode.dataset.cloudVariant = String(Math.max(0, Math.min(2, Math.floor(cloud.styleVariant))));
       cloudNode.dataset.cloudRecycleCount = String(cloud.recycleCount);
-    });
-
-    const baselineCloudOpacity = 0.28;
-    const cloudSignalOpacity = snapshot.active.clouds ? snapshot.signals.clouds * 0.46 : 0;
-    const cloudOpacity = baselineCloudOpacity + cloudSignalOpacity;
-    this.cloudLayer.style.opacity = Math.min(0.92, cloudOpacity).toFixed(3);
-    this.cloudLayer.style.transform = "translateX(0px)";
-  }
+    });  }
 
   private syncCloudNodePool(count: number): HTMLElement[] {
     const targetCount = Math.max(0, Math.floor(count));
