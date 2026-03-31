@@ -6,6 +6,10 @@ type CloudSnapshot = {
   opacity: number;
   cloudId: string | null;
   lane: string | null;
+  variant: string | null;
+  laneClassApplied: boolean;
+  variantClassApplied: boolean;
+  lobeCount: number;
 };
 
 test("cloud layer renders and captures entry screenshots", async ({ page }, testInfo) => {
@@ -65,12 +69,18 @@ test("cloud layer renders and captures entry screenshots", async ({ page }, test
         const element = node as HTMLElement;
         const transform = element.style.transform;
         const match = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(transform);
+        const lane = element.dataset.cloudLane ?? null;
+        const variant = element.dataset.cloudVariant ?? null;
         return {
           x: match ? Number.parseFloat(match[1]) : Number.NaN,
           y: match ? Number.parseFloat(match[2]) : Number.NaN,
           opacity: Number.parseFloat(element.style.opacity || "1"),
           cloudId: element.dataset.cloudId ?? null,
-          lane: element.dataset.cloudLane ?? null,
+          lane,
+          variant,
+          laneClassApplied: lane ? element.classList.contains(`distraction-cloud--lane-${lane}`) : false,
+          variantClassApplied: variant ? element.classList.contains(`distraction-cloud--variant-${variant}`) : false,
+          lobeCount: element.querySelectorAll(".distraction-cloud__lobe").length,
         };
       }),
     );
@@ -81,6 +91,10 @@ test("cloud layer renders and captures entry screenshots", async ({ page }, test
   beforeVisible.forEach((cloud) => {
     expect(cloud.cloudId).toMatch(/^cloud-/);
     expect(["front", "back"]).toContain(cloud.lane);
+    expect(["0", "1", "2"]).toContain(cloud.variant);
+    expect(cloud.laneClassApplied).toBe(true);
+    expect(cloud.variantClassApplied).toBe(true);
+    expect(cloud.lobeCount).toBeGreaterThanOrEqual(3);
   });
 
   const beforePath = testInfo.outputPath("cloud-entry-before.png");
@@ -116,6 +130,10 @@ test("cloud layer renders and captures entry screenshots", async ({ page }, test
   afterVisible.forEach((cloud) => {
     expect(cloud.cloudId).toMatch(/^cloud-/);
     expect(["front", "back"]).toContain(cloud.lane);
+    expect(["0", "1", "2"]).toContain(cloud.variant);
+    expect(cloud.laneClassApplied).toBe(true);
+    expect(cloud.variantClassApplied).toBe(true);
+    expect(cloud.lobeCount).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -143,15 +161,25 @@ test("cloud layer toggle off/on cleanly gates simulation mapping", async ({ page
 
   const enabledSnapshot = await page.locator(".distraction-cloud").first().evaluate((node) => {
     const element = node as HTMLElement;
+    const lane = element.dataset.cloudLane ?? null;
+    const variant = element.dataset.cloudVariant ?? null;
     return {
       transform: element.style.transform,
       cloudId: element.dataset.cloudId ?? null,
-      lane: element.dataset.cloudLane ?? null,
+      lane,
+      variant,
+      laneClassApplied: lane ? element.classList.contains(`distraction-cloud--lane-${lane}`) : false,
+      variantClassApplied: variant ? element.classList.contains(`distraction-cloud--variant-${variant}`) : false,
+      lobeCount: element.querySelectorAll(".distraction-cloud__lobe").length,
     };
   });
 
   expect(enabledSnapshot.cloudId).toMatch(/^cloud-/);
   expect(["front", "back"]).toContain(enabledSnapshot.lane);
+  expect(["0", "1", "2"]).toContain(enabledSnapshot.variant);
+  expect(enabledSnapshot.laneClassApplied).toBe(true);
+  expect(enabledSnapshot.variantClassApplied).toBe(true);
+  expect(enabledSnapshot.lobeCount).toBeGreaterThanOrEqual(3);
 
   await page.evaluate(() => {
     const api = (window as Window & {
@@ -190,16 +218,26 @@ test("cloud layer toggle off/on cleanly gates simulation mapping", async ({ page
 
   const reenabledSnapshot = await page.locator(".distraction-cloud").first().evaluate((node) => {
     const element = node as HTMLElement;
+    const lane = element.dataset.cloudLane ?? null;
+    const variant = element.dataset.cloudVariant ?? null;
     return {
       transform: element.style.transform,
       opacity: Number.parseFloat(element.style.opacity || "0"),
       cloudId: element.dataset.cloudId ?? null,
-      lane: element.dataset.cloudLane ?? null,
+      lane,
+      variant,
+      laneClassApplied: lane ? element.classList.contains(`distraction-cloud--lane-${lane}`) : false,
+      variantClassApplied: variant ? element.classList.contains(`distraction-cloud--variant-${variant}`) : false,
+      lobeCount: element.querySelectorAll(".distraction-cloud__lobe").length,
     };
   });
 
   expect(reenabledSnapshot.cloudId).toMatch(/^cloud-/);
   expect(["front", "back"]).toContain(reenabledSnapshot.lane);
+  expect(["0", "1", "2"]).toContain(reenabledSnapshot.variant);
+  expect(reenabledSnapshot.laneClassApplied).toBe(true);
+  expect(reenabledSnapshot.variantClassApplied).toBe(true);
+  expect(reenabledSnapshot.lobeCount).toBeGreaterThanOrEqual(3);
   expect(reenabledSnapshot.transform.length).toBeGreaterThan(0);
   expect(reenabledSnapshot.opacity).toBeGreaterThan(0);
 });

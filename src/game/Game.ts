@@ -623,9 +623,7 @@ export class Game {
     this.cloudLayer.className = "distraction-clouds";
     this.cloudLayer.dataset.testid = "actor-clouds";
     for (let index = 0; index < CLOUD_DEFAULT_COUNT; index += 1) {
-      const cloud = document.createElement("span");
-      cloud.className = "distraction-cloud";
-      this.cloudLayer.append(cloud);
+      this.cloudLayer.append(this.createCloudNode());
     }
 
     this.fireworksActor.className = "distraction-fireworks";
@@ -1606,8 +1604,10 @@ export class Game {
 
       cloudNode.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
       cloudNode.style.opacity = (cloud.lane === "front" ? 1 : 0.88).toFixed(3);
+      this.applyCloudRenderAdapter(cloudNode, cloud.lane, cloud.styleVariant);
       cloudNode.dataset.cloudId = cloud.id;
       cloudNode.dataset.cloudLane = cloud.lane;
+      cloudNode.dataset.cloudVariant = String(Math.max(0, Math.min(2, Math.floor(cloud.styleVariant))));
       cloudNode.dataset.cloudRecycleCount = String(cloud.recycleCount);
     });
 
@@ -1623,8 +1623,7 @@ export class Game {
     const cloudNodes = Array.from(this.cloudLayer.querySelectorAll<HTMLElement>(".distraction-cloud"));
 
     while (cloudNodes.length < targetCount) {
-      const cloudNode = document.createElement("span");
-      cloudNode.className = "distraction-cloud";
+      const cloudNode = this.createCloudNode();
       this.cloudLayer.append(cloudNode);
       cloudNodes.push(cloudNode);
     }
@@ -1634,7 +1633,46 @@ export class Game {
       cloudNode?.remove();
     }
 
+    cloudNodes.forEach((cloudNode) => this.ensureCloudNodeStructure(cloudNode));
+
     return cloudNodes;
+  }
+
+  private createCloudNode(): HTMLSpanElement {
+    const cloudNode = document.createElement("span");
+    cloudNode.className = "distraction-cloud distraction-cloud--rounded";
+    this.ensureCloudNodeStructure(cloudNode);
+    return cloudNode;
+  }
+
+  private ensureCloudNodeStructure(cloudNode: HTMLElement): void {
+    if (cloudNode.querySelector(".distraction-cloud__lobe")) {
+      return;
+    }
+
+    cloudNode.classList.add("distraction-cloud", "distraction-cloud--rounded");
+
+    const lobeLeft = document.createElement("span");
+    lobeLeft.className = "distraction-cloud__lobe distraction-cloud__lobe--left";
+
+    const lobeCenter = document.createElement("span");
+    lobeCenter.className = "distraction-cloud__lobe distraction-cloud__lobe--center";
+
+    const lobeRight = document.createElement("span");
+    lobeRight.className = "distraction-cloud__lobe distraction-cloud__lobe--right";
+
+    cloudNode.replaceChildren(lobeLeft, lobeCenter, lobeRight);
+  }
+
+  private applyCloudRenderAdapter(cloudNode: HTMLElement, lane: "front" | "back", styleVariant: number): void {
+    this.ensureCloudNodeStructure(cloudNode);
+
+    const normalizedVariant = Math.max(0, Math.min(2, Math.floor(styleVariant)));
+    cloudNode.classList.remove("distraction-cloud--lane-front", "distraction-cloud--lane-back");
+    cloudNode.classList.remove("distraction-cloud--variant-0", "distraction-cloud--variant-1", "distraction-cloud--variant-2");
+    cloudNode.classList.add(`distraction-cloud--lane-${lane}`, `distraction-cloud--variant-${normalizedVariant}`);
+    cloudNode.style.setProperty("--cloud-lane-highlight", lane === "front" ? "0.94" : "0.82");
+    cloudNode.style.setProperty("--cloud-variant-index", String(normalizedVariant));
   }
 
   private buildCloudSimulationConfig(): CloudSimulationConfig {
