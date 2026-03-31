@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   initializeCloudState,
   resolveCloudSpawnNdcX,
+  sanitizeCloudLifecycleBands,
   shouldRespawnCloud,
   stepCloudState,
   type CloudCameraFrame,
@@ -204,5 +205,121 @@ describe("cloud simulation state", () => {
 
     expect(first).toEqual(second);
     expect(first.clouds[0].recycleCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps a deterministic front/back lane mix when count supports both lanes", () => {
+    const config: CloudSimulationConfig = {
+      ...baseConfig,
+      count: 6,
+      laneRatioFront: 1,
+    };
+
+    const first = initializeCloudState({ seed: 31337, config, cameraFrame: baseCameraFrame });
+    const second = initializeCloudState({ seed: 31337, config, cameraFrame: baseCameraFrame });
+    const firstLanes = new Set(first.clouds.map((cloud) => cloud.lane));
+    const secondLanes = new Set(second.clouds.map((cloud) => cloud.lane));
+
+    expect(first).toEqual(second);
+    expect(firstLanes.has("front")).toBe(true);
+    expect(firstLanes.has("back")).toBe(true);
+    expect(secondLanes.has("front")).toBe(true);
+    expect(secondLanes.has("back")).toBe(true);
+  });
+
+  it("preserves lane on recycle while applying lane depth for both lanes", () => {
+    const config: CloudSimulationConfig = {
+      ...baseConfig,
+      count: 2,
+      laneRatioFront: 0.5,
+      laneDepthFront: 8,
+      laneDepthBack: 18,
+      despawnBandBelowCamera: 2,
+    };
+    const initial = initializeCloudState({ seed: 4242, config, cameraFrame: baseCameraFrame });
+    const thresholdY = baseCameraFrame.viewBottomY - config.despawnBandBelowCamera;
+
+    const forcedRecycle = {
+      ...initial,
+      clouds: initial.clouds.map((cloud) => ({
+        ...cloud,
+        y: thresholdY - 0.001,
+      })),
+    };
+
+    const stepped = stepCloudState({
+      previousState: forcedRecycle,
+      config,
+      cameraFrame: baseCameraFrame,
+      deltaSeconds: 1 / 60,
+    });
+
+    for (const cloud of stepped.clouds) {
+      const baseline = initial.clouds.find((entry) => entry.id === cloud.id);
+      expect(baseline).toBeDefined();
+      expect(cloud.lane).toBe(baseline?.lane);
+      expect(cloud.z).toBeCloseTo(cloud.lane === "front" ? config.laneDepthFront : config.laneDepthBack, 6);
+    }
+  });
+
+  it("applies signed horizontal drift and keeps x static in zero-drift mode", () => {
+    const driftingConfig: CloudSimulationConfig = {
+      ...baseConfig,
+      horizontalDriftSpeed: -3,
+      despawnBandBelowCamera: 200,
+    };
+    const driftingInitial = initializeCloudState({ seed: 202, config: driftingConfig, cameraFrame: baseCameraFrame });
+    const driftingStepped = stepCloudState({
+      previousState: driftingInitial,
+      config: driftingConfig,
+      cameraFrame: baseCameraFrame,
+      deltaSeconds: 0.5,
+    });
+
+    driftingStepped.clouds.forEach((cloud, index) => {
+      expect(cloud.x).toBeCloseTo(driftingInitial.clouds[index].x + driftingConfig.horizontalDriftSpeed * 0.5, 6);
+      expect(cloud.x).toBeLessThan(driftingInitial.clouds[index].x);
+    });
+
+    const staticConfig: CloudSimulationConfig = {
+      ...baseConfig,
+      horizontalDriftSpeed: 0,
+      despawnBandBelowCamera: 200,
+    };
+    const staticInitial = initializeCloudState({ seed: 203, config: staticConfig, cameraFrame: baseCameraFrame });
+    const staticStepped = stepCloudState({
+      previousState: staticInitial,
+      config: staticConfig,
+      cameraFrame: baseCameraFrame,
+      deltaSeconds: 0.5,
+    });
+
+    staticStepped.clouds.forEach((cloud, index) => {
+      expect(cloud.x).toBeCloseTo(staticInitial.clouds[index].x, 6);
+    });
+  });
+});
+
+describe("cloud lifecycle sanitization", () => {
+  it("normalizes inverted and non-finite threshold bands", () => {
+    const sanitized = sanitizeCloudLifecycleBands({
+      spawnBandAboveCamera: -5,
+      despawnBandBelowCamera: Number.NaN,
+      minimumSeparation: 1,
+    });
+
+    expect(Number.isFinite(sanitized.spawnBandAboveCamera)).toBe(true);
+    expect(Number.isFinite(sanitized.despawnBandBelowCamera)).toBe(true);
+    expect(sanitized.spawnBandAboveCamera).toBeGreaterThanOrEqual(0);
+    expect(sanitized.despawnBandBelowCamera).toBeGreaterThanOrEqual(0);
+  });
+
+  it("enforces minimum separation between effective despawn and spawn thresholds", () => {
+    const sanitized = sanitizeCloudLifecycleBands({
+      spawnBandAboveCamera: 0.25,
+      despawnBandBelowCamera: 0,
+      minimumSeparation: 1.5,
+    });
+
+    expect(sanitized.spawnBandAboveCamera - sanitized.despawnBandBelowCamera).toBeGreaterThanOrEqual(1.5);
   });
 });
