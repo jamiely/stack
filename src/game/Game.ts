@@ -2440,6 +2440,14 @@ export class Game {
           tremorStrength: distractionSnapshot.active.tremor ? distractionSnapshot.signals.tremor : 0,
           fireworksOpacity: Number(this.fireworksActor.style.opacity || 0),
         },
+        clouds: (this.cloudState?.clouds ?? []).map((cloud) => ({
+          id: cloud.id,
+          x: cloud.x,
+          y: cloud.y,
+          z: cloud.z,
+          lane: cloud.lane,
+          recycleCount: cloud.recycleCount,
+        })),
       },
       integrity: {
         tier: this.integrityTelemetry.tier,

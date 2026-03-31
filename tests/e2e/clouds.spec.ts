@@ -344,3 +344,108 @@ test("cloud debug controls apply on the next simulation step", async ({ page }) 
     afterStep.debugConfig!.distractionCloudDespawnBandBelow + 0.5,
   );
 });
+
+test("test API exposes per-cloud diagnostics and stays stable under adversarial cloud thresholds", async ({ page }) => {
+  await page.goto("/?debug&test&paused=1&seed=42");
+
+  const first = await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        applyDebugConfig: (config: Partial<Record<string, number | boolean>>) => void;
+        stepSimulation: (steps?: number) => void;
+        getState: () => {
+          distractions: {
+            clouds?: Array<{
+              id: string;
+              x: number;
+              y: number;
+              z: number;
+              lane: string;
+              recycleCount: number;
+            }>;
+          };
+          debugConfig: { distractionCloudSpawnBandAbove: number; distractionCloudDespawnBandBelow: number };
+        };
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return null;
+    }
+
+    api.startGame();
+    api.setPaused(true);
+    api.applyDebugConfig({
+      distractionCloudEnabled: true,
+      distractionCloudStartLevel: 0,
+      distractionCloudCount: 12,
+      distractionCloudDriftSpeed: 0,
+      distractionCloudSpawnBandAbove: 0,
+      distractionCloudDespawnBandBelow: 29.5,
+    });
+    api.stepSimulation(1);
+
+    const state = api.getState();
+    return {
+      clouds: state.distractions.clouds ?? [],
+      debugConfig: state.debugConfig,
+    };
+  });
+
+  expect(first).not.toBeNull();
+  expect(first!.clouds).toHaveLength(12);
+  expect(first!.debugConfig.distractionCloudSpawnBandAbove).toBeGreaterThanOrEqual(
+    first!.debugConfig.distractionCloudDespawnBandBelow + 0.5,
+  );
+
+  first!.clouds.forEach((cloud) => {
+    expect(cloud.id).toMatch(/^cloud-/);
+    expect(["front", "back"]).toContain(cloud.lane);
+    expect(Number.isFinite(cloud.x)).toBe(true);
+    expect(Number.isFinite(cloud.y)).toBe(true);
+    expect(Number.isFinite(cloud.z)).toBe(true);
+    expect(cloud.recycleCount).toBeGreaterThanOrEqual(0);
+  });
+
+  const second = await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        stepSimulation: (steps?: number) => void;
+        getState: () => {
+          distractions: {
+            clouds?: Array<{
+              id: string;
+              x: number;
+              y: number;
+              z: number;
+              lane: string;
+              recycleCount: number;
+            }>;
+          };
+        };
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return null;
+    }
+
+    api.stepSimulation(10);
+    return api.getState().distractions.clouds ?? [];
+  });
+
+  expect(second).not.toBeNull();
+  expect(second!).toHaveLength(12);
+  second!.forEach((cloud, index) => {
+    const baseline = first!.clouds[index];
+    expect(baseline).toBeDefined();
+    expect(cloud.id).toBe(baseline.id);
+    expect(cloud.lane).toBe(baseline.lane);
+    expect(cloud.recycleCount).toBe(baseline.recycleCount);
+    expect(Number.isFinite(cloud.x)).toBe(true);
+    expect(Number.isFinite(cloud.y)).toBe(true);
+    expect(Number.isFinite(cloud.z)).toBe(true);
+  });
+});

@@ -163,6 +163,14 @@ export interface PublicGameState {
       tremorStrength: number;
       fireworksOpacity: number;
     };
+    clouds: Array<{
+      id: string;
+      x: number;
+      y: number;
+      z: number;
+      lane: "front" | "back";
+      recycleCount: number;
+    }>;
   };
   integrity: {
     tier: "stable" | "precarious" | "unstable";

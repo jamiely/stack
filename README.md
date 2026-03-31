@@ -21,7 +21,7 @@ The repo now includes a playable early milestone:
 - Runtime debug panel for gameplay tuning, gated behind `?debug`
 - Vitest unit test setup with 90%+ enforced coverage on non-rendering code (logic modules + non-rendering runtime services such as debug config and feedback orchestration)
 - Playwright coverage for autostart boot flow, keyboard + pointer stops, miss/restart flow, deterministic test stepping, and runtime debug tuning updates
-- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, recovery telemetry, feedback telemetry, distraction-state/actor-visual assertions, integrity telemetry assertions, collapse-state assertions, and performance diagnostics assertions
+- Deterministic test mode (`?test`) with a guarded `window.__towerStackerTestApi` control surface for stepping, scripted placement setup, combo-state inspection, recovery telemetry, feedback telemetry, distraction-state/actor-visual assertions (including per-cloud diagnostics with id/position/lane/recycle metadata), integrity telemetry assertions, collapse-state assertions, and performance diagnostics assertions
 - Git hooks for unit tests on commit and Playwright on commit/push
 
 ## Development

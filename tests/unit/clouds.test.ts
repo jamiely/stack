@@ -322,4 +322,38 @@ describe("cloud lifecycle sanitization", () => {
 
     expect(sanitized.spawnBandAboveCamera - sanitized.despawnBandBelowCamera).toBeGreaterThanOrEqual(1.5);
   });
+
+  it("avoids recycle thrash under inverted tight threshold controls", () => {
+    const config: CloudSimulationConfig = {
+      ...baseConfig,
+      count: 3,
+      horizontalDriftSpeed: 0,
+      spawnBandAboveCamera: 0,
+      despawnBandBelowCamera: 29.5,
+    };
+
+    const initial = initializeCloudState({ seed: 2026, config, cameraFrame: baseCameraFrame });
+    const firstStep = stepCloudState({
+      previousState: initial,
+      config,
+      cameraFrame: baseCameraFrame,
+      deltaSeconds: 1 / 60,
+    });
+    const secondStep = stepCloudState({
+      previousState: firstStep,
+      config,
+      cameraFrame: baseCameraFrame,
+      deltaSeconds: 1 / 60,
+    });
+
+    expect(firstStep.clouds).toHaveLength(3);
+    expect(secondStep.clouds).toHaveLength(3);
+
+    firstStep.clouds.forEach((cloud, index) => {
+      expect(Number.isFinite(cloud.x)).toBe(true);
+      expect(Number.isFinite(cloud.y)).toBe(true);
+      expect(Number.isFinite(cloud.z)).toBe(true);
+      expect(secondStep.clouds[index]?.recycleCount).toBe(cloud.recycleCount);
+    });
+  });
 });
