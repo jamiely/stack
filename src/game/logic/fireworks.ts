@@ -23,6 +23,7 @@ const MAX_PRIMARY_COMPLETION_SECONDS = 2.2;
 const MIN_SECONDARY_COMPLETION_SECONDS = 1;
 const MAX_SECONDARY_COMPLETION_SECONDS = 2.8;
 const MAX_CLEANUP_FROM_LAUNCH_SECONDS = 3.2;
+const SECONDARY_TIMING_EPSILON_SECONDS = 1e-6;
 const PRIMARY_PARTICLE_COUNT = 20;
 const SECONDARY_PARTICLE_COUNT = 12;
 
@@ -292,7 +293,14 @@ export function stepFireworksState({ previousState, config, deltaSeconds, isChan
   const launchByShell = new Map(launchEvents.map((event) => [event.shellId, event]));
 
   const nextShells: FireworkShellState[] = [];
-  const burstOrigins: Array<{ shellId: string; x: number; y: number; z: number }> = [];
+  const burstOrigins: Array<{
+    shellId: string;
+    x: number;
+    y: number;
+    z: number;
+    primaryElapsedSeconds: number;
+    remainingStepSeconds: number;
+  }> = [];
 
   for (const shell of previousState.shells) {
     const nextVy = shell.vy - sanitizedConfig.shellGravity * dt;
@@ -302,14 +310,27 @@ export function stepFireworksState({ previousState, config, deltaSeconds, isChan
     const shouldBurst = nextVy <= 0 && nextAgeTicks >= shell.trailTicksRequired;
 
     if (shouldBurst) {
+      const burstOffsetSeconds = computeShellBurstOffsetSeconds({
+        previousVy: shell.vy,
+        gravity: sanitizedConfig.shellGravity,
+        dt,
+      });
+      const burstElapsedSeconds = previousState.elapsedSeconds + burstOffsetSeconds;
       primaryBurstEvents.push({
         shellId: shell.id,
         tick: currentTick,
         apexTick: currentTick,
-        elapsedSeconds: currentElapsedSeconds,
+        elapsedSeconds: burstElapsedSeconds,
         shellTicks: nextAgeTicks,
       });
-      burstOrigins.push({ shellId: shell.id, x: shell.x, y: nextY, z: shell.z });
+      burstOrigins.push({
+        shellId: shell.id,
+        x: shell.x,
+        y: nextY,
+        z: shell.z,
+        primaryElapsedSeconds: burstElapsedSeconds,
+        remainingStepSeconds: Math.max(0, dt - burstOffsetSeconds),
+      });
       continue;
     }
 
@@ -397,9 +418,9 @@ export function stepFireworksState({ previousState, config, deltaSeconds, isChan
       x: origin.x,
       y: origin.y,
       z: origin.z,
-      ageSeconds: 0,
+      ageSeconds: origin.remainingStepSeconds,
       delaySeconds: lerp(normalizedDelayMin, normalizedDelayMax, delaySample.value),
-      primaryElapsedSeconds: currentElapsedSeconds,
+      primaryElapsedSeconds: origin.primaryElapsedSeconds,
     });
   }
 
@@ -699,6 +720,32 @@ function emitBurstParticles({
     nextParticleId: particleId,
     dropped: Math.max(0, count - emitCount),
   };
+}
+
+function computeShellBurstOffsetSeconds({ previousVy, gravity, dt }: { previousVy: number; gravity: number; dt: number }): number {
+  if (dt <= 0) {
+    return 0;
+  }
+
+  if (previousVy <= 0) {
+    if (dt <= MAX_SECONDARY_WINDOW_SECONDS) {
+      return 0;
+    }
+
+    return Math.min(dt, dt - MAX_SECONDARY_WINDOW_SECONDS + SECONDARY_TIMING_EPSILON_SECONDS);
+  }
+
+  if (gravity <= 0) {
+    return dt;
+  }
+
+  const rawOffset = clamp(previousVy / gravity, 0, dt);
+  if (dt <= MAX_SECONDARY_WINDOW_SECONDS) {
+    return rawOffset;
+  }
+
+  const latestAllowedOffset = Math.max(0, dt - MAX_SECONDARY_WINDOW_SECONDS + SECONDARY_TIMING_EPSILON_SECONDS);
+  return Math.min(rawOffset, latestAllowedOffset);
 }
 
 function sampleWithCursor(seed: number, cursor: number): RngSample {
