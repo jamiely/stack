@@ -308,6 +308,88 @@ describe("fireworks secondary lifecycle and cleanup", () => {
   });
 });
 
+describe("fireworks particle cap guardrails", () => {
+  it("never exceeds maxActiveParticles under sustained deterministic stress", () => {
+    const stressConfig: FireworksConfig = {
+      ...baseConfig,
+      launchIntervalMinSeconds: 0.2,
+      launchIntervalMaxSeconds: 0.2,
+      shellSpeedMin: 18,
+      shellSpeedMax: 24,
+      particleLifetimeMinSeconds: 2.4,
+      particleLifetimeMaxSeconds: 8,
+      secondaryDelayMinSeconds: 0.05,
+      secondaryDelayMaxSeconds: 0.05,
+      maxActiveParticles: 48,
+    };
+
+    let state = initializeFireworksState({ seed: 42, config: stressConfig });
+    const deltaSeconds = 1 / 30;
+
+    for (let step = 0; step < 900; step += 1) {
+      state = stepFireworksState({
+        previousState: state,
+        config: stressConfig,
+        deltaSeconds,
+        isChannelActive: true,
+      });
+      expect(state.snapshot.activeParticles).toBeLessThanOrEqual(stressConfig.maxActiveParticles);
+      expect(state.particles.length).toBeLessThanOrEqual(stressConfig.maxActiveParticles);
+    }
+
+    expect(state.telemetry.droppedSecondary).toBeGreaterThan(0);
+  });
+
+  it("records secondary degradation before any primary reductions under cap pressure", () => {
+    const stressConfig: FireworksConfig = {
+      ...baseConfig,
+      launchIntervalMinSeconds: 0.2,
+      launchIntervalMaxSeconds: 0.2,
+      shellSpeedMin: 18,
+      shellSpeedMax: 24,
+      particleLifetimeMinSeconds: 2.8,
+      particleLifetimeMaxSeconds: 8,
+      secondaryDelayMinSeconds: 0.05,
+      secondaryDelayMaxSeconds: 0.05,
+      maxActiveParticles: 48,
+    };
+
+    let state = initializeFireworksState({ seed: 7, config: stressConfig });
+    const deltaSeconds = 1 / 30;
+    let firstDropCounters: { droppedSecondary: number; droppedPrimary: number } | null = null;
+
+    for (let step = 0; step < 900; step += 1) {
+      const previousSecondaryDrops = state.telemetry.droppedSecondary;
+      const previousPrimaryDrops = state.telemetry.droppedPrimary;
+
+      state = stepFireworksState({
+        previousState: state,
+        config: stressConfig,
+        deltaSeconds,
+        isChannelActive: true,
+      });
+
+      if (
+        firstDropCounters === null
+        && (state.telemetry.droppedSecondary > previousSecondaryDrops || state.telemetry.droppedPrimary > previousPrimaryDrops)
+      ) {
+        firstDropCounters = {
+          droppedSecondary: state.telemetry.droppedSecondary,
+          droppedPrimary: state.telemetry.droppedPrimary,
+        };
+      }
+    }
+
+    expect(firstDropCounters).not.toBeNull();
+    expect(firstDropCounters?.droppedSecondary ?? 0).toBeGreaterThan(0);
+    expect(firstDropCounters?.droppedPrimary ?? 0).toBe(0);
+
+    if (state.telemetry.droppedPrimary > 0) {
+      expect(state.telemetry.droppedSecondary).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe("fireworks simulation determinism", () => {
   it("initializes deterministically for same seed and config", () => {
     const first = initializeFireworksState({ seed: 42, config: baseConfig });

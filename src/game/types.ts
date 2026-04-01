@@ -183,6 +183,19 @@ export interface PublicGameState {
       lane: "front" | "back";
       recycleCount: number;
     }>;
+    fireworks: {
+      tick: number;
+      elapsedSeconds: number;
+      activeShells: number;
+      activeParticles: number;
+      launches: number;
+      primaryBursts: number;
+      secondaryBursts: number;
+      cleanupEvents: number;
+      droppedSecondary: number;
+      droppedPrimary: number;
+      maxActiveParticles: number;
+    };
   };
   integrity: {
     tier: "stable" | "precarious" | "unstable";

@@ -348,40 +348,61 @@ export function stepFireworksState({ previousState, config, deltaSeconds, isChan
   let nextShellId = previousState.nextShellId;
 
   if (isChannelActive && nextLaunchInSeconds <= 0) {
-    const spawnNoise = sampleNoise(previousState.seed, nextRngCursor);
-    const heightNoise = sampleNoise(previousState.seed, nextRngCursor + 1);
-    const trailNoise = sampleNoise(previousState.seed, nextRngCursor + 2);
-    const cooldownNoise = sampleNoise(previousState.seed, nextRngCursor + 3);
-    nextRngCursor += 4;
+    const availableParticleRoom = Math.max(0, sanitizedConfig.maxActiveParticles - previousState.particles.length);
+    const projectedPrimaryDemand = (nextShells.length + 1) * PRIMARY_PARTICLE_COUNT;
 
-    const shell = createShell({
-      shellId: nextShellId,
-      config: sanitizedConfig,
-      spawnNoise,
-      heightNoise,
-      trailNoise,
-    });
+    if (availableParticleRoom >= projectedPrimaryDemand) {
+      const spawnNoise = sampleNoise(previousState.seed, nextRngCursor);
+      const heightNoise = sampleNoise(previousState.seed, nextRngCursor + 1);
+      const trailNoise = sampleNoise(previousState.seed, nextRngCursor + 2);
+      const cooldownNoise = sampleNoise(previousState.seed, nextRngCursor + 3);
+      nextRngCursor += 4;
 
-    launches += 1;
-    nextShellId += 1;
-    nextShells.push(shell);
-    launchEvents.push({
-      shellId: shell.id,
-      tick: currentTick,
-      elapsedSeconds: currentElapsedSeconds,
-    });
-    launchByShell.set(shell.id, launchEvents[launchEvents.length - 1]!);
-    nextLaunchInSeconds = lerp(
-      sanitizedConfig.launchIntervalMinSeconds,
-      sanitizedConfig.launchIntervalMaxSeconds,
-      cooldownNoise,
-    );
+      const shell = createShell({
+        shellId: nextShellId,
+        config: sanitizedConfig,
+        spawnNoise,
+        heightNoise,
+        trailNoise,
+      });
+
+      launches += 1;
+      nextShellId += 1;
+      nextShells.push(shell);
+      launchEvents.push({
+        shellId: shell.id,
+        tick: currentTick,
+        elapsedSeconds: currentElapsedSeconds,
+      });
+      launchByShell.set(shell.id, launchEvents[launchEvents.length - 1]!);
+      nextLaunchInSeconds = lerp(
+        sanitizedConfig.launchIntervalMinSeconds,
+        sanitizedConfig.launchIntervalMaxSeconds,
+        cooldownNoise,
+      );
+    } else {
+      const cooldownSample = sampleWithCursor(previousState.seed, nextRngCursor);
+      nextRngCursor = cooldownSample.cursor;
+      nextLaunchInSeconds = lerp(
+        sanitizedConfig.launchIntervalMinSeconds,
+        sanitizedConfig.launchIntervalMaxSeconds,
+        cooldownSample.value,
+      );
+    }
   }
 
   let nextSecondaryQueue = previousState.secondaryQueue.map((event) => ({ ...event, ageSeconds: event.ageSeconds + dt }));
   let nextParticles = [...previousState.particles];
 
   for (const origin of burstOrigins) {
+    const reclaimedSecondary = reclaimSecondaryParticlesForPrimary({
+      particles: nextParticles,
+      maxActiveParticles: sanitizedConfig.maxActiveParticles,
+      requiredPrimaryParticles: PRIMARY_PARTICLE_COUNT,
+    });
+    nextParticles = reclaimedSecondary.particles;
+    droppedSecondary += reclaimedSecondary.droppedSecondary;
+
     const primaryEmit = emitBurstParticles({
       seed: previousState.seed,
       rngCursor: nextRngCursor,
@@ -623,6 +644,44 @@ function createShell({
       MIN_PRE_BURST_TICKS,
       lerpInt(config.shellTrailTicksMin, config.shellTrailTicksMax, trailNoise),
     ),
+  };
+}
+
+function reclaimSecondaryParticlesForPrimary({
+  particles,
+  maxActiveParticles,
+  requiredPrimaryParticles,
+}: {
+  particles: FireworkParticleState[];
+  maxActiveParticles: number;
+  requiredPrimaryParticles: number;
+}): { particles: FireworkParticleState[]; droppedSecondary: number } {
+  const availableRoom = Math.max(0, maxActiveParticles - particles.length);
+  const particlesNeeded = Math.max(0, requiredPrimaryParticles - availableRoom);
+  if (particlesNeeded <= 0) {
+    return {
+      particles,
+      droppedSecondary: 0,
+    };
+  }
+
+  let remainingToDrop = particlesNeeded;
+  const trimmed: FireworkParticleState[] = [];
+  let droppedSecondary = 0;
+
+  for (const particle of particles) {
+    if (remainingToDrop > 0 && particle.stage === "secondary") {
+      remainingToDrop -= 1;
+      droppedSecondary += 1;
+      continue;
+    }
+
+    trimmed.push(particle);
+  }
+
+  return {
+    particles: trimmed,
+    droppedSecondary,
   };
 }
 
