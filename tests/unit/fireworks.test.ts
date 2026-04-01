@@ -187,6 +187,127 @@ describe("fireworks scheduler and shell lifecycle", () => {
   });
 });
 
+describe("fireworks secondary lifecycle and cleanup", () => {
+  it("emits delayed secondary bursts and secondary particles trend downward by mid-life", () => {
+    let state = initializeFireworksState({ seed: 42, config: baseConfig });
+    const deltaSeconds = 1 / 60;
+
+    for (let step = 0; step < 600 && state.telemetry.secondaryBurstEvents.length === 0; step += 1) {
+      state = stepFireworksState({
+        previousState: state,
+        config: baseConfig,
+        deltaSeconds,
+        isChannelActive: true,
+      });
+    }
+
+    expect(state.telemetry.secondaryBurstEvents.length).toBeGreaterThan(0);
+    const firstSecondary = state.telemetry.secondaryBurstEvents[0];
+    const primary = state.telemetry.primaryBurstEvents.find((event) => event.shellId === firstSecondary.shellId);
+    expect(primary).toBeDefined();
+
+    const secondaryDelay = firstSecondary.elapsedSeconds - (primary?.elapsedSeconds ?? 0);
+    expect(secondaryDelay).toBeGreaterThanOrEqual(0.05);
+    expect(secondaryDelay).toBeLessThanOrEqual(0.35 + deltaSeconds);
+
+    const trackedParticle = state.particles.find(
+      (particle) => particle.shellId === firstSecondary.shellId && particle.stage === "secondary",
+    );
+    expect(trackedParticle).toBeDefined();
+
+    const trackedId = trackedParticle?.id ?? "";
+    const initialVy = trackedParticle?.initialVy ?? 0;
+    const halfLife = (trackedParticle?.lifetimeSeconds ?? 0) / 2;
+
+    while (true) {
+      const active = state.particles.find((particle) => particle.id === trackedId);
+      expect(active).toBeDefined();
+      if ((active?.ageSeconds ?? 0) >= halfLife) {
+        expect((active?.vy ?? 0)).toBeLessThan(initialVy);
+        expect((active?.vy ?? 0)).toBeLessThan(0);
+        break;
+      }
+
+      state = stepFireworksState({
+        previousState: state,
+        config: baseConfig,
+        deltaSeconds,
+        isChannelActive: true,
+      });
+    }
+  });
+
+  it("keeps secondary delay telemetry inside 0.05s-0.35s under coarse deterministic stepping", () => {
+    let state = initializeFireworksState({ seed: 42, config: baseConfig });
+
+    for (let step = 0; step < 120 && state.telemetry.secondaryBurstEvents.length === 0; step += 1) {
+      state = stepFireworksState({
+        previousState: state,
+        config: baseConfig,
+        deltaSeconds: 0.4,
+        isChannelActive: true,
+      });
+    }
+
+    expect(state.telemetry.secondaryBurstEvents.length).toBeGreaterThan(0);
+    const firstSecondary = state.telemetry.secondaryBurstEvents[0];
+    const primary = state.telemetry.primaryBurstEvents.find((event) => event.shellId === firstSecondary.shellId);
+    expect(primary).toBeDefined();
+
+    const secondaryDelay = firstSecondary.elapsedSeconds - (primary?.elapsedSeconds ?? 0);
+    expect(secondaryDelay).toBeGreaterThanOrEqual(0.05);
+    expect(secondaryDelay).toBeLessThanOrEqual(0.35);
+  });
+
+  it("meets primary and secondary completion windows and cleans each firework by 3.2 seconds from launch", () => {
+    const state = stepForDuration({ seconds: 24, isChannelActive: true });
+    expect(state.telemetry.cleanupEvents.length).toBeGreaterThan(0);
+
+    const primaryByShell = new Map(state.telemetry.primaryBurstEvents.map((event) => [event.shellId, event]));
+    const secondaryByShell = new Map(state.telemetry.secondaryBurstEvents.map((event) => [event.shellId, event]));
+    const primaryCompletionByShell = new Map(state.telemetry.primaryCompletionEvents.map((event) => [event.shellId, event]));
+    const secondaryCompletionByShell = new Map(state.telemetry.secondaryCompletionEvents.map((event) => [event.shellId, event]));
+    const launchByShell = new Map(state.telemetry.launchEvents.map((event) => [event.shellId, event]));
+    const maxTickDrift = 1 / 60;
+
+    for (const cleanup of state.telemetry.cleanupEvents) {
+      const launch = launchByShell.get(cleanup.shellId);
+      const primary = primaryByShell.get(cleanup.shellId);
+      const secondary = secondaryByShell.get(cleanup.shellId);
+      const primaryCompletion = primaryCompletionByShell.get(cleanup.shellId);
+      const secondaryCompletion = secondaryCompletionByShell.get(cleanup.shellId);
+
+      expect(launch).toBeDefined();
+      expect(primary).toBeDefined();
+      expect(secondary).toBeDefined();
+      expect(primaryCompletion).toBeDefined();
+      expect(secondaryCompletion).toBeDefined();
+
+      const primaryCompletionSeconds = (primaryCompletion?.elapsedSeconds ?? 0) - (primary?.elapsedSeconds ?? 0);
+      expect(primaryCompletionSeconds).toBeGreaterThanOrEqual(1.2);
+      expect(primaryCompletionSeconds).toBeLessThanOrEqual(2.2 + maxTickDrift);
+
+      const secondaryCompletionSeconds = (secondaryCompletion?.elapsedSeconds ?? 0) - (secondary?.elapsedSeconds ?? 0);
+      expect(secondaryCompletionSeconds).toBeGreaterThanOrEqual(1.0);
+      expect(secondaryCompletionSeconds).toBeLessThanOrEqual(2.8 + maxTickDrift);
+
+      const launchToCleanup = cleanup.elapsedSeconds - (launch?.elapsedSeconds ?? 0);
+      expect(launchToCleanup).toBeLessThanOrEqual(3.2 + maxTickDrift);
+    }
+  });
+
+  it("removes expired shells, particles, and queued secondary events from active arrays", () => {
+    const state = stepForDuration({ seconds: 24, isChannelActive: true });
+    expect(state.telemetry.cleanupEvents.length).toBeGreaterThan(0);
+
+    for (const cleanup of state.telemetry.cleanupEvents) {
+      expect(state.shells.some((shell) => shell.id === cleanup.shellId)).toBe(false);
+      expect(state.particles.some((particle) => particle.shellId === cleanup.shellId)).toBe(false);
+      expect(state.secondaryQueue.some((event) => event.shellId === cleanup.shellId)).toBe(false);
+    }
+  });
+});
+
 describe("fireworks simulation determinism", () => {
   it("initializes deterministically for same seed and config", () => {
     const first = initializeFireworksState({ seed: 42, config: baseConfig });
