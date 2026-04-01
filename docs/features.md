@@ -71,7 +71,7 @@ Runtime tuning panel includes:
 - Placement: perfect tolerance, combo target length
 - Recovery rewards: growth multiplier, slowdown factor, slowdown floors
 - Feedback: audio enable toggle, haptics enable toggle
-- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud/fireworks), deterministic motion speed, level-start thresholds for tentacle/gorilla/ufo/cloud/fireworks gating, cloud-specific simulation controls (count, horizontal drift speed including explicit zero-drift, spawn-above band, despawn-below band with ordered sanitization and minimum separation), and on-demand launch buttons for each distraction channel
+- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud/fireworks), deterministic motion speed, level-start thresholds for tentacle/gorilla/ufo/cloud/fireworks gating, fireworks simulation controls (launch interval min/max, shell speed min/max, shell gravity, shell trail ticks min/max, secondary delay min/max, particle lifetime min/max, active-particle cap with min/max relationship sanitization), cloud-specific simulation controls (count, horizontal drift speed including explicit zero-drift, spawn-above band, despawn-below band with ordered sanitization and minimum separation), and on-demand launch buttons for each distraction channel
 - Integrity: precarious threshold, unstable threshold, and camera wobble strength
 - Collapse: fail-sequence duration, tilt strength, camera pullback distance, and drop distance
 - Performance: quality preset (`0` low / `1` medium / `2` high), auto-quality toggle, frame-budget target, archival keep-level/chunk sizing, distraction LOD near/far distances, active debris cap, and debris pool limit

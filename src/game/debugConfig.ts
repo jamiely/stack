@@ -40,6 +40,18 @@ export const defaultDebugConfig: DebugConfig = {
   distractionCloudDespawnBandBelow: 4.5,
   distractionFireworksEnabled: true,
   distractionFireworksStartLevel: 18,
+  distractionFireworksLaunchIntervalMinSeconds: 0.8,
+  distractionFireworksLaunchIntervalMaxSeconds: 2.4,
+  distractionFireworksShellSpeedMin: 24,
+  distractionFireworksShellSpeedMax: 34,
+  distractionFireworksShellGravity: 46,
+  distractionFireworksShellTrailTicksMin: 6,
+  distractionFireworksShellTrailTicksMax: 18,
+  distractionFireworksSecondaryDelayMinSeconds: 0.05,
+  distractionFireworksSecondaryDelayMaxSeconds: 0.35,
+  distractionFireworksParticleLifetimeMinSeconds: 1.2,
+  distractionFireworksParticleLifetimeMaxSeconds: 2,
+  distractionFireworksMaxActiveParticles: 240,
   dayNightCycleBlocks: 20,
   integrityPrecariousThreshold: 0.55,
   integrityUnstableThreshold: 0.9,
@@ -71,6 +83,36 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     despawnBandBelowCamera: clamp(config.distractionCloudDespawnBandBelow, 0, 29.5),
     minimumSeparation: 0.5,
   });
+  const fireworksLaunchInterval = normalizeClampedPair(
+    config.distractionFireworksLaunchIntervalMinSeconds,
+    config.distractionFireworksLaunchIntervalMaxSeconds,
+    0.2,
+    6,
+  );
+  const fireworksShellSpeed = normalizeClampedPair(
+    config.distractionFireworksShellSpeedMin,
+    config.distractionFireworksShellSpeedMax,
+    1,
+    120,
+  );
+  const fireworksShellTrailTicks = normalizeClampedIntegerPair(
+    config.distractionFireworksShellTrailTicksMin,
+    config.distractionFireworksShellTrailTicksMax,
+    1,
+    240,
+  );
+  const fireworksSecondaryDelay = normalizeClampedPair(
+    config.distractionFireworksSecondaryDelayMinSeconds,
+    config.distractionFireworksSecondaryDelayMaxSeconds,
+    0,
+    4,
+  );
+  const fireworksParticleLifetime = normalizeClampedPair(
+    config.distractionFireworksParticleLifetimeMinSeconds,
+    config.distractionFireworksParticleLifetimeMaxSeconds,
+    0.1,
+    8,
+  );
 
   return {
     cameraHeight: clamp(config.cameraHeight, 4, 20),
@@ -111,6 +153,18 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     distractionCloudDespawnBandBelow: cloudLifecycleBands.despawnBandBelowCamera,
     distractionFireworksEnabled: config.distractionFireworksEnabled,
     distractionFireworksStartLevel: Math.round(clamp(config.distractionFireworksStartLevel, 0, 120)),
+    distractionFireworksLaunchIntervalMinSeconds: fireworksLaunchInterval.min,
+    distractionFireworksLaunchIntervalMaxSeconds: fireworksLaunchInterval.max,
+    distractionFireworksShellSpeedMin: fireworksShellSpeed.min,
+    distractionFireworksShellSpeedMax: fireworksShellSpeed.max,
+    distractionFireworksShellGravity: clamp(config.distractionFireworksShellGravity, 0, 200),
+    distractionFireworksShellTrailTicksMin: fireworksShellTrailTicks.min,
+    distractionFireworksShellTrailTicksMax: fireworksShellTrailTicks.max,
+    distractionFireworksSecondaryDelayMinSeconds: fireworksSecondaryDelay.min,
+    distractionFireworksSecondaryDelayMaxSeconds: fireworksSecondaryDelay.max,
+    distractionFireworksParticleLifetimeMinSeconds: fireworksParticleLifetime.min,
+    distractionFireworksParticleLifetimeMaxSeconds: fireworksParticleLifetime.max,
+    distractionFireworksMaxActiveParticles: Math.round(clamp(config.distractionFireworksMaxActiveParticles, 32, 10000)),
     dayNightCycleBlocks: Math.round(clamp(config.dayNightCycleBlocks, 4, 80)),
     integrityPrecariousThreshold: clamp(config.integrityPrecariousThreshold, 0.35, 0.85),
     integrityUnstableThreshold: clamp(
@@ -140,6 +194,23 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     placementShakeAmount: clamp(config.placementShakeAmount, 0, 1.5),
     tremorShakeAmount: clamp(config.tremorShakeAmount, 0, 3),
     gridVisible: config.gridVisible,
+  };
+}
+
+function normalizeClampedPair(minValue: number, maxValue: number, rangeMin: number, rangeMax: number): { min: number; max: number } {
+  const min = clamp(minValue, rangeMin, rangeMax);
+  const max = clamp(maxValue, rangeMin, rangeMax);
+  return {
+    min: Math.min(min, max),
+    max: Math.max(min, max),
+  };
+}
+
+function normalizeClampedIntegerPair(minValue: number, maxValue: number, rangeMin: number, rangeMax: number): { min: number; max: number } {
+  const normalized = normalizeClampedPair(minValue, maxValue, rangeMin, rangeMax);
+  return {
+    min: Math.round(normalized.min),
+    max: Math.round(normalized.max),
   };
 }
 

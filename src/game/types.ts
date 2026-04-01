@@ -68,6 +68,18 @@ export interface DebugConfig {
   distractionCloudDespawnBandBelow: number;
   distractionFireworksEnabled: boolean;
   distractionFireworksStartLevel: number;
+  distractionFireworksLaunchIntervalMinSeconds: number;
+  distractionFireworksLaunchIntervalMaxSeconds: number;
+  distractionFireworksShellSpeedMin: number;
+  distractionFireworksShellSpeedMax: number;
+  distractionFireworksShellGravity: number;
+  distractionFireworksShellTrailTicksMin: number;
+  distractionFireworksShellTrailTicksMax: number;
+  distractionFireworksSecondaryDelayMinSeconds: number;
+  distractionFireworksSecondaryDelayMaxSeconds: number;
+  distractionFireworksParticleLifetimeMinSeconds: number;
+  distractionFireworksParticleLifetimeMaxSeconds: number;
+  distractionFireworksMaxActiveParticles: number;
   dayNightCycleBlocks: number;
   integrityPrecariousThreshold: number;
   integrityUnstableThreshold: number;

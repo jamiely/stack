@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clampDebugConfig, defaultDebugConfig } from "../../src/game/debugConfig";
+import { canForceDistractionChannel } from "../../src/game/logic/runtime";
 
 describe("clampDebugConfig", () => {
   it("preserves values inside the accepted range", () => {
@@ -47,6 +48,18 @@ describe("clampDebugConfig", () => {
         distractionCloudDespawnBandBelow: 99,
         distractionFireworksEnabled: false,
         distractionFireworksStartLevel: 999,
+        distractionFireworksLaunchIntervalMinSeconds: -1,
+        distractionFireworksLaunchIntervalMaxSeconds: 99,
+        distractionFireworksShellSpeedMin: -10,
+        distractionFireworksShellSpeedMax: 999,
+        distractionFireworksShellGravity: 999,
+        distractionFireworksShellTrailTicksMin: -20,
+        distractionFireworksShellTrailTicksMax: 999,
+        distractionFireworksSecondaryDelayMinSeconds: -2,
+        distractionFireworksSecondaryDelayMaxSeconds: 99,
+        distractionFireworksParticleLifetimeMinSeconds: 0,
+        distractionFireworksParticleLifetimeMaxSeconds: 99,
+        distractionFireworksMaxActiveParticles: 2,
         dayNightCycleBlocks: 1,
         integrityPrecariousThreshold: 0,
         integrityUnstableThreshold: 2,
@@ -110,6 +123,18 @@ describe("clampDebugConfig", () => {
       distractionCloudDespawnBandBelow: 29.5,
       distractionFireworksEnabled: false,
       distractionFireworksStartLevel: 120,
+      distractionFireworksLaunchIntervalMinSeconds: 0.2,
+      distractionFireworksLaunchIntervalMaxSeconds: 6,
+      distractionFireworksShellSpeedMin: 1,
+      distractionFireworksShellSpeedMax: 120,
+      distractionFireworksShellGravity: 200,
+      distractionFireworksShellTrailTicksMin: 1,
+      distractionFireworksShellTrailTicksMax: 240,
+      distractionFireworksSecondaryDelayMinSeconds: 0,
+      distractionFireworksSecondaryDelayMaxSeconds: 4,
+      distractionFireworksParticleLifetimeMinSeconds: 0.1,
+      distractionFireworksParticleLifetimeMaxSeconds: 8,
+      distractionFireworksMaxActiveParticles: 32,
       dayNightCycleBlocks: 4,
       integrityPrecariousThreshold: 0.35,
       integrityUnstableThreshold: 1.2,
@@ -136,6 +161,35 @@ describe("clampDebugConfig", () => {
     });
   });
 
+  it("normalizes fireworks min/max controls and cap bounds", () => {
+    const clamped = clampDebugConfig({
+      ...defaultDebugConfig,
+      distractionFireworksLaunchIntervalMinSeconds: 3.2,
+      distractionFireworksLaunchIntervalMaxSeconds: 1.8,
+      distractionFireworksShellSpeedMin: 48,
+      distractionFireworksShellSpeedMax: 12,
+      distractionFireworksShellTrailTicksMin: 40,
+      distractionFireworksShellTrailTicksMax: 6,
+      distractionFireworksSecondaryDelayMinSeconds: 0.45,
+      distractionFireworksSecondaryDelayMaxSeconds: 0.1,
+      distractionFireworksParticleLifetimeMinSeconds: 3.2,
+      distractionFireworksParticleLifetimeMaxSeconds: 1.2,
+      distractionFireworksMaxActiveParticles: 50000,
+    });
+
+    expect(clamped.distractionFireworksLaunchIntervalMinSeconds).toBe(1.8);
+    expect(clamped.distractionFireworksLaunchIntervalMaxSeconds).toBe(3.2);
+    expect(clamped.distractionFireworksShellSpeedMin).toBe(12);
+    expect(clamped.distractionFireworksShellSpeedMax).toBe(48);
+    expect(clamped.distractionFireworksShellTrailTicksMin).toBe(6);
+    expect(clamped.distractionFireworksShellTrailTicksMax).toBe(40);
+    expect(clamped.distractionFireworksSecondaryDelayMinSeconds).toBe(0.1);
+    expect(clamped.distractionFireworksSecondaryDelayMaxSeconds).toBe(0.45);
+    expect(clamped.distractionFireworksParticleLifetimeMinSeconds).toBe(1.2);
+    expect(clamped.distractionFireworksParticleLifetimeMaxSeconds).toBe(3.2);
+    expect(clamped.distractionFireworksMaxActiveParticles).toBe(10000);
+  });
+
   it("sanitizes cloud lifecycle controls and preserves explicit zero drift", () => {
     const clamped = clampDebugConfig({
       ...defaultDebugConfig,
@@ -146,5 +200,16 @@ describe("clampDebugConfig", () => {
 
     expect(clamped.distractionCloudDriftSpeed).toBe(0);
     expect(clamped.distractionCloudSpawnBandAbove).toBeGreaterThanOrEqual(clamped.distractionCloudDespawnBandBelow + 0.5);
+  });
+
+  it("keeps fireworks force-launch action available when channel is enabled", () => {
+    const clamped = clampDebugConfig({
+      ...defaultDebugConfig,
+      distractionsEnabled: true,
+      distractionFireworksEnabled: true,
+    });
+
+    expect(canForceDistractionChannel("fireworks", clamped)).toBe(true);
+    expect(canForceDistractionChannel("fireworks", { ...clamped, distractionFireworksEnabled: false })).toBe(false);
   });
 });
