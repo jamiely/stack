@@ -80,6 +80,7 @@ import {
 import { resolveFacadeStyle } from "./logic/facade";
 import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
+import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import { createSeededRandom } from "./logic/random";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
@@ -437,6 +438,8 @@ export class Game {
   private readonly sidingTexture = this.createSidingTexture();
   private cloudState: CloudState | null = null;
   private cloudSimulationSeed = 0;
+  private fireworksState: FireworksState | null = null;
+  private fireworksSimulationSeed = 0;
   private tentacleBurstKeys: string[] = [];
 
   public constructor(container: HTMLDivElement) {
@@ -640,7 +643,6 @@ export class Game {
 
     this.fireworksActor.className = "distraction-fireworks";
     this.fireworksActor.dataset.testid = "actor-fireworks";
-    this.fireworksActor.innerHTML = "<span class=\"distraction-fireworks__burst\"></span>";
 
     this.tremorPulse.className = "distraction-tremor";
     this.tremorPulse.dataset.testid = "actor-tremor";
@@ -911,6 +913,7 @@ export class Game {
     this.tickGorillaSlam(deltaSeconds);
     this.refreshQualityPreset();
     this.updateDistractions(deltaSeconds);
+    this.updateFireworksSimulation(deltaSeconds);
     this.updateDistractionActors(deltaSeconds);
     this.updateDayNightCycle(deltaSeconds);
     this.updateActiveSlab(deltaSeconds);
@@ -1043,6 +1046,11 @@ export class Game {
     this.activeQualityPreset = toQualityPreset(this.debugConfig.performanceQualityPreset);
     this.cloudState = null;
     this.cloudSimulationSeed = (distractionSeed ^ 0x9e3779b9) >>> 0;
+    this.fireworksSimulationSeed = (distractionSeed ^ 0x1f123bb5) >>> 0;
+    this.fireworksState = initializeFireworksState({
+      seed: this.fireworksSimulationSeed,
+      config: this.buildFireworksSimulationConfig(),
+    });
     this.tentacleBurstKeys = [];
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
@@ -1341,6 +1349,26 @@ export class Game {
     );
   }
 
+  private updateFireworksSimulation(deltaSeconds: number): void {
+    if (deltaSeconds <= 0) {
+      return;
+    }
+
+    if (!this.fireworksState) {
+      this.fireworksState = initializeFireworksState({
+        seed: this.fireworksSimulationSeed,
+        config: this.buildFireworksSimulationConfig(),
+      });
+    }
+
+    this.fireworksState = stepFireworksState({
+      previousState: this.fireworksState,
+      config: this.buildFireworksSimulationConfig(),
+      deltaSeconds,
+      isChannelActive: this.getEffectiveDistractionSnapshot().active.fireworks,
+    });
+  }
+
   private updateDistractionActors(deltaSeconds: number): void {
     const snapshot = this.getEffectiveDistractionSnapshot();
     const scalars = getQualityScalars(this.activeQualityPreset);
@@ -1516,21 +1544,7 @@ export class Game {
       this.updateCloudLayer(snapshot, deltaSeconds);
     }
 
-    if (snapshot.active.fireworks) {
-      const burst = this.fireworksActor.querySelector<HTMLElement>(".distraction-fireworks__burst");
-      const burstScale = 0.7 + snapshot.signals.fireworks * 0.9;
-      const burstOpacity = 0.16 + snapshot.signals.fireworks * 0.72;
-      const xPercent = 18 + ((this.distractionState.elapsedSeconds * 23.5) % 64);
-      const yPercent = 22 + ((this.distractionState.elapsedSeconds * 17.25) % 48);
-      this.fireworksActor.style.opacity = burstOpacity.toFixed(3);
-      this.fireworksActor.style.transform = `translate(${xPercent.toFixed(1)}%, ${yPercent.toFixed(1)}%) translate(-50%, -50%)`;
-      if (burst) {
-        burst.style.transform = `scale(${burstScale.toFixed(3)})`;
-        burst.style.opacity = Math.min(1, 0.35 + snapshot.signals.fireworks * 0.75).toFixed(3);
-      }
-    } else {
-      this.fireworksActor.style.opacity = "0";
-    }
+    this.updateFireworksLayer();
 
     const contrastOpacity = snapshot.active.contrastWash ? snapshot.signals.contrastWash * 0.35 : 0;
     this.shell.style.setProperty("--contrast-alpha", contrastOpacity.toFixed(3));
@@ -1701,6 +1715,137 @@ export class Game {
       laneDepthFront: -2.2,
       laneDepthBack: 1.8,
     };
+  }
+
+  private buildFireworksSimulationConfig(): FireworksConfig {
+    return {
+      launchIntervalMinSeconds: this.debugConfig.distractionFireworksLaunchIntervalMinSeconds,
+      launchIntervalMaxSeconds: this.debugConfig.distractionFireworksLaunchIntervalMaxSeconds,
+      shellSpeedMin: this.debugConfig.distractionFireworksShellSpeedMin,
+      shellSpeedMax: this.debugConfig.distractionFireworksShellSpeedMax,
+      shellGravity: this.debugConfig.distractionFireworksShellGravity,
+      shellTrailTicksMin: this.debugConfig.distractionFireworksShellTrailTicksMin,
+      shellTrailTicksMax: this.debugConfig.distractionFireworksShellTrailTicksMax,
+      secondaryDelayMinSeconds: this.debugConfig.distractionFireworksSecondaryDelayMinSeconds,
+      secondaryDelayMaxSeconds: this.debugConfig.distractionFireworksSecondaryDelayMaxSeconds,
+      particleLifetimeMinSeconds: this.debugConfig.distractionFireworksParticleLifetimeMinSeconds,
+      particleLifetimeMaxSeconds: this.debugConfig.distractionFireworksParticleLifetimeMaxSeconds,
+      maxActiveParticles: this.debugConfig.distractionFireworksMaxActiveParticles,
+      spawnXMin: -18,
+      spawnXMax: 18,
+      spawnZMin: -32,
+      spawnZMax: -14,
+    };
+  }
+
+  private updateFireworksLayer(): void {
+    const fireworksState = this.fireworksState;
+    if (!fireworksState) {
+      this.fireworksActor.style.opacity = "0";
+      this.fireworksActor.replaceChildren();
+      return;
+    }
+
+    const topSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
+    const topZ = topSlab?.position.z ?? 0;
+
+    const nodes: HTMLElement[] = [];
+
+    fireworksState.shells.forEach((shell) => {
+      const node = this.createFireworkEntityNode({
+        kind: "shell",
+        entityId: shell.id,
+        shellId: shell.id,
+        stage: "shell",
+      });
+
+      const visible = this.applyFireworkEntityProjection(node, {
+        x: shell.x,
+        y: shell.y,
+        z: topZ + shell.z,
+      });
+      if (!visible) {
+        return;
+      }
+
+      const shellScale = Math.max(0.5, Math.min(1.3, 0.9 + shell.ageTicks * 0.015));
+      node.style.setProperty("--fireworks-scale", shellScale.toFixed(3));
+      node.style.setProperty("--fireworks-alpha", "0.92");
+      nodes.push(node);
+    });
+
+    fireworksState.particles.forEach((particle) => {
+      const node = this.createFireworkEntityNode({
+        kind: "particle",
+        entityId: particle.id,
+        shellId: particle.shellId,
+        stage: particle.stage,
+      });
+
+      const visible = this.applyFireworkEntityProjection(node, {
+        x: particle.x,
+        y: particle.y,
+        z: topZ + particle.z,
+      });
+      if (!visible) {
+        return;
+      }
+
+      const particleScale = particle.stage === "secondary" ? 0.72 : 1;
+      node.style.setProperty("--fireworks-scale", particleScale.toFixed(3));
+      node.style.setProperty("--fireworks-alpha", Math.max(0, Math.min(1, particle.alpha)).toFixed(3));
+      nodes.push(node);
+    });
+
+    this.fireworksActor.replaceChildren(...nodes);
+    this.fireworksActor.style.opacity = nodes.length > 0 ? "1" : "0";
+  }
+
+  private createFireworkEntityNode({
+    kind,
+    entityId,
+    shellId,
+    stage,
+  }: {
+    kind: "shell" | "particle";
+    entityId: string;
+    shellId: string;
+    stage: "shell" | "primary" | "secondary";
+  }): HTMLSpanElement {
+    const node = document.createElement("span");
+    node.className = `distraction-fireworks__entity distraction-fireworks__entity--${kind}`;
+    if (kind === "particle") {
+      node.classList.add(`distraction-fireworks__entity--${stage}`);
+    }
+
+    node.dataset.fireworksKind = kind;
+    node.dataset.fireworksEntityId = entityId;
+    node.dataset.fireworksShellId = shellId;
+    node.dataset.fireworksStage = stage;
+    return node;
+  }
+
+  private applyFireworkEntityProjection(node: HTMLElement, position: { x: number; y: number; z: number }): boolean {
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight;
+    if (width <= 0 || height <= 0) {
+      return false;
+    }
+
+    const projected = new Vector3(position.x, position.y, position.z).project(this.camera);
+    if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y) || !Number.isFinite(projected.z)) {
+      return false;
+    }
+
+    if (projected.z <= -1 || projected.z >= 1) {
+      return false;
+    }
+
+    const screenX = (projected.x * 0.5 + 0.5) * width;
+    const screenY = (-projected.y * 0.5 + 0.5) * height;
+    node.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(var(--fireworks-scale, 1))`;
+    node.style.opacity = "var(--fireworks-alpha, 1)";
+    return true;
   }
 
   private createCloudCameraFrame(topSlab: SlabData): CloudCameraFrame {
@@ -2469,6 +2614,19 @@ export class Game {
           lane: cloud.lane,
           recycleCount: cloud.recycleCount,
         })),
+        fireworks: {
+          tick: this.fireworksState?.snapshot.tick ?? 0,
+          elapsedSeconds: this.fireworksState?.snapshot.elapsedSeconds ?? 0,
+          activeShells: this.fireworksState?.snapshot.activeShells ?? 0,
+          activeParticles: this.fireworksState?.snapshot.activeParticles ?? 0,
+          launches: this.fireworksState?.snapshot.launches ?? 0,
+          primaryBursts: this.fireworksState?.snapshot.primaryBursts ?? 0,
+          secondaryBursts: this.fireworksState?.snapshot.secondaryBursts ?? 0,
+          cleanupEvents: this.fireworksState?.telemetry.cleanupEvents.length ?? 0,
+          droppedSecondary: this.fireworksState?.telemetry.droppedSecondary ?? 0,
+          droppedPrimary: this.fireworksState?.telemetry.droppedPrimary ?? 0,
+          maxActiveParticles: this.debugConfig.distractionFireworksMaxActiveParticles,
+        },
       },
       integrity: {
         tier: this.integrityTelemetry.tier,

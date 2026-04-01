@@ -42,6 +42,7 @@ interface E2EState {
       ufo: boolean;
       contrastWash: boolean;
       clouds: boolean;
+      fireworks: boolean;
     };
     signals: {
       tentacle: number;
@@ -50,6 +51,7 @@ interface E2EState {
       ufo: number;
       contrastWash: number;
       clouds: number;
+      fireworks: number;
     };
     visuals: {
       gorillaOpacity: number;
@@ -57,6 +59,7 @@ interface E2EState {
       cloudOpacity: number;
       contrastOpacity: number;
       tremorStrength: number;
+      fireworksOpacity: number;
     };
   };
   debugConfig: {
@@ -609,6 +612,7 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.fireworks).toBe(false);
 
   await page.getByTestId("debug-launch-tentacle").click();
   await page.getByTestId("debug-launch-gorilla").click();
@@ -616,6 +620,7 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   await page.getByTestId("debug-launch-ufo").click();
   await page.getByTestId("debug-launch-contrastWash").click();
   await page.getByTestId("debug-launch-clouds").click();
+  await page.getByTestId("debug-launch-fireworks").click();
 
   await expect.poll(async () => (await getTestState(page))?.distractions.active.tentacle).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(true);
@@ -623,12 +628,14 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.contrastWash).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.fireworks).toBe(true);
 
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.cloudOpacity ?? 0).toBeGreaterThan(0.1);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.contrastOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.tremorStrength ?? 0).toBeGreaterThan(0.9);
+  await expect.poll(async () => (await getTestState(page))?.distractions.signals.fireworks ?? 0).toBeGreaterThan(0.9);
 
   await page.evaluate(() => {
     const api = (window as Window & {

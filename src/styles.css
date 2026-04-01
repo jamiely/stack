@@ -202,28 +202,48 @@ body {
 
 .distraction-fireworks {
   position: absolute;
-  left: 0;
-  top: 0;
+  inset: 0;
   opacity: 0;
   transition: opacity 100ms linear;
 }
 
-.distraction-fireworks__burst {
-  display: block;
-  width: 8.5rem;
-  height: 8.5rem;
+.distraction-fireworks__entity {
+  --fireworks-scale: 1;
+  --fireworks-alpha: 1;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0.7rem;
+  height: 0.7rem;
   border-radius: 999px;
-  background:
-    repeating-conic-gradient(
-      from 0deg,
-      rgba(255, 227, 131, 0.9) 0deg 8deg,
-      rgba(255, 123, 188, 0.86) 8deg 16deg,
-      rgba(142, 255, 182, 0.86) 16deg 24deg,
-      rgba(126, 186, 255, 0.82) 24deg 32deg
-    );
-  mask: radial-gradient(circle, transparent 0 22%, #000 24% 100%);
-  filter: drop-shadow(0 0 0.8rem rgba(255, 220, 122, 0.66));
-  opacity: 0;
+  transform: translate(-50%, -50%) scale(var(--fireworks-scale));
+  opacity: var(--fireworks-alpha);
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.distraction-fireworks__entity--shell {
+  width: 0.45rem;
+  height: 1.05rem;
+  border-radius: 0.45rem;
+  background: linear-gradient(180deg, rgba(255, 252, 212, 0.98), rgba(255, 171, 112, 0.78));
+  box-shadow:
+    0 0 0.55rem rgba(255, 198, 124, 0.74),
+    0 0 1rem rgba(255, 123, 112, 0.46);
+}
+
+.distraction-fireworks__entity--particle {
+  background: radial-gradient(circle, rgba(255, 246, 196, 0.98) 0 32%, rgba(255, 165, 94, 0.56) 72%, transparent 100%);
+  box-shadow: 0 0 0.5rem rgba(255, 191, 116, 0.65);
+}
+
+.distraction-fireworks__entity--primary {
+  background: radial-gradient(circle, rgba(255, 247, 207, 0.98) 0 28%, rgba(255, 164, 114, 0.62) 70%, transparent 100%);
+}
+
+.distraction-fireworks__entity--secondary {
+  background: radial-gradient(circle, rgba(164, 223, 255, 0.94) 0 30%, rgba(122, 171, 255, 0.54) 70%, transparent 100%);
+  box-shadow: 0 0 0.42rem rgba(123, 176, 255, 0.58);
 }
 
 .distraction-tremor {
