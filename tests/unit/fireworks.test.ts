@@ -4,6 +4,7 @@ import {
   sanitizeFireworksConfig,
   stepFireworksState,
   type FireworksConfig,
+  type FireworksState,
 } from "../../src/game/logic/fireworks";
 
 const baseConfig: FireworksConfig = {
@@ -24,6 +25,33 @@ const baseConfig: FireworksConfig = {
   spawnZMin: -32,
   spawnZMax: -14,
 };
+
+function stepForDuration({
+  seed = 42,
+  seconds,
+  isChannelActive,
+  config = baseConfig,
+}: {
+  seed?: number;
+  seconds: number;
+  isChannelActive: boolean;
+  config?: FireworksConfig;
+}): FireworksState {
+  let state = initializeFireworksState({ seed, config });
+  const deltaSeconds = 1 / 60;
+  const ticks = Math.ceil(seconds / deltaSeconds);
+
+  for (let index = 0; index < ticks; index += 1) {
+    state = stepFireworksState({
+      previousState: state,
+      config,
+      deltaSeconds,
+      isChannelActive,
+    });
+  }
+
+  return state;
+}
 
 describe("fireworks config sanitization", () => {
   it("clamps and normalizes adversarial values", () => {
@@ -60,7 +88,60 @@ describe("fireworks config sanitization", () => {
   });
 });
 
-describe("fireworks simulation skeleton", () => {
+describe("fireworks scheduler and shell lifecycle", () => {
+  it("keeps launch intervals in range without starvation over 20 seconds", () => {
+    const state = stepForDuration({ seconds: 20, isChannelActive: true });
+    const launchTimes = state.telemetry.launchEvents.map((event) => event.elapsedSeconds);
+    expect(launchTimes.length).toBeGreaterThan(5);
+
+    const intervals = launchTimes.slice(1).map((timestamp, index) => timestamp - launchTimes[index]);
+    const maxTickDrift = 1 / 60;
+    expect(intervals.every((interval) => interval >= baseConfig.launchIntervalMinSeconds)).toBe(true);
+    expect(intervals.every((interval) => interval <= baseConfig.launchIntervalMaxSeconds + maxTickDrift)).toBe(true);
+    expect(Math.max(...intervals)).toBeLessThanOrEqual(3);
+  });
+
+  it("produces zero launches when channel is gated off", () => {
+    const state = stepForDuration({ seconds: 20, isChannelActive: false });
+    expect(state.telemetry.launches).toBe(0);
+    expect(state.telemetry.launchEvents).toHaveLength(0);
+    expect(state.telemetry.primaryBurstEvents).toHaveLength(0);
+  });
+
+  it("emits exactly one primary burst per shell near apex after at least six ticks", () => {
+    const state = stepForDuration({ seconds: 20, isChannelActive: true });
+    const launchesByShell = new Map(state.telemetry.launchEvents.map((event) => [event.shellId, event]));
+
+    expect(state.telemetry.primaryBurstEvents.length).toBeGreaterThan(0);
+
+    for (const burst of state.telemetry.primaryBurstEvents) {
+      const launch = launchesByShell.get(burst.shellId);
+      expect(launch).toBeDefined();
+      expect(burst.shellTicks).toBeGreaterThanOrEqual(6);
+      expect(Math.abs(burst.tick - burst.apexTick)).toBeLessThanOrEqual(1);
+
+      const shellArcSeconds = burst.elapsedSeconds - (launch?.elapsedSeconds ?? 0);
+      expect(shellArcSeconds).toBeGreaterThanOrEqual(0.45);
+      expect(shellArcSeconds).toBeLessThanOrEqual(1.1 + 1 / 60);
+    }
+
+    const burstCountByShell = new Map<string, number>();
+    for (const burst of state.telemetry.primaryBurstEvents) {
+      burstCountByShell.set(burst.shellId, (burstCountByShell.get(burst.shellId) ?? 0) + 1);
+    }
+
+    for (const [, count] of burstCountByShell) {
+      expect(count).toBe(1);
+    }
+
+    const activeShellIds = new Set(state.shells.map((shell) => shell.id));
+    for (const burst of state.telemetry.primaryBurstEvents) {
+      expect(activeShellIds.has(burst.shellId)).toBe(false);
+    }
+  });
+});
+
+describe("fireworks simulation determinism", () => {
   it("initializes deterministically for same seed and config", () => {
     const first = initializeFireworksState({ seed: 42, config: baseConfig });
     const second = initializeFireworksState({ seed: 42, config: baseConfig });
@@ -88,19 +169,7 @@ describe("fireworks simulation skeleton", () => {
   });
 
   it("replays fixed-step sequences identically", () => {
-    const run = () => {
-      let state = initializeFireworksState({ seed: 7, config: baseConfig });
-      for (let index = 0; index < 180; index += 1) {
-        state = stepFireworksState({
-          previousState: state,
-          config: baseConfig,
-          deltaSeconds: 1 / 60,
-          isChannelActive: true,
-        });
-      }
-      return state.snapshot;
-    };
-
+    const run = () => stepForDuration({ seed: 7, seconds: 20, isChannelActive: true }).snapshot;
     expect(run()).toEqual(run());
   });
 });

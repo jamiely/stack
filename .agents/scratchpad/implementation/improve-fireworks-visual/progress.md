@@ -1,19 +1,19 @@
 # Progress — improve-fireworks-visual
 
 ## Current Step
-- Step 01: Add deterministic fireworks logic module skeleton + config sanitization
-- Status: completed
+- Step 02: Implement launch scheduler + shell arc/apex + single primary burst
+- Status: implemented, pending critic review
 
 ## Active Wave (Runtime Tasks)
-1. `task-1775050604-d5d1`
-   - Key: `pdd:improve-fireworks-visual:step-01:fireworks-logic-skeleton-and-config-sanitization`
-   - Code Task: `.agents/scratchpad/implementation/improve-fireworks-visual/tasks/task-01-fireworks-logic-skeleton-and-config-sanitization.code-task.md`
-   - Status: completed
+1. `task-1775051127-7de2`
+   - Key: `pdd:improve-fireworks-visual:step-02:launch-scheduler-shell-arc-and-primary-burst`
+   - Code Task: `.agents/scratchpad/implementation/improve-fireworks-visual/tasks/task-02-launch-scheduler-shell-arc-and-primary-burst.code-task.md`
+   - Status: in_progress
 
 ## TDD Evidence
-- RED: Added `tests/unit/fireworks.test.ts` covering adversarial config sanitization and deterministic initialize/step replay; initial run failed due to missing `src/game/logic/fireworks.ts` module.
-- GREEN: Implemented `src/game/logic/fireworks.ts` with typed config/state/snapshot models, sanitization helpers, seeded deterministic sampling, and initialize/step skeleton APIs.
-- REFACTOR: Consolidated clamp/normalize helpers and snapshot builder flow while preserving deterministic test expectations.
+- RED: Expanded `tests/unit/fireworks.test.ts` with failing assertions for launch cadence bounds/no-starvation, gating-off zero launches, shell arc timing, and single apex-aligned primary burst semantics via deterministic 20s stepping.
+- GREEN: Implemented deterministic scheduler + shell lifecycle in `src/game/logic/fireworks.ts` with launch/primary burst event telemetry, per-shell trail gating (>=6 ticks), apex-triggered shell retirement, and bounded arc-speed sampling.
+- REFACTOR: Kept the module aligned with existing sanitize/clamp helpers while centralizing launch/burst event bookkeeping and snapshot updates.
 
 ## Verification
 - `npm run test:unit -- tests/unit/fireworks.test.ts`
@@ -24,3 +24,4 @@
 
 ## Completed Steps
 - Step 01: deterministic fireworks logic skeleton + config sanitization
+- Step 02: launch scheduler + shell arc/apex + single primary burst semantics

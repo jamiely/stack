@@ -13,6 +13,8 @@ const MIN_ACTIVE_PARTICLE_CAP = 32;
 const MAX_ACTIVE_PARTICLE_CAP = 10_000;
 const MIN_TRAIL_TICKS = 1;
 const MAX_TRAIL_TICKS = 240;
+const MIN_ARC_SECONDS = 0.45;
+const MAX_ARC_SECONDS = 1.1;
 
 export interface FireworksConfig {
   launchIntervalMinSeconds: number;
@@ -42,6 +44,8 @@ export interface FireworkShellState {
   z: number;
   vy: number;
   ageSeconds: number;
+  ageTicks: number;
+  trailTicksRequired: number;
 }
 
 export interface FireworkParticleState {
@@ -54,6 +58,20 @@ export interface FireworkParticleState {
   lifetimeSeconds: number;
 }
 
+export interface FireworkLaunchEvent {
+  shellId: string;
+  tick: number;
+  elapsedSeconds: number;
+}
+
+export interface FireworkPrimaryBurstEvent {
+  shellId: string;
+  tick: number;
+  apexTick: number;
+  elapsedSeconds: number;
+  shellTicks: number;
+}
+
 export interface FireworksTelemetry {
   launches: number;
   primaryBursts: number;
@@ -61,6 +79,8 @@ export interface FireworksTelemetry {
   droppedSecondary: number;
   droppedPrimary: number;
   sampledNoise: number;
+  launchEvents: FireworkLaunchEvent[];
+  primaryBurstEvents: FireworkPrimaryBurstEvent[];
 }
 
 export interface FireworksSnapshot {
@@ -69,6 +89,7 @@ export interface FireworksSnapshot {
   activeShells: number;
   activeParticles: number;
   launches: number;
+  primaryBursts: number;
   nextLaunchInSeconds: number;
   sampledNoise: number;
 }
@@ -168,6 +189,8 @@ export function initializeFireworksState({ seed, config }: InitializeFireworksSt
       droppedSecondary: 0,
       droppedPrimary: 0,
       sampledNoise: first,
+      launchEvents: [],
+      primaryBurstEvents: [],
     },
     snapshot: {
       tick: 0,
@@ -175,6 +198,7 @@ export function initializeFireworksState({ seed, config }: InitializeFireworksSt
       activeShells: 0,
       activeParticles: 0,
       launches: 0,
+      primaryBursts: 0,
       nextLaunchInSeconds,
       sampledNoise: first,
     },
@@ -186,38 +210,82 @@ export function initializeFireworksState({ seed, config }: InitializeFireworksSt
 export function stepFireworksState({ previousState, config, deltaSeconds, isChannelActive }: StepFireworksStateInput): FireworksState {
   const sanitizedConfig = sanitizeFireworksConfig(config);
   const dt = clampFinite(deltaSeconds, 0, 5, 0);
-  const sampledNoise = sampleNoise(previousState.seed, previousState.rngCursor);
-  const nextRngCursor = previousState.rngCursor + 1;
+  const currentTick = previousState.tick + 1;
+  const currentElapsedSeconds = previousState.elapsedSeconds + dt;
 
-  const nextShells = previousState.shells
-    .map((shell) => ({
+  const nextShells: FireworkShellState[] = [];
+  const primaryBurstEvents = [...previousState.telemetry.primaryBurstEvents];
+
+  for (const shell of previousState.shells) {
+    const nextVy = shell.vy - sanitizedConfig.shellGravity * dt;
+    const nextAgeSeconds = shell.ageSeconds + dt;
+    const nextAgeTicks = shell.ageTicks + 1;
+    const nextY = Math.max(0, shell.y + nextVy * dt);
+    const shouldBurst = nextVy <= 0 && nextAgeTicks >= shell.trailTicksRequired;
+
+    if (shouldBurst) {
+      primaryBurstEvents.push({
+        shellId: shell.id,
+        tick: currentTick,
+        apexTick: currentTick,
+        elapsedSeconds: currentElapsedSeconds,
+        shellTicks: nextAgeTicks,
+      });
+      continue;
+    }
+
+    nextShells.push({
       ...shell,
-      ageSeconds: shell.ageSeconds + dt,
-      vy: shell.vy - sanitizedConfig.shellGravity * dt,
-      y: shell.y + shell.vy * dt,
-    }))
-    .filter((shell) => shell.ageSeconds <= sanitizedConfig.particleLifetimeMaxSeconds);
+      y: nextY,
+      vy: nextVy,
+      ageSeconds: nextAgeSeconds,
+      ageTicks: nextAgeTicks,
+    });
+  }
 
   let launches = previousState.telemetry.launches;
   let nextLaunchInSeconds = Math.max(0, previousState.nextLaunchInSeconds - dt);
   let nextShellId = previousState.nextShellId;
+  let nextRngCursor = previousState.rngCursor;
+  const launchEvents = [...previousState.telemetry.launchEvents];
 
   if (isChannelActive && nextLaunchInSeconds <= 0) {
+    const spawnNoise = sampleNoise(previousState.seed, nextRngCursor);
+    const heightNoise = sampleNoise(previousState.seed, nextRngCursor + 1);
+    const trailNoise = sampleNoise(previousState.seed, nextRngCursor + 2);
+    const cooldownNoise = sampleNoise(previousState.seed, nextRngCursor + 3);
+    nextRngCursor += 4;
+
+    const shell = createShell({
+      shellId: nextShellId,
+      config: sanitizedConfig,
+      spawnNoise,
+      heightNoise,
+      trailNoise,
+    });
+
     launches += 1;
-    nextShells.push(createShell({ state: previousState, config: sanitizedConfig, sampledNoise }));
     nextShellId += 1;
+    nextShells.push(shell);
+    launchEvents.push({
+      shellId: shell.id,
+      tick: currentTick,
+      elapsedSeconds: currentElapsedSeconds,
+    });
     nextLaunchInSeconds = lerp(
       sanitizedConfig.launchIntervalMinSeconds,
       sanitizedConfig.launchIntervalMaxSeconds,
-      sampledNoise,
+      cooldownNoise,
     );
   }
+
+  const sampledNoise = sampleNoise(previousState.seed, nextRngCursor);
 
   const nextState: FireworksState = {
     seed: previousState.seed,
     rngCursor: nextRngCursor,
-    tick: previousState.tick + 1,
-    elapsedSeconds: previousState.elapsedSeconds + dt,
+    tick: currentTick,
+    elapsedSeconds: currentElapsedSeconds,
     nextLaunchInSeconds,
     nextShellId,
     shells: nextShells,
@@ -225,14 +293,18 @@ export function stepFireworksState({ previousState, config, deltaSeconds, isChan
     telemetry: {
       ...previousState.telemetry,
       launches,
+      primaryBursts: primaryBurstEvents.length,
       sampledNoise,
+      launchEvents,
+      primaryBurstEvents,
     },
     snapshot: {
-      tick: previousState.tick + 1,
-      elapsedSeconds: previousState.elapsedSeconds + dt,
+      tick: currentTick,
+      elapsedSeconds: currentElapsedSeconds,
       activeShells: nextShells.length,
       activeParticles: previousState.particles.length,
       launches,
+      primaryBursts: primaryBurstEvents.length,
       nextLaunchInSeconds,
       sampledNoise,
     },
@@ -242,21 +314,34 @@ export function stepFireworksState({ previousState, config, deltaSeconds, isChan
 }
 
 function createShell({
-  state,
+  shellId,
   config,
-  sampledNoise,
+  spawnNoise,
+  heightNoise,
+  trailNoise,
 }: {
-  state: FireworksState;
+  shellId: number;
   config: SanitizedFireworksConfig;
-  sampledNoise: number;
+  spawnNoise: number;
+  heightNoise: number;
+  trailNoise: number;
 }): FireworkShellState {
+  const minArcSpeed = config.shellGravity * MIN_ARC_SECONDS;
+  const maxArcSpeed = config.shellGravity * MAX_ARC_SECONDS;
+  const speedMin = Math.max(config.shellSpeedMin, minArcSpeed);
+  const speedMax = Math.min(config.shellSpeedMax, maxArcSpeed);
+  const normalizedMin = Math.min(speedMin, speedMax);
+  const normalizedMax = Math.max(speedMin, speedMax);
+
   return {
-    id: `shell-${state.nextShellId}`,
-    x: lerp(config.spawnXMin, config.spawnXMax, sampledNoise),
+    id: `shell-${shellId}`,
+    x: lerp(config.spawnXMin, config.spawnXMax, spawnNoise),
     y: 0,
-    z: lerp(config.spawnZMin, config.spawnZMax, 1 - sampledNoise),
-    vy: lerp(config.shellSpeedMin, config.shellSpeedMax, sampledNoise),
+    z: lerp(config.spawnZMin, config.spawnZMax, 1 - spawnNoise),
+    vy: lerp(normalizedMin, normalizedMax, heightNoise),
     ageSeconds: 0,
+    ageTicks: 0,
+    trailTicksRequired: lerpInt(config.shellTrailTicksMin, config.shellTrailTicksMax, trailNoise),
   };
 }
 
@@ -314,6 +399,10 @@ function clampIntFinite(value: number, min: number, max: number, fallback: numbe
 function lerp(min: number, max: number, alpha: number): number {
   const clampedAlpha = clamp(alpha, 0, 1);
   return min + (max - min) * clampedAlpha;
+}
+
+function lerpInt(min: number, max: number, alpha: number): number {
+  return Math.round(lerp(min, max, alpha));
 }
 
 function clamp(value: number, min: number, max: number): number {
