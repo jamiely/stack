@@ -1,0 +1,13 @@
+
+> tower-stacker@0.1.0 test:unit
+> vitest run tests/unit/fireworks.step03.coarse-actual-delay.adversarial.test.ts
+
+
+ RUN  v4.1.2 /Users/jamiely/code/stack
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  10:39:36
+   Duration  124ms (transform 30ms, setup 0ms, import 41ms, tests 3ms, environment 0ms)
+
