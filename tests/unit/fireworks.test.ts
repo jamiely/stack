@@ -139,6 +139,52 @@ describe("fireworks scheduler and shell lifecycle", () => {
       expect(activeShellIds.has(burst.shellId)).toBe(false);
     }
   });
+
+  it("enforces at least six pre-burst ticks even with low speed and high gravity config", () => {
+    const state = stepForDuration({
+      seconds: 20,
+      isChannelActive: true,
+      config: {
+        ...baseConfig,
+        shellGravity: 200,
+        shellSpeedMin: 1,
+        shellSpeedMax: 1,
+        shellTrailTicksMin: 1,
+        shellTrailTicksMax: 1,
+      },
+    });
+
+    expect(state.telemetry.primaryBurstEvents.length).toBeGreaterThan(0);
+    for (const burst of state.telemetry.primaryBurstEvents) {
+      expect(burst.shellTicks).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it("keeps six-tick shell minimum under coarse deterministic stepping", () => {
+    const config: FireworksConfig = {
+      ...baseConfig,
+      shellGravity: 200,
+      shellSpeedMin: 1,
+      shellSpeedMax: 1,
+      shellTrailTicksMin: 1,
+      shellTrailTicksMax: 1,
+    };
+    let state = initializeFireworksState({ seed: 42, config });
+
+    for (let step = 0; step < 120; step += 1) {
+      state = stepFireworksState({
+        previousState: state,
+        config,
+        deltaSeconds: 0.2,
+        isChannelActive: true,
+      });
+    }
+
+    expect(state.telemetry.primaryBurstEvents.length).toBeGreaterThan(0);
+    for (const burst of state.telemetry.primaryBurstEvents) {
+      expect(burst.shellTicks).toBeGreaterThanOrEqual(6);
+    }
+  });
 });
 
 describe("fireworks simulation determinism", () => {

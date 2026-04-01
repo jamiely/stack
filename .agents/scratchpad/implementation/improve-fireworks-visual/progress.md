@@ -11,9 +11,9 @@
    - Status: in_progress
 
 ## TDD Evidence
-- RED: Expanded `tests/unit/fireworks.test.ts` with failing assertions for launch cadence bounds/no-starvation, gating-off zero launches, shell arc timing, and single apex-aligned primary burst semantics via deterministic 20s stepping.
-- GREEN: Implemented deterministic scheduler + shell lifecycle in `src/game/logic/fireworks.ts` with launch/primary burst event telemetry, per-shell trail gating (>=6 ticks), apex-triggered shell retirement, and bounded arc-speed sampling.
-- REFACTOR: Kept the module aligned with existing sanitize/clamp helpers while centralizing launch/burst event bookkeeping and snapshot updates.
+- RED: Added a coarse-step adversarial unit case in `tests/unit/fireworks.test.ts` (`deltaSeconds: 0.2`, `shellGravity: 200`, `shellSpeedMin/Max: 1`, `shellTrailTicksMin/Max: 1`) that failed with `shellTicks` dropping below 6.
+- GREEN: Updated `src/game/logic/fireworks.ts` to enforce `MIN_PRE_BURST_TICKS = 6` at shell creation (`trailTicksRequired = max(6, sampledTrailTicks)`), making burst timing independent from low debug trail settings.
+- REFACTOR: Kept changes localized to shell construction and test coverage; existing scheduler/apex telemetry structure remained unchanged.
 
 ## Verification
 - `npm run test:unit -- tests/unit/fireworks.test.ts`

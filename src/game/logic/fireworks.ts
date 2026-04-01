@@ -15,6 +15,7 @@ const MIN_TRAIL_TICKS = 1;
 const MAX_TRAIL_TICKS = 240;
 const MIN_ARC_SECONDS = 0.45;
 const MAX_ARC_SECONDS = 1.1;
+const MIN_PRE_BURST_TICKS = 6;
 
 export interface FireworksConfig {
   launchIntervalMinSeconds: number;
@@ -341,7 +342,10 @@ function createShell({
     vy: lerp(normalizedMin, normalizedMax, heightNoise),
     ageSeconds: 0,
     ageTicks: 0,
-    trailTicksRequired: lerpInt(config.shellTrailTicksMin, config.shellTrailTicksMax, trailNoise),
+    trailTicksRequired: Math.max(
+      MIN_PRE_BURST_TICKS,
+      lerpInt(config.shellTrailTicksMin, config.shellTrailTicksMax, trailNoise),
+    ),
   };
 }
 
