@@ -485,3 +485,124 @@ test("fireworks stress mode keeps cap bounded and degrades secondary emissions f
   expect(stress!.droppedSecondary).toBeGreaterThan(0);
   expect(stress!.droppedPrimary).toBe(0);
 });
+
+test("fireworks chrysanthemum canonical snapshot remains stable", async ({ page }) => {
+  await page.goto("/?debug&test&paused=1&seed=42");
+
+  const telemetry = await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        applyDebugConfig: (config: Partial<Record<string, number | boolean>>) => void;
+        stepSimulation: (steps?: number) => void;
+        getState: () => {
+          distractions: {
+            fireworks?: {
+              tick: number;
+              primaryBursts: number;
+              activeParticles: number;
+            };
+          };
+        };
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return null;
+    }
+
+    const runAnchor = (verticalBias: number) => {
+      api.startGame();
+      api.setPaused(true);
+      api.applyDebugConfig({
+        distractionsEnabled: true,
+        distractionFireworksEnabled: true,
+        distractionFireworksStartLevel: 0,
+        distractionFireworksLaunchIntervalMinSeconds: 0.2,
+        distractionFireworksLaunchIntervalMaxSeconds: 0.2,
+        distractionFireworksShellSpeedMin: 36,
+        distractionFireworksShellSpeedMax: 36,
+        distractionFireworksShellGravity: 48,
+        distractionFireworksSecondaryDelayMinSeconds: 0.3,
+        distractionFireworksSecondaryDelayMaxSeconds: 0.3,
+        distractionFireworksParticleLifetimeMinSeconds: 1,
+        distractionFireworksParticleLifetimeMaxSeconds: 1,
+        distractionFireworksPrimaryParticleCount: 41,
+        distractionFireworksSecondaryParticleCount: 10,
+        distractionFireworksRingBias: 0.75,
+        distractionFireworksRadialJitter: 0.5,
+        distractionFireworksVerticalBias: verticalBias,
+        distractionFireworksSpeedJitter: 0.4,
+        distractionFireworksMaxActiveParticles: 96,
+      });
+
+      let previousPrimaryBursts = 0;
+      for (let step = 0; step < 600; step += 1) {
+        api.stepSimulation(1);
+        const fireworks = api.getState().distractions.fireworks;
+        const currentPrimaryBursts = fireworks?.primaryBursts ?? 0;
+        if (previousPrimaryBursts === 0 && currentPrimaryBursts > 0) {
+          break;
+        }
+
+        previousPrimaryBursts = currentPrimaryBursts;
+      }
+
+      api.stepSimulation(2);
+
+      const fireworks = api.getState().distractions.fireworks;
+      const particleNodes = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          ".distraction-fireworks__entity[data-fireworks-kind='particle'][data-fireworks-stage='primary']",
+        ),
+      );
+
+      const points = particleNodes
+        .map((node) => {
+          const match = node.style.transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+          if (!match) {
+            return null;
+          }
+
+          return {
+            x: Number.parseFloat(match[1]),
+            y: Number.parseFloat(match[2]),
+          };
+        })
+        .filter((point): point is { x: number; y: number } => point !== null);
+
+      const signature = points
+        .slice(0, 12)
+        .map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+        .join("|");
+
+      return {
+        tick: fireworks?.tick ?? 0,
+        primaryBursts: fireworks?.primaryBursts ?? 0,
+        activeParticles: fireworks?.activeParticles ?? 0,
+        visiblePrimaryParticles: points.length,
+        signature,
+      };
+    };
+
+    const adversarial = runAnchor(1);
+    const canonical = runAnchor(-0.25);
+
+    return { adversarial, canonical };
+  });
+
+  expect(telemetry).not.toBeNull();
+  expect(telemetry!.adversarial.primaryBursts).toBeGreaterThan(0);
+  expect(telemetry!.canonical.primaryBursts).toBeGreaterThan(0);
+  expect(telemetry!.canonical.visiblePrimaryParticles).toBeGreaterThan(0);
+  expect(telemetry!.adversarial.signature).not.toBe(telemetry!.canonical.signature);
+
+  await expect(page.getByTestId("actor-fireworks")).toHaveScreenshot("fireworks-chrysanthemum-canonical-chromium.png", {
+    animations: "disabled",
+    caret: "hide",
+    scale: "css",
+    threshold: 0.12,
+    maxDiffPixels: 180,
+  });
+});

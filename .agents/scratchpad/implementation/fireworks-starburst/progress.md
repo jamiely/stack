@@ -1,13 +1,13 @@
 # Progress — fireworks-starburst
 
 ## Current Step
-- Step 5: Wire controls through Game debug ranges + simulation mapping
+- Step 6: Add canonical deterministic screenshot gate
 
 ## Active Wave
-- Runtime task id: task-1775096809-f43e
-- Runtime task key: pdd:fireworks-starburst:step-05:wire-controls-through-game-debug-ranges-and-simulation-mapping
-- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-05-wire-controls-through-game-debug-ranges-and-simulation-mapping.code-task.md
-- Wave status: active (Step 5 only mirrored)
+- Runtime task id: task-1775097975-f83c
+- Runtime task key: pdd:fireworks-starburst:step-06:add-canonical-deterministic-screenshot-gate
+- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-06-add-canonical-deterministic-screenshot-gate.code-task.md
+- Wave status: active (Step 6 only mirrored)
 
 ## Step Status
 - Step 1: completed
@@ -15,9 +15,31 @@
 - Step 3: completed
 - Step 4: completed
 - Step 5: completed
-- Step 6: pending
+- Step 6: completed
 - Step 7: pending
 - Step 8: pending
+
+## 2026-04-02 — Step 6 TDD Evidence (task-1775097975-f83c)
+- **RED**
+  - Added `fireworks chrysanthemum canonical snapshot remains stable` in `tests/e2e/fireworks.spec.ts` with deterministic paused-step anchoring and adversarial morphology telemetry checks.
+  - Confirmed RED via `npm run test:e2e -- tests/e2e/fireworks.spec.ts -g "fireworks chrysanthemum canonical snapshot remains stable"` (missing baseline snapshot).
+- **GREEN**
+  - Committed canonical baseline snapshot at `tests/e2e/fireworks.spec.ts-snapshots/fireworks-chrysanthemum-canonical-chromium-darwin.png`.
+  - Kept screenshot contract exact: `animations: "disabled"`, `caret: "hide"`, `scale: "css"`, `threshold: 0.12`, `maxDiffPixels: 180`.
+  - Added adversarial vertical-bias perturbation run before canonical capture and asserted signature drift to ensure morphology sensitivity.
+- **REFACTOR / ALIGNMENT**
+  - Updated feature/docs surfaces (`docs/features.md`, `README.md`) so debug control and Playwright gate descriptions match the implemented fireworks morphology controls and canonical visual regression coverage.
+- **Verification**
+  - Targeted: `npm run test:e2e -- tests/e2e/fireworks.spec.ts -g "fireworks chrysanthemum canonical snapshot remains stable"` ✅
+  - Full gates: `npm run test:unit && npm run test:e2e` ✅; `npm run build` ✅
+  - Logs refreshed:
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`
+
+## 2026-04-02 — Queue advance to Step 6
+- Closed Step 5 runtime wave after passed review/finalizer handoff.
+- Mirrored only Step 6 into runtime queue as `task-1775097975-f83c`.
+- Next handoff event targets Builder for Step 6 TDD execution.
 
 ## 2026-04-02 — Queue advance to Step 5
 - Closed Step 4 runtime wave after passed review/finalizer handoff.

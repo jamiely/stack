@@ -72,7 +72,7 @@ Runtime tuning panel includes:
 - Placement: perfect tolerance, combo target length
 - Recovery rewards: growth multiplier, slowdown factor, slowdown floors
 - Feedback: audio enable toggle, haptics enable toggle
-- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud/fireworks), deterministic motion speed, level-start thresholds for tentacle/gorilla/ufo/cloud/fireworks gating, fireworks simulation controls (launch interval min/max, shell speed min/max, shell gravity, shell trail ticks min/max, secondary delay min/max, particle lifetime min/max, active-particle cap with min/max relationship sanitization), cloud-specific simulation controls (count, horizontal drift speed including explicit zero-drift, spawn-above band, despawn-below band with ordered sanitization and minimum separation), and on-demand launch buttons for each distraction channel
+- Distractions: global enable, per-layer toggles (tentacle/gorilla/tremor/ufo/contrast/cloud/fireworks), deterministic motion speed, level-start thresholds for tentacle/gorilla/ufo/cloud/fireworks gating, fireworks simulation controls (launch interval min/max, shell speed min/max, shell gravity, shell trail ticks min/max, secondary delay min/max, particle lifetime min/max, primary/secondary particle counts, ring bias, radial jitter, vertical bias, speed jitter, and active-particle cap with min/max relationship sanitization), cloud-specific simulation controls (count, horizontal drift speed including explicit zero-drift, spawn-above band, despawn-below band with ordered sanitization and minimum separation), and on-demand launch buttons for each distraction channel
 - Integrity: precarious threshold, unstable threshold, and camera wobble strength
 - Collapse: fail-sequence duration, tilt strength, camera pullback distance, and drop distance
 - Performance: quality preset (`0` low / `1` medium / `2` high), auto-quality toggle, frame-budget target, archival keep-level/chunk sizing, distraction LOD near/far distances, active debris cap, and debris pool limit
@@ -125,6 +125,6 @@ Runtime tuning panel includes:
   - Deterministic collapse trigger from unstable integrity without requiring a hard miss
   - High-start-stack performance smoke with archival/quality toggles and responsive input assertion
   - Deterministic scripted outcomes preserved with optimization toggles enabled
-  - Fireworks render adapter regression coverage for metadata staging, expired-node cleanup, and 30s cap/degradation stress bounds
+  - Fireworks render adapter regression coverage for metadata staging, expired-node cleanup, 30s cap/degradation stress bounds, and a canonical deterministic chrysanthemum screenshot gate (seed `42`, first primary-burst transition + 2 paused ticks, `threshold: 0.12`, `maxDiffPixels: 180`)
   - Mobile-sized touch/tap stop input path
 - Unit coverage threshold is enforced at 90% for non-rendering code
