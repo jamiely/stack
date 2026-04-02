@@ -1,13 +1,13 @@
 # Progress — fireworks-starburst
 
 ## Current Step
-- Step 6: Add canonical deterministic screenshot gate
+- Step 7: Tune default values to match chrysanthemum reference style
 
 ## Active Wave
-- Runtime task id: task-1775097975-f83c
-- Runtime task key: pdd:fireworks-starburst:step-06:add-canonical-deterministic-screenshot-gate
-- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-06-add-canonical-deterministic-screenshot-gate.code-task.md
-- Wave status: active (Step 6 only mirrored)
+- Runtime task id: task-1775098563-5cf3
+- Runtime task key: pdd:fireworks-starburst:step-07:tune-default-values-to-match-chrysanthemum-reference-style
+- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-07-tune-default-values-to-match-chrysanthemum-reference-style.code-task.md
+- Wave status: active (Step 7 only mirrored)
 
 ## Step Status
 - Step 1: completed
@@ -16,8 +16,30 @@
 - Step 4: completed
 - Step 5: completed
 - Step 6: completed
-- Step 7: pending
+- Step 7: completed
 - Step 8: pending
+
+## 2026-04-03 — Queue advance to Step 7
+- Closed Step 6 runtime wave after passed review/finalizer handoff.
+- Mirrored only Step 7 into runtime queue as `task-1775098563-5cf3`.
+- Next handoff event targets Builder for Step 7 TDD execution.
+
+## 2026-04-03 — Step 7 TDD Evidence (task-1775098563-5cf3)
+- **RED**
+  - Added a new default-contract unit test in `tests/unit/debugConfig.test.ts` asserting chrysanthemum-tuned default morphology/count values and cap-safe total burst demand.
+  - Verified RED with `npm run test:unit -- tests/unit/debugConfig.test.ts` (failed on legacy defaults `20/12/0/0/0/0`).
+- **GREEN**
+  - Tuned `defaultDebugConfig` fireworks morphology/count defaults in `src/game/debugConfig.ts` to the chrysanthemum profile (`41`, `10`, `0.75`, `0.5`, `-0.25`, `0.4`).
+  - Updated canonical screenshot scenario in `tests/e2e/fireworks.spec.ts` to consume default morphology/count knobs (only adversarial `verticalBias` override remains explicit), so the visual gate now guards startup defaults directly.
+- **REFACTOR / ALIGNMENT**
+  - Updated docs surfaces (`docs/features.md`, `README.md`) to record the shipped default fireworks morphology profile.
+- **Verification**
+  - Targeted: `npm run test:unit -- tests/unit/debugConfig.test.ts` ✅
+  - Targeted: `npm run test:e2e -- tests/e2e/fireworks.spec.ts` ✅
+  - Full gates: `npm run test:unit && npm run test:e2e` ✅; `npm run build` ✅
+  - Logs refreshed:
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`
 
 ## 2026-04-02 — Step 6 TDD Evidence (task-1775097975-f83c)
 - **RED**

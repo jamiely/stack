@@ -240,6 +240,19 @@ describe("clampDebugConfig", () => {
     expect(clamped.distractionFireworksSpeedJitter).toBe(defaultDebugConfig.distractionFireworksSpeedJitter);
   });
 
+  it("uses chrysanthemum-tuned fireworks morphology defaults within cap-safe envelope", () => {
+    expect(defaultDebugConfig.distractionFireworksPrimaryParticleCount).toBe(41);
+    expect(defaultDebugConfig.distractionFireworksSecondaryParticleCount).toBe(10);
+    expect(defaultDebugConfig.distractionFireworksRingBias).toBe(0.75);
+    expect(defaultDebugConfig.distractionFireworksRadialJitter).toBe(0.5);
+    expect(defaultDebugConfig.distractionFireworksVerticalBias).toBe(-0.25);
+    expect(defaultDebugConfig.distractionFireworksSpeedJitter).toBe(0.4);
+
+    const totalBurstDemand =
+      defaultDebugConfig.distractionFireworksPrimaryParticleCount + defaultDebugConfig.distractionFireworksSecondaryParticleCount;
+    expect(totalBurstDemand).toBeLessThanOrEqual(defaultDebugConfig.distractionFireworksMaxActiveParticles);
+  });
+
   it("sanitizes cloud lifecycle controls and preserves explicit zero drift", () => {
     const clamped = clampDebugConfig({
       ...defaultDebugConfig,

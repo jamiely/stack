@@ -528,12 +528,7 @@ test("fireworks chrysanthemum canonical snapshot remains stable", async ({ page 
         distractionFireworksSecondaryDelayMaxSeconds: 0.3,
         distractionFireworksParticleLifetimeMinSeconds: 1,
         distractionFireworksParticleLifetimeMaxSeconds: 1,
-        distractionFireworksPrimaryParticleCount: 41,
-        distractionFireworksSecondaryParticleCount: 10,
-        distractionFireworksRingBias: 0.75,
-        distractionFireworksRadialJitter: 0.5,
         distractionFireworksVerticalBias: verticalBias,
-        distractionFireworksSpeedJitter: 0.4,
         distractionFireworksMaxActiveParticles: 96,
       });
 
