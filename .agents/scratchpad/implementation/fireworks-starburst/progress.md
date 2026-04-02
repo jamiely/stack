@@ -41,3 +41,14 @@
 - Logs captured:
   - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
   - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`
+
+## 2026-04-02 — Step 1 review-reject fix (rounding parity)
+- **RED**
+  - Added `tests/unit/fireworks.test.ts` assertion that decimal count fields are rounded (`40.9 -> 41`, `9.6 -> 10`) in `sanitizeFireworksConfig`.
+  - Verified failure with `npm run test:unit -- tests/unit/fireworks.test.ts` (received `40` before fix).
+- **GREEN**
+  - Updated `src/game/logic/fireworks.ts` `clampIntFinite` from `Math.floor` to `Math.round` so simulation-side sanitization mirrors debug clamp count behavior.
+  - Re-ran targeted suite: `npm run test:unit -- tests/unit/fireworks.test.ts tests/unit/debugConfig.test.ts` ✅.
+- **REFACTOR / ALIGNMENT**
+  - No additional refactor required; change is isolated to shared integer finite clamp helper used by count sanitization.
+  - Full verification rerun and logs refreshed.

@@ -936,7 +936,7 @@ function clampIntFinite(value: number, min: number, max: number, fallback: numbe
     return fallback;
   }
 
-  return Math.floor(clamp(value, min, max));
+  return Math.round(clamp(value, min, max));
 }
 
 function lerp(min: number, max: number, alpha: number): number {

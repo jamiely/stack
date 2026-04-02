@@ -104,6 +104,17 @@ describe("fireworks config sanitization", () => {
     expect(sanitized.spawnXMax).toBeGreaterThanOrEqual(sanitized.spawnXMin);
     expect(sanitized.spawnZMax).toBeGreaterThanOrEqual(sanitized.spawnZMin);
   });
+
+  it("rounds decimal particle counts to match debug clamp behavior", () => {
+    const sanitized = sanitizeFireworksConfig({
+      ...baseConfig,
+      primaryParticleCount: 40.9,
+      secondaryParticleCount: 9.6,
+    });
+
+    expect(sanitized.primaryParticleCount).toBe(41);
+    expect(sanitized.secondaryParticleCount).toBe(10);
+  });
 });
 
 describe("fireworks scheduler and shell lifecycle", () => {
