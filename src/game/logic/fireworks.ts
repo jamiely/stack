@@ -36,14 +36,15 @@ const MAX_CLEANUP_FROM_LAUNCH_SECONDS = 3.2;
 const SECONDARY_TIMING_EPSILON_SECONDS = 1e-6;
 const DEFAULT_PRIMARY_PARTICLE_COUNT = 20;
 const DEFAULT_SECONDARY_PARTICLE_COUNT = 12;
-const MAX_SPEED_JITTER_SCALE = 0.4;
-const MAX_AZIMUTH_JITTER_RADIANS = Math.PI / 10;
-const MAX_VERTICAL_JITTER = 0.2;
-const VERTICAL_BIAS_STRENGTH = 0.35;
-const RING_VERTICAL_RETAIN = 0.85;
-const GOLDEN_ANGLE_RADIANS = Math.PI * (3 - Math.sqrt(5));
-const SECONDARY_ORIGIN_RADIUS_MIN = 0.55;
-const SECONDARY_ORIGIN_RADIUS_MAX = 1.9;
+const MAX_SPEED_JITTER_SCALE = 0.3;
+const MAX_AZIMUTH_JITTER_RADIANS = Math.PI / 18;
+const MAX_VERTICAL_JITTER = 0.1;
+const VERTICAL_BIAS_STRENGTH = 0.22;
+const RING_SPEED_SPREAD = 0.12;
+const PRIMARY_PARTICLE_DRAG = 0.975;
+const SECONDARY_PARTICLE_DRAG = 0.965;
+const PRIMARY_PARTICLE_GRAVITY_SCALE = 0.55;
+const SECONDARY_PARTICLE_GRAVITY_SCALE = 0.8;
 
 export interface FireworksConfig {
   launchIntervalMinSeconds: number;
@@ -527,29 +528,15 @@ export function stepFireworksState({
       delaySeconds: event.delaySeconds,
     });
 
-    const offsetAzimuthSample = sampleWithCursor(previousState.seed, nextRngCursor);
-    nextRngCursor = offsetAzimuthSample.cursor;
-    const offsetVerticalSample = sampleWithCursor(previousState.seed, nextRngCursor);
-    nextRngCursor = offsetVerticalSample.cursor;
-
-    const secondaryDelayAlpha = clamp(event.delaySeconds / MAX_SECONDARY_WINDOW_SECONDS, 0, 1);
-    const secondaryOriginRadius = lerp(SECONDARY_ORIGIN_RADIUS_MIN, SECONDARY_ORIGIN_RADIUS_MAX, secondaryDelayAlpha);
-    const offsetAzimuth = offsetAzimuthSample.value * Math.PI * 2;
-    const offsetUnitY = offsetVerticalSample.value * 2 - 1;
-    const offsetRadial = Math.sqrt(Math.max(0, 1 - offsetUnitY * offsetUnitY));
-    const secondaryOriginX = event.x + Math.cos(offsetAzimuth) * offsetRadial * secondaryOriginRadius;
-    const secondaryOriginY = event.y + offsetUnitY * secondaryOriginRadius;
-    const secondaryOriginZ = event.z + Math.sin(offsetAzimuth) * offsetRadial * secondaryOriginRadius;
-
     const secondaryEmit = emitBurstParticles({
       seed: previousState.seed,
       rngCursor: nextRngCursor,
       nextParticleId,
       shellId: event.shellId,
       stage: "secondary",
-      x: secondaryOriginX,
-      y: secondaryOriginY,
-      z: secondaryOriginZ,
+      x: event.x,
+      y: event.y,
+      z: event.z,
       count: effectiveSecondaryParticleCount,
       lifetimeMin: Math.max(MIN_SECONDARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMinSeconds),
       lifetimeMax: Math.min(MAX_SECONDARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMaxSeconds),
@@ -578,9 +565,11 @@ export function stepFireworksState({
     const launchElapsed = launchEvent?.elapsedSeconds ?? currentElapsedSeconds;
     const fireworkAge = currentElapsedSeconds - launchElapsed;
 
-    const updatedVy = particle.vy - sanitizedConfig.shellGravity * (particle.stage === "secondary" ? 1.45 : 1) * dt;
-    const updatedVx = particle.vx * (particle.stage === "secondary" ? 0.9 : 0.94);
-    const updatedVz = particle.vz * (particle.stage === "secondary" ? 0.9 : 0.94);
+    const gravityScale = particle.stage === "secondary" ? SECONDARY_PARTICLE_GRAVITY_SCALE : PRIMARY_PARTICLE_GRAVITY_SCALE;
+    const dragScale = particle.stage === "secondary" ? SECONDARY_PARTICLE_DRAG : PRIMARY_PARTICLE_DRAG;
+    const updatedVy = particle.vy - sanitizedConfig.shellGravity * gravityScale * dt;
+    const updatedVx = particle.vx * dragScale;
+    const updatedVz = particle.vz * dragScale;
     const updatedAge = particle.ageSeconds + dt;
     const updatedAlpha = clamp(1 - updatedAge / particle.lifetimeSeconds, 0, 1);
 
@@ -825,53 +814,39 @@ function emitBurstParticles({
   let particleId = nextParticleId;
   const room = Math.max(0, maxActiveParticles - activeParticles);
   const emitCount = Math.min(count, room);
-  const shellRotationSample = emitCount > 0 ? sampleWithCursor(seed, cursor) : null;
-  if (shellRotationSample) {
-    cursor = shellRotationSample.cursor;
-  }
-
   for (let index = 0; index < emitCount; index += 1) {
     const azimuthSample = sampleWithCursor(seed, cursor);
     cursor = azimuthSample.cursor;
-    const elevationSample = sampleWithCursor(seed, cursor);
-    cursor = elevationSample.cursor;
+    const verticalSample = sampleWithCursor(seed, cursor);
+    cursor = verticalSample.cursor;
     const speedSample = sampleWithCursor(seed, cursor);
     cursor = speedSample.cursor;
     const lifetimeSample = sampleWithCursor(seed, cursor);
     cursor = lifetimeSample.cursor;
 
-    const shellRotation = shellRotationSample?.value ?? 0;
-    const baseAzimuth = shellRotation * Math.PI * 2 + index * GOLDEN_ANGLE_RADIANS;
-    const stratifiedUnitY = emitCount <= 1 ? 0 : 1 - 2 * ((index + 0.5) / emitCount);
+    const azimuthJitter = (sampleWithCursor(seed, cursor).value * 2 - 1) * radialJitter * MAX_AZIMUTH_JITTER_RADIANS;
+    cursor += 1;
+    const verticalJitter = (sampleWithCursor(seed, cursor).value * 2 - 1) * radialJitter * MAX_VERTICAL_JITTER;
+    cursor += 1;
 
-    const compressedUnitY = stratifiedUnitY * (1 - ringBias * RING_VERTICAL_RETAIN);
-    const verticalBiasWeight = 1 - Math.abs(compressedUnitY);
-    const biasedUnitY = clamp(
-      compressedUnitY + verticalBias * VERTICAL_BIAS_STRENGTH * verticalBiasWeight,
-      -1,
-      1,
-    );
-    const azimuthJitter =
-      ((azimuthSample.value * 2 - 1) * 0.35 + (lifetimeSample.value * 2 - 1) * 0.65)
-      * radialJitter
-      * MAX_AZIMUTH_JITTER_RADIANS;
-    const verticalJitter =
-      ((elevationSample.value * 2 - 1) * 0.6 + (speedSample.value * 2 - 1) * 0.4)
-      * radialJitter
-      * MAX_VERTICAL_JITTER;
-    const shapedUnitY = clamp(biasedUnitY + verticalJitter, -1, 1);
-    const shapedAzimuth = baseAzimuth + azimuthJitter;
-    const radialMagnitude = Math.sqrt(Math.max(0, 1 - shapedUnitY * shapedUnitY));
+    const azimuth = azimuthSample.value * Math.PI * 2 + azimuthJitter;
+    const unbiasedUnitY = 1 - 2 * verticalSample.value;
+    const unitY = clamp(unbiasedUnitY + verticalBias * VERTICAL_BIAS_STRENGTH + verticalJitter, -1, 1);
+    const radialMagnitude = Math.sqrt(Math.max(0, 1 - unitY * unitY));
 
     const baseSpeed = lerp(speedMin, speedMax, speedSample.value);
-    const speedScale = 1 + (azimuthSample.value * 2 - 1) * speedJitter * MAX_SPEED_JITTER_SCALE;
-    const normalizedSpeedMin = speedMin * (1 - speedJitter * MAX_SPEED_JITTER_SCALE);
-    const normalizedSpeedMax = speedMax * (1 + speedJitter * MAX_SPEED_JITTER_SCALE);
-    const speed = clamp(baseSpeed * speedScale, normalizedSpeedMin, normalizedSpeedMax);
+    const ringSpeedAlpha = Math.round(speedSample.value * 2) / 2;
+    const ringSpeed = lerp(speedMin, speedMax, ringSpeedAlpha);
+    const ringWeightedSpeed = lerp(baseSpeed, ringSpeed, ringBias);
+    const speedScale = 1 + (sampleWithCursor(seed, cursor).value * 2 - 1) * speedJitter * MAX_SPEED_JITTER_SCALE;
+    cursor += 1;
+    const normalizedSpeedMin = speedMin * (1 - RING_SPEED_SPREAD);
+    const normalizedSpeedMax = speedMax * (1 + RING_SPEED_SPREAD);
+    const speed = clamp(ringWeightedSpeed * speedScale, normalizedSpeedMin, normalizedSpeedMax);
 
-    const vx = Math.cos(shapedAzimuth) * radialMagnitude * speed;
-    const vy = shapedUnitY * speed;
-    const vz = Math.sin(shapedAzimuth) * radialMagnitude * speed;
+    const vx = Math.cos(azimuth) * radialMagnitude * speed;
+    const vy = unitY * speed;
+    const vz = Math.sin(azimuth) * radialMagnitude * speed;
 
     const normalizedLifetimeMin = Math.min(lifetimeMin, lifetimeMax);
     const normalizedLifetimeMax = Math.max(lifetimeMin, lifetimeMax);

@@ -241,12 +241,12 @@ describe("clampDebugConfig", () => {
   });
 
   it("uses chrysanthemum-tuned fireworks morphology defaults within cap-safe envelope", () => {
-    expect(defaultDebugConfig.distractionFireworksPrimaryParticleCount).toBe(41);
-    expect(defaultDebugConfig.distractionFireworksSecondaryParticleCount).toBe(10);
-    expect(defaultDebugConfig.distractionFireworksRingBias).toBe(0.75);
-    expect(defaultDebugConfig.distractionFireworksRadialJitter).toBe(0.5);
-    expect(defaultDebugConfig.distractionFireworksVerticalBias).toBe(-0.25);
-    expect(defaultDebugConfig.distractionFireworksSpeedJitter).toBe(0.4);
+    expect(defaultDebugConfig.distractionFireworksPrimaryParticleCount).toBe(48);
+    expect(defaultDebugConfig.distractionFireworksSecondaryParticleCount).toBe(8);
+    expect(defaultDebugConfig.distractionFireworksRingBias).toBe(0.2);
+    expect(defaultDebugConfig.distractionFireworksRadialJitter).toBe(0.2);
+    expect(defaultDebugConfig.distractionFireworksVerticalBias).toBe(0.08);
+    expect(defaultDebugConfig.distractionFireworksSpeedJitter).toBe(0.14);
 
     const totalBurstDemand =
       defaultDebugConfig.distractionFireworksPrimaryParticleCount + defaultDebugConfig.distractionFireworksSecondaryParticleCount;

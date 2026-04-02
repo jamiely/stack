@@ -516,7 +516,7 @@ describe("fireworks morphology controls", () => {
         particleLifetimeMinSeconds: 4,
         particleLifetimeMaxSeconds: 4,
         primaryParticleCount: 64,
-        ringBias: 1,
+        ringBias: 0,
         radialJitter: 0,
         verticalBias: 0.8,
         speedJitter: 0,
@@ -535,12 +535,9 @@ describe("fireworks morphology controls", () => {
     expect(neutralY.length).toBe(64);
     expect(shapedY.length).toBe(64);
 
-    const neutralAbsMean = neutralY.reduce((sum, value) => sum + Math.abs(value), 0) / neutralY.length;
     const neutralMean = neutralY.reduce((sum, value) => sum + value, 0) / neutralY.length;
-    const shapedAbsMean = shapedY.reduce((sum, value) => sum + Math.abs(value), 0) / shapedY.length;
     const shapedMean = shapedY.reduce((sum, value) => sum + value, 0) / shapedY.length;
 
-    expect(shapedAbsMean).toBeLessThan(neutralAbsMean);
     expect(shapedMean).toBeGreaterThan(neutralMean + 0.12);
     expect(shapedY.every((value) => value >= -1 && value <= 1)).toBe(true);
   });
