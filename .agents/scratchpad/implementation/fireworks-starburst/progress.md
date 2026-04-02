@@ -1,23 +1,45 @@
 # Progress — fireworks-starburst
 
 ## Current Step
-- Step 4: Preserve cap guardrails under new morphology/count envelope
+- Step 5: Wire controls through Game debug ranges + simulation mapping
 
 ## Active Wave
-- Runtime task id: task-1775096280-6688
-- Runtime task key: pdd:fireworks-starburst:step-04:preserve-cap-guardrails-under-new-morphology-count-envelope
-- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-04-preserve-cap-guardrails-under-new-morphology-count-envelope.code-task.md
-- Wave status: active (Step 4 only mirrored)
+- Runtime task id: task-1775096809-f43e
+- Runtime task key: pdd:fireworks-starburst:step-05:wire-controls-through-game-debug-ranges-and-simulation-mapping
+- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-05-wire-controls-through-game-debug-ranges-and-simulation-mapping.code-task.md
+- Wave status: active (Step 5 only mirrored)
 
 ## Step Status
 - Step 1: completed
 - Step 2: completed
 - Step 3: completed
 - Step 4: completed
-- Step 5: pending
+- Step 5: completed
 - Step 6: pending
 - Step 7: pending
 - Step 8: pending
+
+## 2026-04-02 — Queue advance to Step 5
+- Closed Step 4 runtime wave after passed review/finalizer handoff.
+- Mirrored only Step 5 into runtime queue as `task-1775096809-f43e`.
+- Next handoff event targets Builder for Step 5 TDD execution.
+
+## 2026-04-02 — Step 5 TDD Evidence (task-1775096809-f43e)
+- **RED**
+  - Added paused deterministic integration coverage in `tests/e2e/fireworks.spec.ts` that applies new morphology/count controls through the test debug API and requires no telemetry mutation until `stepSimulation(...)` is invoked.
+  - Added assertions that the debug panel integer display rounds the new count controls (`40.9 -> 41`, `9.6 -> 10`) to verify integer formatting/parsing parity with runtime sliders.
+- **GREEN**
+  - Updated integer-key handling in `src/game/Game.ts` so the new count controls (`distractionFireworksPrimaryParticleCount`, `distractionFireworksSecondaryParticleCount`) are rounded consistently in both slider input handling and HUD debug value rendering.
+  - Verified simulation mapping remains intact via existing `buildFireworksSimulationConfig()` fields and the new paused-step e2e assertions.
+- **REFACTOR / ALIGNMENT**
+  - Kept integer-key lists ordered with neighboring fireworks controls to match existing debug panel organization and avoid introducing new helper abstractions in this narrow step.
+- **Verification**
+  - `npm run test:unit` ✅ (24 files / 173 tests)
+  - `npm run test:e2e -- tests/e2e/fireworks.spec.ts` ✅ (5 tests)
+  - `npm run build` ✅
+  - Logs refreshed:
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`
 
 ## 2026-04-02 — Step 4 TDD Evidence (task-1775096280-6688)
 - **RED**

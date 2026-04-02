@@ -63,6 +63,121 @@ test("fireworks config changes stay stable while paused until stepSimulation", a
   expect(snapshots!.afterStep?.tick ?? 0).toBeGreaterThan(snapshots!.beforeApply?.tick ?? 0);
 });
 
+test("fireworks morphology/count controls map through debug config and stay step-gated while paused", async ({ page }) => {
+  await page.goto("/?debug&test&paused=1&seed=42");
+
+  const snapshots = await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        applyDebugConfig: (config: Partial<Record<string, number | boolean>>) => void;
+        stepSimulation: (steps?: number) => void;
+        getState: () => {
+          distractions: {
+            fireworks?: {
+              tick: number;
+              primaryBursts: number;
+              activeParticles: number;
+              maxActiveParticles: number;
+            };
+          };
+        };
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      return null;
+    }
+
+    api.startGame();
+    api.setPaused(true);
+    api.applyDebugConfig({
+      distractionsEnabled: true,
+      distractionFireworksEnabled: true,
+      distractionFireworksStartLevel: 0,
+      distractionFireworksLaunchIntervalMinSeconds: 0.2,
+      distractionFireworksLaunchIntervalMaxSeconds: 0.2,
+      distractionFireworksShellSpeedMin: 36,
+      distractionFireworksShellSpeedMax: 36,
+      distractionFireworksShellGravity: 48,
+      distractionFireworksSecondaryDelayMinSeconds: 0.3,
+      distractionFireworksSecondaryDelayMaxSeconds: 0.3,
+      distractionFireworksParticleLifetimeMinSeconds: 1,
+      distractionFireworksParticleLifetimeMaxSeconds: 1,
+      distractionFireworksPrimaryParticleCount: 20,
+      distractionFireworksSecondaryParticleCount: 12,
+      distractionFireworksMaxActiveParticles: 240,
+    });
+
+    const beforeApply = api.getState().distractions.fireworks;
+
+    api.applyDebugConfig({
+      distractionFireworksPrimaryParticleCount: 40.9,
+      distractionFireworksSecondaryParticleCount: 9.6,
+      distractionFireworksMaxActiveParticles: 96.2,
+      distractionFireworksRingBias: 0.75,
+      distractionFireworksRadialJitter: 0.5,
+      distractionFireworksVerticalBias: -0.25,
+      distractionFireworksSpeedJitter: 0.4,
+    });
+
+    const afterApply = api.getState().distractions.fireworks;
+    const debugValuePrimary = document
+      .querySelector<HTMLElement>("[data-debug-value='distractionFireworksPrimaryParticleCount']")
+      ?.textContent?.trim();
+    const debugValueSecondary = document
+      .querySelector<HTMLElement>("[data-debug-value='distractionFireworksSecondaryParticleCount']")
+      ?.textContent?.trim();
+
+    let burstSnapshot: {
+      tick: number;
+      primaryBursts: number;
+      activeParticles: number;
+      maxActiveParticles: number;
+    } | null = null;
+
+    for (let step = 0; step < 600; step += 1) {
+      api.stepSimulation(1);
+      const fireworks = api.getState().distractions.fireworks;
+      if (!fireworks) {
+        continue;
+      }
+
+      if (fireworks.primaryBursts > 0) {
+        burstSnapshot = {
+          tick: fireworks.tick,
+          primaryBursts: fireworks.primaryBursts,
+          activeParticles: fireworks.activeParticles,
+          maxActiveParticles: fireworks.maxActiveParticles,
+        };
+        break;
+      }
+    }
+
+    return {
+      beforeApply,
+      afterApply,
+      burstSnapshot,
+      debugValuePrimary,
+      debugValueSecondary,
+    };
+  });
+
+  expect(snapshots).not.toBeNull();
+  expect(snapshots!.beforeApply).toBeDefined();
+  expect(snapshots!.afterApply?.tick).toBe(snapshots!.beforeApply?.tick);
+  expect(snapshots!.afterApply?.primaryBursts).toBe(snapshots!.beforeApply?.primaryBursts);
+  expect(snapshots!.afterApply?.activeParticles).toBe(snapshots!.beforeApply?.activeParticles);
+  expect(snapshots!.debugValuePrimary).toBe("41");
+  expect(snapshots!.debugValueSecondary).toBe("10");
+  expect(snapshots!.burstSnapshot).not.toBeNull();
+  expect(snapshots!.burstSnapshot!.tick).toBeGreaterThan(snapshots!.beforeApply?.tick ?? 0);
+  expect(snapshots!.burstSnapshot!.primaryBursts).toBeGreaterThan(0);
+  expect(snapshots!.burstSnapshot!.activeParticles).toBe(41);
+  expect(snapshots!.burstSnapshot!.maxActiveParticles).toBe(96);
+});
+
 test("public state exposes deterministic fireworks lifecycle counters", async ({ page }) => {
   await page.goto("/?debug&test&paused=1&seed=42");
 

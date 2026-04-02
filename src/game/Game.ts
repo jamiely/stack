@@ -713,6 +713,8 @@ export class Game {
             "distractionFireworksShellTrailTicksMin",
             "distractionFireworksShellTrailTicksMax",
             "distractionFireworksMaxActiveParticles",
+            "distractionFireworksPrimaryParticleCount",
+            "distractionFireworksSecondaryParticleCount",
             "dayNightCycleBlocks",
           ];
           const rawValue = Number(input.value);
@@ -2515,6 +2517,8 @@ export class Game {
         "distractionFireworksShellTrailTicksMin",
         "distractionFireworksShellTrailTicksMax",
         "distractionFireworksMaxActiveParticles",
+        "distractionFireworksPrimaryParticleCount",
+        "distractionFireworksSecondaryParticleCount",
         "dayNightCycleBlocks",
       ];
 

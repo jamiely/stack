@@ -8,43 +8,20 @@
 
  Test Files  24 passed (24)
       Tests  173 passed (173)
-   Start at  22:21:27
-   Duration  700ms (transform 575ms, setup 0ms, import 912ms, tests 384ms, environment 1ms)
+   Start at  22:42:11
+   Duration  1.17s (transform 806ms, setup 0ms, import 1.39s, tests 882ms, environment 3ms)
 
 
 > tower-stacker@0.1.0 test:e2e
-> playwright test
+> playwright test tests/e2e/fireworks.spec.ts
 
 
-Running 28 tests using 4 workers
+Running 5 tests using 1 worker
 
-  ✓   3 tests/e2e/fireworks.spec.ts:3:1 › fireworks config changes stay stable while paused until stepSimulation (615ms)
-  ✓   1 tests/e2e/gameplay.spec.ts:145:1 › test API is only exposed in test mode and supports deterministic stepping (670ms)
-  ✓   5 tests/e2e/fireworks.spec.ts:66:1 › public state exposes deterministic fireworks lifecycle counters (246ms)
-  ✓   6 tests/e2e/gameplay.spec.ts:194:1 › test mode paused boot can be toggled with query params (676ms)
-  ✓   4 tests/e2e/clouds.spec.ts:15:1 › cloud layer renders and captures entry screenshots (1.6s)
-  ✓   8 tests/e2e/gameplay.spec.ts:228:1 › seeded startup produces stable active-slab spawn states (322ms)
-  ✓   9 tests/e2e/clouds.spec.ts:140:1 › cloud layer toggle off/on cleanly gates simulation mapping (303ms)
-  ✓   2 tests/e2e/smoke.spec.ts:3:1 › run autostarts and title card briefly animates out (1.9s)
-  ✓   7 tests/e2e/fireworks.spec.ts:159:1 › fireworks render nodes mirror simulation ids/stages and cleanup removes expired nodes (1.1s)
-  ✓  12 tests/e2e/smoke.spec.ts:17:1 › debug controls and status surfaces render only with the debug query param (315ms)
-  ✓  11 tests/e2e/clouds.spec.ts:245:1 › cloud debug controls apply on the next simulation step (311ms)
-  ✓  10 tests/e2e/gameplay.spec.ts:273:1 › scripted placement sequence is deterministic across runs (603ms)
-  ✓  14 tests/e2e/clouds.spec.ts:348:1 › test API exposes per-cloud diagnostics and stays stable under adversarial cloud thresholds (333ms)
-  ✓  15 tests/e2e/gameplay.spec.ts:318:1 › combo milestone triggers recovery reward growth + slowdown (314ms)
-  ✓  13 tests/e2e/fireworks.spec.ts:293:1 › fireworks stress mode keeps cap bounded and degrades secondary emissions first (874ms)
-  ✓  16 tests/e2e/gameplay.spec.ts:352:1 › keyboard and pointer input both stop slabs (240ms)
-  ✓  17 tests/e2e/gameplay.spec.ts:383:1 › space or touch input restarts immediately from game over (214ms)
-  ✓  18 tests/e2e/gameplay.spec.ts:423:1 › miss transitions to game over and restart resets state (207ms)
-  ✓  19 tests/e2e/gameplay.spec.ts:462:1 › debug controls can tune movement speed at runtime (174ms)
-  ✓  20 tests/e2e/gameplay.spec.ts:527:1 › debug combo target + growth tuning changes recovery behavior (169ms)
-  ✓  21 tests/e2e/gameplay.spec.ts:571:1 › debug distraction launch buttons can trigger channels on demand (608ms)
-  ✓  22 tests/e2e/gameplay.spec.ts:653:1 › gorilla/ufo/cloud actors are level-gated and core placement still works while active (343ms)
-  ✓  23 tests/e2e/gameplay.spec.ts:789:1 › integrity telemetry reports deterministic stable/precarious/unstable transitions (183ms)
-  ✓  24 tests/e2e/gameplay.spec.ts:854:1 › unstable integrity no longer ends the run without a hard miss (177ms)
-  ✓  25 tests/e2e/gameplay.spec.ts:916:1 › audio/haptics toggles gate runtime feedback emission (182ms)
-  ✓  26 tests/e2e/gameplay.spec.ts:1016:1 › high-start-stack perf profile keeps input responsive with archival + quality controls (311ms)
-  ✓  27 tests/e2e/gameplay.spec.ts:1069:1 › optimization toggles preserve deterministic scripted outcomes (217ms)
-  ✓  28 tests/e2e/gameplay.spec.ts:1135:3 › mobile touch pass › tap input on a mobile-sized viewport stops the active slab (192ms)
+  ✓  1 tests/e2e/fireworks.spec.ts:3:1 › fireworks config changes stay stable while paused until stepSimulation (430ms)
+  ✓  2 tests/e2e/fireworks.spec.ts:66:1 › fireworks morphology/count controls map through debug config and stay step-gated while paused (167ms)
+  ✓  3 tests/e2e/fireworks.spec.ts:181:1 › public state exposes deterministic fireworks lifecycle counters (201ms)
+  ✓  4 tests/e2e/fireworks.spec.ts:274:1 › fireworks render nodes mirror simulation ids/stages and cleanup removes expired nodes (882ms)
+  ✓  5 tests/e2e/fireworks.spec.ts:408:1 › fireworks stress mode keeps cap bounded and degrades secondary emissions first (660ms)
 
-  28 passed (7.4s)
+  5 passed (3.7s)
