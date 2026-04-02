@@ -1362,14 +1362,18 @@ export class Game {
     }
 
     const topSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
+    const launchOriginX = topSlab?.position.x ?? 0;
     const launchOriginY = (topSlab?.position.y ?? 0) + (topSlab?.dimensions.height ?? this.debugConfig.slabHeight) * 0.55;
+    const launchOriginZ = topSlab?.position.z ?? 0;
 
     this.fireworksState = stepFireworksState({
       previousState: this.fireworksState,
       config: this.buildFireworksSimulationConfig(),
       deltaSeconds,
       isChannelActive: this.getEffectiveDistractionSnapshot().active.fireworks,
+      launchOriginX,
       launchOriginY,
+      launchOriginZ,
     });
   }
 
@@ -1735,10 +1739,10 @@ export class Game {
       particleLifetimeMinSeconds: this.debugConfig.distractionFireworksParticleLifetimeMinSeconds,
       particleLifetimeMaxSeconds: this.debugConfig.distractionFireworksParticleLifetimeMaxSeconds,
       maxActiveParticles: this.debugConfig.distractionFireworksMaxActiveParticles,
-      spawnXMin: -18,
-      spawnXMax: 18,
-      spawnZMin: -32,
-      spawnZMax: -14,
+      spawnXMin: -10,
+      spawnXMax: 10,
+      spawnZMin: -24,
+      spawnZMax: -10,
     };
   }
 
@@ -1749,9 +1753,6 @@ export class Game {
       this.fireworksActor.replaceChildren();
       return;
     }
-
-    const topSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
-    const topZ = topSlab?.position.z ?? 0;
 
     const nodes: HTMLElement[] = [];
 
@@ -1766,7 +1767,7 @@ export class Game {
       const visible = this.applyFireworkEntityProjection(node, {
         x: shell.x,
         y: shell.y,
-        z: topZ + shell.z,
+        z: shell.z,
       });
       if (!visible) {
         return;
@@ -1789,7 +1790,7 @@ export class Game {
       const visible = this.applyFireworkEntityProjection(node, {
         x: particle.x,
         y: particle.y,
-        z: topZ + particle.z,
+        z: particle.z,
       });
       if (!visible) {
         return;

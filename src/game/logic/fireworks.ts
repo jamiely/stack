@@ -170,7 +170,9 @@ export interface StepFireworksStateInput {
   config: FireworksConfig;
   deltaSeconds: number;
   isChannelActive: boolean;
+  launchOriginX?: number;
   launchOriginY?: number;
+  launchOriginZ?: number;
 }
 
 interface RngSample {
@@ -273,10 +275,20 @@ export function initializeFireworksState({ seed, config }: InitializeFireworksSt
   return state;
 }
 
-export function stepFireworksState({ previousState, config, deltaSeconds, isChannelActive, launchOriginY }: StepFireworksStateInput): FireworksState {
+export function stepFireworksState({
+  previousState,
+  config,
+  deltaSeconds,
+  isChannelActive,
+  launchOriginX,
+  launchOriginY,
+  launchOriginZ,
+}: StepFireworksStateInput): FireworksState {
   const sanitizedConfig = sanitizeFireworksConfig(config);
   const dt = clampFinite(deltaSeconds, 0, 5, 0);
+  const normalizedLaunchOriginX = clampFinite(launchOriginX, -2_000, 2_000, 0);
   const normalizedLaunchOriginY = clampFinite(launchOriginY, -1_000, 20_000, 0);
+  const normalizedLaunchOriginZ = clampFinite(launchOriginZ, -2_000, 2_000, 0);
   const currentTick = previousState.tick + 1;
   const currentElapsedSeconds = previousState.elapsedSeconds + dt;
 
@@ -355,18 +367,22 @@ export function stepFireworksState({ previousState, config, deltaSeconds, isChan
 
     if (availableParticleRoom >= projectedPrimaryDemand) {
       const spawnNoise = sampleNoise(previousState.seed, nextRngCursor);
-      const heightNoise = sampleNoise(previousState.seed, nextRngCursor + 1);
-      const trailNoise = sampleNoise(previousState.seed, nextRngCursor + 2);
-      const cooldownNoise = sampleNoise(previousState.seed, nextRngCursor + 3);
-      nextRngCursor += 4;
+      const depthNoise = sampleNoise(previousState.seed, nextRngCursor + 1);
+      const heightNoise = sampleNoise(previousState.seed, nextRngCursor + 2);
+      const trailNoise = sampleNoise(previousState.seed, nextRngCursor + 3);
+      const cooldownNoise = sampleNoise(previousState.seed, nextRngCursor + 4);
+      nextRngCursor += 5;
 
       const shell = createShell({
         shellId: nextShellId,
         config: sanitizedConfig,
         spawnNoise,
+        depthNoise,
         heightNoise,
         trailNoise,
+        launchOriginX: normalizedLaunchOriginX,
         launchOriginY: normalizedLaunchOriginY,
+        launchOriginZ: normalizedLaunchOriginZ,
       });
 
       launches += 1;
@@ -619,16 +635,22 @@ function createShell({
   shellId,
   config,
   spawnNoise,
+  depthNoise,
   heightNoise,
   trailNoise,
+  launchOriginX,
   launchOriginY,
+  launchOriginZ,
 }: {
   shellId: number;
   config: SanitizedFireworksConfig;
   spawnNoise: number;
+  depthNoise: number;
   heightNoise: number;
   trailNoise: number;
+  launchOriginX: number;
   launchOriginY: number;
+  launchOriginZ: number;
 }): FireworkShellState {
   const minArcSpeed = config.shellGravity * MIN_ARC_SECONDS;
   const maxArcSpeed = config.shellGravity * MAX_ARC_SECONDS;
@@ -639,9 +661,9 @@ function createShell({
 
   return {
     id: `shell-${shellId}`,
-    x: lerp(config.spawnXMin, config.spawnXMax, spawnNoise),
+    x: launchOriginX + lerp(config.spawnXMin, config.spawnXMax, spawnNoise),
     y: launchOriginY,
-    z: lerp(config.spawnZMin, config.spawnZMax, 1 - spawnNoise),
+    z: launchOriginZ + lerp(config.spawnZMin, config.spawnZMax, depthNoise),
     vy: lerp(normalizedMin, normalizedMax, heightNoise),
     ageSeconds: 0,
     ageTicks: 0,
