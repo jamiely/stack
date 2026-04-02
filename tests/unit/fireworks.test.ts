@@ -108,6 +108,32 @@ describe("fireworks scheduler and shell lifecycle", () => {
     expect(state.telemetry.primaryBurstEvents).toHaveLength(0);
   });
 
+  it("spawns shells at the per-step launch origin height", () => {
+    let state = initializeFireworksState({
+      seed: 42,
+      config: {
+        ...baseConfig,
+        launchIntervalMinSeconds: 0.2,
+        launchIntervalMaxSeconds: 0.2,
+      },
+    });
+
+    state = stepFireworksState({
+      previousState: state,
+      config: {
+        ...baseConfig,
+        launchIntervalMinSeconds: 0.2,
+        launchIntervalMaxSeconds: 0.2,
+      },
+      deltaSeconds: 0.2,
+      isChannelActive: true,
+      launchOriginY: 27.5,
+    });
+
+    expect(state.telemetry.launches).toBeGreaterThan(0);
+    expect(state.shells[0]?.y ?? 0).toBeCloseTo(27.5, 6);
+  });
+
   it("emits exactly one primary burst per shell near apex after at least six ticks", () => {
     const state = stepForDuration({ seconds: 20, isChannelActive: true });
     const launchesByShell = new Map(state.telemetry.launchEvents.map((event) => [event.shellId, event]));

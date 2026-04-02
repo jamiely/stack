@@ -170,6 +170,7 @@ export interface StepFireworksStateInput {
   config: FireworksConfig;
   deltaSeconds: number;
   isChannelActive: boolean;
+  launchOriginY?: number;
 }
 
 interface RngSample {
@@ -272,9 +273,10 @@ export function initializeFireworksState({ seed, config }: InitializeFireworksSt
   return state;
 }
 
-export function stepFireworksState({ previousState, config, deltaSeconds, isChannelActive }: StepFireworksStateInput): FireworksState {
+export function stepFireworksState({ previousState, config, deltaSeconds, isChannelActive, launchOriginY }: StepFireworksStateInput): FireworksState {
   const sanitizedConfig = sanitizeFireworksConfig(config);
   const dt = clampFinite(deltaSeconds, 0, 5, 0);
+  const normalizedLaunchOriginY = clampFinite(launchOriginY, -1_000, 20_000, 0);
   const currentTick = previousState.tick + 1;
   const currentElapsedSeconds = previousState.elapsedSeconds + dt;
 
@@ -364,6 +366,7 @@ export function stepFireworksState({ previousState, config, deltaSeconds, isChan
         spawnNoise,
         heightNoise,
         trailNoise,
+        launchOriginY: normalizedLaunchOriginY,
       });
 
       launches += 1;
@@ -618,12 +621,14 @@ function createShell({
   spawnNoise,
   heightNoise,
   trailNoise,
+  launchOriginY,
 }: {
   shellId: number;
   config: SanitizedFireworksConfig;
   spawnNoise: number;
   heightNoise: number;
   trailNoise: number;
+  launchOriginY: number;
 }): FireworkShellState {
   const minArcSpeed = config.shellGravity * MIN_ARC_SECONDS;
   const maxArcSpeed = config.shellGravity * MAX_ARC_SECONDS;
@@ -635,7 +640,7 @@ function createShell({
   return {
     id: `shell-${shellId}`,
     x: lerp(config.spawnXMin, config.spawnXMax, spawnNoise),
-    y: 0,
+    y: launchOriginY,
     z: lerp(config.spawnZMin, config.spawnZMax, 1 - spawnNoise),
     vy: lerp(normalizedMin, normalizedMax, heightNoise),
     ageSeconds: 0,

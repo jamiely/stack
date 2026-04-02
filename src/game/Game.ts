@@ -1361,11 +1361,15 @@ export class Game {
       });
     }
 
+    const topSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
+    const launchOriginY = (topSlab?.position.y ?? 0) + (topSlab?.dimensions.height ?? this.debugConfig.slabHeight) * 0.7;
+
     this.fireworksState = stepFireworksState({
       previousState: this.fireworksState,
       config: this.buildFireworksSimulationConfig(),
       deltaSeconds,
       isChannelActive: this.getEffectiveDistractionSnapshot().active.fireworks,
+      launchOriginY,
     });
   }
 
