@@ -57,5 +57,6 @@ The dev server runs on `http://127.0.0.1:4173`.
 ## Notes
 
 - The Playwright path supports environments where WebGL is unavailable by degrading to a non-WebGL fallback while preserving the HUD and interaction surface.
+- Fireworks visual-regression workflow: the canonical gate is `fireworks chrysanthemum canonical snapshot remains stable` (seed `42`, first primary burst transition + 2 paused ticks). Run it in isolation with `npm run test:e2e -- tests/e2e/fireworks.spec.ts -g "fireworks chrysanthemum canonical snapshot remains stable"`; refresh the baseline intentionally with `npx playwright test tests/e2e/fireworks.spec.ts -g "fireworks chrysanthemum canonical snapshot remains stable" --update-snapshots`.
 - Local hooks can be enabled with `git config core.hooksPath .githooks` if they are not already configured.
 - `.github/workflows/deploy-pages.yml` publishes the built site to GitHub Pages from `main` and builds with a repository-name base path so project Pages URLs resolve assets correctly.

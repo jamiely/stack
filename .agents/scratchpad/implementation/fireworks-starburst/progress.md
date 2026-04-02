@@ -1,13 +1,13 @@
 # Progress — fireworks-starburst
 
 ## Current Step
-- Step 7: Tune default values to match chrysanthemum reference style
+- Step 8: Regression + documentation closure
 
 ## Active Wave
-- Runtime task id: task-1775098563-5cf3
-- Runtime task key: pdd:fireworks-starburst:step-07:tune-default-values-to-match-chrysanthemum-reference-style
-- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-07-tune-default-values-to-match-chrysanthemum-reference-style.code-task.md
-- Wave status: active (Step 7 only mirrored)
+- Runtime task id: task-1775099965-063c
+- Runtime task key: pdd:fireworks-starburst:step-08:regression-and-documentation-closure
+- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-08-regression-and-documentation-closure.code-task.md
+- Wave status: active (Step 8 only mirrored)
 
 ## Step Status
 - Step 1: completed
@@ -17,7 +17,41 @@
 - Step 5: completed
 - Step 6: completed
 - Step 7: completed
-- Step 8: pending
+- Step 8: completed
+
+## 2026-04-02 — Step 8 review-rejected recovery verification (task-1775099965-063c)
+- Re-ran full required quality gates after blocked/rejected handoff to confirm no hidden regressions:
+  - `npm run test:unit` ✅ (24 files / 174 tests)
+  - `npm run test:e2e` ✅ (30 tests)
+  - `npm run coverage` ✅ (non-rendering aggregate: **96.76% statements / 90.28% branches / 96.68% lines**)
+  - `npm run build` ✅
+- Executed additional adversarial stability probe for the canonical screenshot gate:
+  - `npx playwright test tests/e2e/fireworks.spec.ts -g "fireworks chrysanthemum canonical snapshot remains stable" --repeat-each=3` ✅
+- Refreshed verification artifacts:
+  - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
+  - `.agents/scratchpad/implementation/fireworks-starburst/logs/coverage.log`
+  - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`
+
+## 2026-04-03 — Queue advance to Step 8
+- Closed Step 7 runtime wave after passed review/finalizer handoff.
+- Mirrored only Step 8 into runtime queue as `task-1775099965-063c`.
+- Next handoff event targets Builder for Step 8 TDD execution.
+
+## 2026-04-02 — Step 8 TDD Evidence (task-1775099965-063c)
+- **RED / Verification-first**
+  - Re-read `README.md` + `docs/features.md` against shipped Step 1–7 implementation and identified remaining closure gaps: missing explicit operator guidance for the canonical fireworks screenshot gate workflow and no explicit one-line regression closure command set.
+- **GREEN**
+  - Updated `README.md` Notes with deterministic canonical screenshot gate workflow details (seed `42`, first primary-burst transition + two paused ticks) and explicit commands for isolated run + intentional baseline refresh.
+  - Updated `docs/features.md` automated-verification section with explicit regression closure command set: `npm run test:unit`, `npm run test:e2e`, `npm run coverage`, `npm run build`.
+- **REFACTOR / ALIGNMENT**
+  - Kept updates constrained to existing docs surfaces already used for release/operator guidance; no gameplay/runtime code changed.
+- **Verification**
+  - Full regression gates: `npm run test:unit` ✅, `npm run test:e2e` ✅, `npm run coverage` ✅, `npm run build` ✅.
+  - Coverage confirmation: non-rendering aggregate remains above policy floor at **96.76% statements / 90.28% branches / 96.68% lines**.
+  - Logs refreshed:
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/coverage.log`
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`
 
 ## 2026-04-03 — Queue advance to Step 7
 - Closed Step 6 runtime wave after passed review/finalizer handoff.
