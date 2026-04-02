@@ -1,23 +1,28 @@
 # Progress — fireworks-starburst
 
 ## Current Step
-- Step 2: Implement deterministic isotropic burst direction sampler
+- Step 3: Add morphology shaping controls + configurable particle counts
 
 ## Active Wave
-- Runtime task id: task-1775095329-2ecf
-- Runtime task key: pdd:fireworks-starburst:step-02:implement-deterministic-isotropic-burst-direction-sampler
-- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-02-implement-deterministic-isotropic-burst-direction-sampler.code-task.md
-- Wave status: active (Step 2 only mirrored)
+- Runtime task id: task-1775095818-f279
+- Runtime task key: pdd:fireworks-starburst:step-03:add-morphology-shaping-controls-and-configurable-particle-counts
+- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-03-add-morphology-shaping-controls-and-configurable-particle-counts.code-task.md
+- Wave status: active (Step 3 only mirrored)
 
 ## Step Status
 - Step 1: completed
-- Step 2: active
-- Step 3: pending
+- Step 2: completed
+- Step 3: completed (awaiting critic review)
 - Step 4: pending
 - Step 5: pending
 - Step 6: pending
 - Step 7: pending
 - Step 8: pending
+
+## 2026-04-02 — Queue advance to Step 3
+- Closed Step 2 runtime wave after passed review/finalizer handoff.
+- Mirrored only Step 3 into runtime queue as `task-1775095818-f279`.
+- Next handoff event should target Builder for Step 3 TDD execution.
 
 ## 2026-04-02 — Queue advance to Step 2
 - Closed Step 1 runtime wave after passed re-review/finalizer handoff.
@@ -75,3 +80,24 @@
 - **REFACTOR / ALIGNMENT**
   - No additional refactor required; change is isolated to shared integer finite clamp helper used by count sanitization.
   - Full verification rerun and logs refreshed.
+
+## 2026-04-02 — Step 3 TDD Evidence (task-1775095818-f279)
+- **RED**
+  - Added failing morphology/count tests in `tests/unit/fireworks.test.ts`:
+    - configurable primary/secondary particle counts under cap headroom,
+    - ring + vertical bias direction shaping,
+    - radial/speed jitter bounded spread behavior.
+  - Confirmed initial failures with `npm run test:unit -- tests/unit/fireworks.test.ts` (legacy fixed counts and unused morphology knobs).
+- **GREEN**
+  - Implemented config-driven particle counts across launch demand estimation, reclaim logic, and primary/secondary burst emission in `src/game/logic/fireworks.ts`.
+  - Added bounded deterministic morphology shaping (ring compression, vertical bias, azimuth/vertical jitter, speed jitter envelope) in emission vector/speed generation.
+  - Kept RNG consumption deterministic at 4 samples/particle and preserved lifecycle/cap telemetry pathways.
+- **REFACTOR / ALIGNMENT**
+  - Renamed hardcoded fallback constants to `DEFAULT_*` to clarify schema-default intent vs runtime counts.
+  - Consolidated shaping constants near other firework simulation guardrails for readable bounds.
+- **Verification**
+  - Targeted: `npm run test:unit -- tests/unit/fireworks.test.ts` ✅
+  - Full gates: `npm run test:unit && npm run test:e2e` ✅; `npm run build` ✅
+  - Logs refreshed:
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`

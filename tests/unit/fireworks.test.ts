@@ -88,6 +88,35 @@ function stepUntilFirstPrimaryBurst({
   throw new Error("Expected a primary burst before maxSteps");
 }
 
+function stepUntilFirstSecondaryBurst({
+  seed,
+  config = baseConfig,
+  deltaSeconds = 1 / 60,
+  maxSteps = 1_200,
+}: {
+  seed: number;
+  config?: FireworksConfig;
+  deltaSeconds?: number;
+  maxSteps?: number;
+}): FireworksState {
+  let state = initializeFireworksState({ seed, config });
+
+  for (let step = 0; step < maxSteps; step += 1) {
+    state = stepFireworksState({
+      previousState: state,
+      config,
+      deltaSeconds,
+      isChannelActive: true,
+    });
+
+    if (state.telemetry.secondaryBurstEvents.length > 0) {
+      return state;
+    }
+  }
+
+  throw new Error("Expected a secondary burst before maxSteps");
+}
+
 describe("fireworks config sanitization", () => {
   it("clamps and normalizes adversarial values", () => {
     const sanitized = sanitizeFireworksConfig({
@@ -424,6 +453,154 @@ describe("fireworks secondary lifecycle and cleanup", () => {
       expect(state.particles.some((particle) => particle.shellId === cleanup.shellId)).toBe(false);
       expect(state.secondaryQueue.some((event) => event.shellId === cleanup.shellId)).toBe(false);
     }
+  });
+});
+
+describe("fireworks morphology controls", () => {
+  it("uses configurable primary/secondary particle counts when cap headroom is available", () => {
+    const config: FireworksConfig = {
+      ...baseConfig,
+      launchIntervalMinSeconds: 6,
+      launchIntervalMaxSeconds: 6,
+      shellSpeedMin: 16,
+      shellSpeedMax: 16,
+      shellGravity: 20,
+      secondaryDelayMinSeconds: 0.05,
+      secondaryDelayMaxSeconds: 0.05,
+      particleLifetimeMinSeconds: 4,
+      particleLifetimeMaxSeconds: 4,
+      maxActiveParticles: 1_000,
+      primaryParticleCount: 11,
+      secondaryParticleCount: 7,
+    };
+
+    const state = stepUntilFirstSecondaryBurst({ seed: 42, config });
+    const shellId = state.telemetry.primaryBurstEvents[0]?.shellId ?? "";
+    const primaryCount = state.particles.filter((particle) => particle.shellId === shellId && particle.stage === "primary").length;
+    const secondaryCount = state.particles.filter((particle) => particle.shellId === shellId && particle.stage === "secondary").length;
+
+    expect(state.telemetry.droppedPrimary).toBe(0);
+    expect(state.telemetry.droppedSecondary).toBe(0);
+    expect(primaryCount).toBe(11);
+    expect(secondaryCount).toBe(7);
+  });
+
+  it("applies ring bias and vertical bias as bounded deterministic direction shaping", () => {
+    const neutral = stepUntilFirstPrimaryBurst({
+      seed: 9,
+      config: {
+        ...baseConfig,
+        launchIntervalMinSeconds: 6,
+        launchIntervalMaxSeconds: 6,
+        shellSpeedMin: 12,
+        shellSpeedMax: 12,
+        shellGravity: 20,
+        particleLifetimeMinSeconds: 4,
+        particleLifetimeMaxSeconds: 4,
+        primaryParticleCount: 64,
+        ringBias: 0,
+        radialJitter: 0,
+        verticalBias: 0,
+        speedJitter: 0,
+      },
+    });
+    const ringAndVertical = stepUntilFirstPrimaryBurst({
+      seed: 9,
+      config: {
+        ...baseConfig,
+        launchIntervalMinSeconds: 6,
+        launchIntervalMaxSeconds: 6,
+        shellSpeedMin: 12,
+        shellSpeedMax: 12,
+        shellGravity: 20,
+        particleLifetimeMinSeconds: 4,
+        particleLifetimeMaxSeconds: 4,
+        primaryParticleCount: 64,
+        ringBias: 1,
+        radialJitter: 0,
+        verticalBias: 0.8,
+        speedJitter: 0,
+      },
+    });
+
+    const neutralShellId = neutral.telemetry.primaryBurstEvents[0]?.shellId ?? "";
+    const shapedShellId = ringAndVertical.telemetry.primaryBurstEvents[0]?.shellId ?? "";
+    const neutralY = neutral.particles
+      .filter((particle) => particle.shellId === neutralShellId && particle.stage === "primary")
+      .map((particle) => particle.initialVy / Math.hypot(particle.vx, particle.initialVy, particle.vz));
+    const shapedY = ringAndVertical.particles
+      .filter((particle) => particle.shellId === shapedShellId && particle.stage === "primary")
+      .map((particle) => particle.initialVy / Math.hypot(particle.vx, particle.initialVy, particle.vz));
+
+    expect(neutralY.length).toBe(64);
+    expect(shapedY.length).toBe(64);
+
+    const neutralAbsMean = neutralY.reduce((sum, value) => sum + Math.abs(value), 0) / neutralY.length;
+    const neutralMean = neutralY.reduce((sum, value) => sum + value, 0) / neutralY.length;
+    const shapedAbsMean = shapedY.reduce((sum, value) => sum + Math.abs(value), 0) / shapedY.length;
+    const shapedMean = shapedY.reduce((sum, value) => sum + value, 0) / shapedY.length;
+
+    expect(shapedAbsMean).toBeLessThan(neutralAbsMean);
+    expect(shapedMean).toBeGreaterThan(neutralMean + 0.12);
+    expect(shapedY.every((value) => value >= -1 && value <= 1)).toBe(true);
+  });
+
+  it("uses radial and speed jitter to broaden speed spread while keeping bounded envelope", () => {
+    const neutral = stepUntilFirstPrimaryBurst({
+      seed: 15,
+      config: {
+        ...baseConfig,
+        launchIntervalMinSeconds: 6,
+        launchIntervalMaxSeconds: 6,
+        shellSpeedMin: 10,
+        shellSpeedMax: 10,
+        shellGravity: 20,
+        particleLifetimeMinSeconds: 4,
+        particleLifetimeMaxSeconds: 4,
+        primaryParticleCount: 48,
+        ringBias: 0,
+        radialJitter: 0,
+        verticalBias: 0,
+        speedJitter: 0,
+      },
+    });
+    const jittered = stepUntilFirstPrimaryBurst({
+      seed: 15,
+      config: {
+        ...baseConfig,
+        launchIntervalMinSeconds: 6,
+        launchIntervalMaxSeconds: 6,
+        shellSpeedMin: 10,
+        shellSpeedMax: 10,
+        shellGravity: 20,
+        particleLifetimeMinSeconds: 4,
+        particleLifetimeMaxSeconds: 4,
+        primaryParticleCount: 48,
+        ringBias: 0,
+        radialJitter: 1,
+        verticalBias: 0,
+        speedJitter: 1,
+      },
+    });
+
+    const neutralShellId = neutral.telemetry.primaryBurstEvents[0]?.shellId ?? "";
+    const jitteredShellId = jittered.telemetry.primaryBurstEvents[0]?.shellId ?? "";
+    const neutralSpeeds = neutral.particles
+      .filter((particle) => particle.shellId === neutralShellId && particle.stage === "primary")
+      .map((particle) => Math.hypot(particle.vx, particle.initialVy, particle.vz));
+    const jitteredSpeeds = jittered.particles
+      .filter((particle) => particle.shellId === jitteredShellId && particle.stage === "primary")
+      .map((particle) => Math.hypot(particle.vx, particle.initialVy, particle.vz));
+
+    expect(neutralSpeeds.length).toBe(48);
+    expect(jitteredSpeeds.length).toBe(48);
+    const neutralRange = Math.max(...neutralSpeeds) - Math.min(...neutralSpeeds);
+    const jitteredRange = Math.max(...jitteredSpeeds) - Math.min(...jitteredSpeeds);
+
+    expect(neutralRange).toBeGreaterThan(6);
+    expect(jitteredRange).toBeGreaterThan(neutralRange + 1);
+    expect(Math.min(...jitteredSpeeds)).toBeGreaterThanOrEqual(3.6);
+    expect(Math.max(...jitteredSpeeds)).toBeLessThanOrEqual(19.6);
   });
 });
 

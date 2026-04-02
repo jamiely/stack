@@ -34,8 +34,13 @@ const MIN_SECONDARY_COMPLETION_SECONDS = 1;
 const MAX_SECONDARY_COMPLETION_SECONDS = 2.8;
 const MAX_CLEANUP_FROM_LAUNCH_SECONDS = 3.2;
 const SECONDARY_TIMING_EPSILON_SECONDS = 1e-6;
-const PRIMARY_PARTICLE_COUNT = 20;
-const SECONDARY_PARTICLE_COUNT = 12;
+const DEFAULT_PRIMARY_PARTICLE_COUNT = 20;
+const DEFAULT_SECONDARY_PARTICLE_COUNT = 12;
+const MAX_SPEED_JITTER_SCALE = 0.4;
+const MAX_AZIMUTH_JITTER_RADIANS = Math.PI / 10;
+const MAX_VERTICAL_JITTER = 0.2;
+const VERTICAL_BIAS_STRENGTH = 0.35;
+const RING_VERTICAL_RETAIN = 0.85;
 
 export interface FireworksConfig {
   launchIntervalMinSeconds: number;
@@ -237,13 +242,13 @@ export function sanitizeFireworksConfig(config: FireworksConfig): SanitizedFirew
       config.primaryParticleCount,
       MIN_PARTICLE_COUNT,
       MAX_PARTICLE_COUNT,
-      PRIMARY_PARTICLE_COUNT,
+      DEFAULT_PRIMARY_PARTICLE_COUNT,
     ),
     secondaryParticleCount: clampIntFinite(
       config.secondaryParticleCount,
       MIN_PARTICLE_COUNT,
       MAX_PARTICLE_COUNT,
-      SECONDARY_PARTICLE_COUNT,
+      DEFAULT_SECONDARY_PARTICLE_COUNT,
     ),
     ringBias: clampFinite(config.ringBias, MIN_RING_BIAS, MAX_RING_BIAS, 0),
     radialJitter: clampFinite(config.radialJitter, MIN_RADIAL_JITTER, MAX_RADIAL_JITTER, 0),
@@ -395,7 +400,7 @@ export function stepFireworksState({
 
   if (isChannelActive && nextLaunchInSeconds <= 0) {
     const availableParticleRoom = Math.max(0, sanitizedConfig.maxActiveParticles - previousState.particles.length);
-    const projectedPrimaryDemand = (nextShells.length + 1) * PRIMARY_PARTICLE_COUNT;
+    const projectedPrimaryDemand = (nextShells.length + 1) * sanitizedConfig.primaryParticleCount;
 
     if (availableParticleRoom >= projectedPrimaryDemand) {
       const spawnNoise = sampleNoise(previousState.seed, nextRngCursor);
@@ -449,7 +454,7 @@ export function stepFireworksState({
     const reclaimedSecondary = reclaimSecondaryParticlesForPrimary({
       particles: nextParticles,
       maxActiveParticles: sanitizedConfig.maxActiveParticles,
-      requiredPrimaryParticles: PRIMARY_PARTICLE_COUNT,
+      requiredPrimaryParticles: sanitizedConfig.primaryParticleCount,
     });
     nextParticles = reclaimedSecondary.particles;
     droppedSecondary += reclaimedSecondary.droppedSecondary;
@@ -463,11 +468,15 @@ export function stepFireworksState({
       x: origin.x,
       y: origin.y,
       z: origin.z,
-      count: PRIMARY_PARTICLE_COUNT,
+      count: sanitizedConfig.primaryParticleCount,
       lifetimeMin: Math.max(MIN_PRIMARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMinSeconds),
       lifetimeMax: Math.min(MAX_PRIMARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMaxSeconds),
       speedMin: 6,
       speedMax: 14,
+      ringBias: sanitizedConfig.ringBias,
+      radialJitter: sanitizedConfig.radialJitter,
+      verticalBias: sanitizedConfig.verticalBias,
+      speedJitter: sanitizedConfig.speedJitter,
       activeParticles: nextParticles.length,
       maxActiveParticles: sanitizedConfig.maxActiveParticles,
     });
@@ -522,11 +531,15 @@ export function stepFireworksState({
       x: event.x,
       y: event.y,
       z: event.z,
-      count: SECONDARY_PARTICLE_COUNT,
+      count: sanitizedConfig.secondaryParticleCount,
       lifetimeMin: Math.max(MIN_SECONDARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMinSeconds),
       lifetimeMax: Math.min(MAX_SECONDARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMaxSeconds),
       speedMin: 4,
       speedMax: 10,
+      ringBias: sanitizedConfig.ringBias,
+      radialJitter: sanitizedConfig.radialJitter,
+      verticalBias: sanitizedConfig.verticalBias,
+      speedJitter: sanitizedConfig.speedJitter,
       activeParticles: nextParticles.length,
       maxActiveParticles: sanitizedConfig.maxActiveParticles,
     });
@@ -756,6 +769,10 @@ function emitBurstParticles({
   lifetimeMax,
   speedMin,
   speedMax,
+  ringBias,
+  radialJitter,
+  verticalBias,
+  speedJitter,
   activeParticles,
   maxActiveParticles,
 }: {
@@ -772,6 +789,10 @@ function emitBurstParticles({
   lifetimeMax: number;
   speedMin: number;
   speedMax: number;
+  ringBias: number;
+  radialJitter: number;
+  verticalBias: number;
+  speedJitter: number;
   activeParticles: number;
   maxActiveParticles: number;
 }): {
@@ -798,12 +819,29 @@ function emitBurstParticles({
 
     const azimuth = azimuthSample.value * Math.PI * 2;
     const unitY = elevationSample.value * 2 - 1;
-    const radialMagnitude = Math.sqrt(Math.max(0, 1 - unitY * unitY));
-    const speed = lerp(speedMin, speedMax, speedSample.value);
 
-    const vx = Math.cos(azimuth) * radialMagnitude * speed;
-    const vy = unitY * speed;
-    const vz = Math.sin(azimuth) * radialMagnitude * speed;
+    const compressedUnitY = unitY * (1 - ringBias * RING_VERTICAL_RETAIN);
+    const verticalBiasWeight = 1 - Math.abs(compressedUnitY);
+    const biasedUnitY = clamp(
+      compressedUnitY + verticalBias * VERTICAL_BIAS_STRENGTH * verticalBiasWeight,
+      -1,
+      1,
+    );
+    const azimuthJitter = (lifetimeSample.value * 2 - 1) * radialJitter * MAX_AZIMUTH_JITTER_RADIANS;
+    const verticalJitter = (speedSample.value * 2 - 1) * radialJitter * MAX_VERTICAL_JITTER;
+    const shapedUnitY = clamp(biasedUnitY + verticalJitter, -1, 1);
+    const shapedAzimuth = azimuth + azimuthJitter;
+    const radialMagnitude = Math.sqrt(Math.max(0, 1 - shapedUnitY * shapedUnitY));
+
+    const baseSpeed = lerp(speedMin, speedMax, speedSample.value);
+    const speedScale = 1 + (azimuthSample.value * 2 - 1) * speedJitter * MAX_SPEED_JITTER_SCALE;
+    const normalizedSpeedMin = speedMin * (1 - speedJitter * MAX_SPEED_JITTER_SCALE);
+    const normalizedSpeedMax = speedMax * (1 + speedJitter * MAX_SPEED_JITTER_SCALE);
+    const speed = clamp(baseSpeed * speedScale, normalizedSpeedMin, normalizedSpeedMax);
+
+    const vx = Math.cos(shapedAzimuth) * radialMagnitude * speed;
+    const vy = shapedUnitY * speed;
+    const vz = Math.sin(shapedAzimuth) * radialMagnitude * speed;
 
     const normalizedLifetimeMin = Math.min(lifetimeMin, lifetimeMax);
     const normalizedLifetimeMax = Math.max(lifetimeMin, lifetimeMax);
