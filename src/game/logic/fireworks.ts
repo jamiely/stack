@@ -42,6 +42,8 @@ const MAX_VERTICAL_JITTER = 0.2;
 const VERTICAL_BIAS_STRENGTH = 0.35;
 const RING_VERTICAL_RETAIN = 0.85;
 const GOLDEN_ANGLE_RADIANS = Math.PI * (3 - Math.sqrt(5));
+const SECONDARY_ORIGIN_RADIUS_MIN = 0.55;
+const SECONDARY_ORIGIN_RADIUS_MAX = 1.9;
 
 export interface FireworksConfig {
   launchIntervalMinSeconds: number;
@@ -525,15 +527,29 @@ export function stepFireworksState({
       delaySeconds: event.delaySeconds,
     });
 
+    const offsetAzimuthSample = sampleWithCursor(previousState.seed, nextRngCursor);
+    nextRngCursor = offsetAzimuthSample.cursor;
+    const offsetVerticalSample = sampleWithCursor(previousState.seed, nextRngCursor);
+    nextRngCursor = offsetVerticalSample.cursor;
+
+    const secondaryDelayAlpha = clamp(event.delaySeconds / MAX_SECONDARY_WINDOW_SECONDS, 0, 1);
+    const secondaryOriginRadius = lerp(SECONDARY_ORIGIN_RADIUS_MIN, SECONDARY_ORIGIN_RADIUS_MAX, secondaryDelayAlpha);
+    const offsetAzimuth = offsetAzimuthSample.value * Math.PI * 2;
+    const offsetUnitY = offsetVerticalSample.value * 2 - 1;
+    const offsetRadial = Math.sqrt(Math.max(0, 1 - offsetUnitY * offsetUnitY));
+    const secondaryOriginX = event.x + Math.cos(offsetAzimuth) * offsetRadial * secondaryOriginRadius;
+    const secondaryOriginY = event.y + offsetUnitY * secondaryOriginRadius;
+    const secondaryOriginZ = event.z + Math.sin(offsetAzimuth) * offsetRadial * secondaryOriginRadius;
+
     const secondaryEmit = emitBurstParticles({
       seed: previousState.seed,
       rngCursor: nextRngCursor,
       nextParticleId,
       shellId: event.shellId,
       stage: "secondary",
-      x: event.x,
-      y: event.y,
-      z: event.z,
+      x: secondaryOriginX,
+      y: secondaryOriginY,
+      z: secondaryOriginZ,
       count: effectiveSecondaryParticleCount,
       lifetimeMin: Math.max(MIN_SECONDARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMinSeconds),
       lifetimeMax: Math.min(MAX_SECONDARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMaxSeconds),
