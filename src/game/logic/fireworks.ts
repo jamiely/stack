@@ -11,6 +11,16 @@ const MIN_PARTICLE_LIFETIME_SECONDS = 0.1;
 const MAX_PARTICLE_LIFETIME_SECONDS = 8;
 const MIN_ACTIVE_PARTICLE_CAP = 32;
 const MAX_ACTIVE_PARTICLE_CAP = 10_000;
+const MIN_PARTICLE_COUNT = 1;
+const MAX_PARTICLE_COUNT = 120;
+const MIN_RING_BIAS = 0;
+const MAX_RING_BIAS = 1;
+const MIN_RADIAL_JITTER = 0;
+const MAX_RADIAL_JITTER = 1;
+const MIN_VERTICAL_BIAS = -1;
+const MAX_VERTICAL_BIAS = 1;
+const MIN_SPEED_JITTER = 0;
+const MAX_SPEED_JITTER = 1;
 const MIN_TRAIL_TICKS = 1;
 const MAX_TRAIL_TICKS = 240;
 const MIN_ARC_SECONDS = 0.45;
@@ -40,6 +50,12 @@ export interface FireworksConfig {
   particleLifetimeMinSeconds: number;
   particleLifetimeMaxSeconds: number;
   maxActiveParticles: number;
+  primaryParticleCount: number;
+  secondaryParticleCount: number;
+  ringBias: number;
+  radialJitter: number;
+  verticalBias: number;
+  speedJitter: number;
   spawnXMin: number;
   spawnXMax: number;
   spawnZMin: number;
@@ -217,6 +233,22 @@ export function sanitizeFireworksConfig(config: FireworksConfig): SanitizedFirew
     particleLifetimeMinSeconds: particleLifetime.min,
     particleLifetimeMaxSeconds: particleLifetime.max,
     maxActiveParticles: clampIntFinite(config.maxActiveParticles, MIN_ACTIVE_PARTICLE_CAP, MAX_ACTIVE_PARTICLE_CAP, MIN_ACTIVE_PARTICLE_CAP),
+    primaryParticleCount: clampIntFinite(
+      config.primaryParticleCount,
+      MIN_PARTICLE_COUNT,
+      MAX_PARTICLE_COUNT,
+      PRIMARY_PARTICLE_COUNT,
+    ),
+    secondaryParticleCount: clampIntFinite(
+      config.secondaryParticleCount,
+      MIN_PARTICLE_COUNT,
+      MAX_PARTICLE_COUNT,
+      SECONDARY_PARTICLE_COUNT,
+    ),
+    ringBias: clampFinite(config.ringBias, MIN_RING_BIAS, MAX_RING_BIAS, 0),
+    radialJitter: clampFinite(config.radialJitter, MIN_RADIAL_JITTER, MAX_RADIAL_JITTER, 0),
+    verticalBias: clampFinite(config.verticalBias, MIN_VERTICAL_BIAS, MAX_VERTICAL_BIAS, 0),
+    speedJitter: clampFinite(config.speedJitter, MIN_SPEED_JITTER, MAX_SPEED_JITTER, 0),
     spawnXMin: spawnX.min,
     spawnXMax: spawnX.max,
     spawnZMin: spawnZ.min,
@@ -286,9 +318,9 @@ export function stepFireworksState({
 }: StepFireworksStateInput): FireworksState {
   const sanitizedConfig = sanitizeFireworksConfig(config);
   const dt = clampFinite(deltaSeconds, 0, 5, 0);
-  const normalizedLaunchOriginX = clampFinite(launchOriginX, -2_000, 2_000, 0);
-  const normalizedLaunchOriginY = clampFinite(launchOriginY, -1_000, 20_000, 0);
-  const normalizedLaunchOriginZ = clampFinite(launchOriginZ, -2_000, 2_000, 0);
+  const normalizedLaunchOriginX = clampFinite(launchOriginX ?? 0, -2_000, 2_000, 0);
+  const normalizedLaunchOriginY = clampFinite(launchOriginY ?? 0, -1_000, 20_000, 0);
+  const normalizedLaunchOriginZ = clampFinite(launchOriginZ ?? 0, -2_000, 2_000, 0);
   const currentTick = previousState.tick + 1;
   const currentElapsedSeconds = previousState.elapsedSeconds + dt;
 

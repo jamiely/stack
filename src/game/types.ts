@@ -80,6 +80,12 @@ export interface DebugConfig {
   distractionFireworksParticleLifetimeMinSeconds: number;
   distractionFireworksParticleLifetimeMaxSeconds: number;
   distractionFireworksMaxActiveParticles: number;
+  distractionFireworksPrimaryParticleCount: number;
+  distractionFireworksSecondaryParticleCount: number;
+  distractionFireworksRingBias: number;
+  distractionFireworksRadialJitter: number;
+  distractionFireworksVerticalBias: number;
+  distractionFireworksSpeedJitter: number;
   dayNightCycleBlocks: number;
   integrityPrecariousThreshold: number;
   integrityUnstableThreshold: number;

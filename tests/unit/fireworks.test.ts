@@ -20,6 +20,12 @@ const baseConfig: FireworksConfig = {
   particleLifetimeMinSeconds: 0.4,
   particleLifetimeMaxSeconds: 2.4,
   maxActiveParticles: 240,
+  primaryParticleCount: 20,
+  secondaryParticleCount: 12,
+  ringBias: 0,
+  radialJitter: 0,
+  verticalBias: 0,
+  speedJitter: 0,
   spawnXMin: -18,
   spawnXMax: 18,
   spawnZMin: -32,
@@ -68,6 +74,12 @@ describe("fireworks config sanitization", () => {
       particleLifetimeMinSeconds: 0,
       particleLifetimeMaxSeconds: -2,
       maxActiveParticles: 1,
+      primaryParticleCount: 0,
+      secondaryParticleCount: 999,
+      ringBias: Number.NaN,
+      radialJitter: Number.POSITIVE_INFINITY,
+      verticalBias: 9,
+      speedJitter: -2,
       spawnXMin: 10,
       spawnXMax: -10,
       spawnZMin: 7,
@@ -83,6 +95,12 @@ describe("fireworks config sanitization", () => {
     expect(sanitized.secondaryDelayMaxSeconds).toBeGreaterThanOrEqual(sanitized.secondaryDelayMinSeconds);
     expect(sanitized.particleLifetimeMaxSeconds).toBeGreaterThanOrEqual(sanitized.particleLifetimeMinSeconds);
     expect(sanitized.maxActiveParticles).toBeGreaterThanOrEqual(32);
+    expect(sanitized.primaryParticleCount).toBeGreaterThanOrEqual(1);
+    expect(sanitized.secondaryParticleCount).toBeLessThanOrEqual(120);
+    expect(Number.isFinite(sanitized.ringBias)).toBe(true);
+    expect(Number.isFinite(sanitized.radialJitter)).toBe(true);
+    expect(sanitized.verticalBias).toBeLessThanOrEqual(1);
+    expect(sanitized.speedJitter).toBeGreaterThanOrEqual(0);
     expect(sanitized.spawnXMax).toBeGreaterThanOrEqual(sanitized.spawnXMin);
     expect(sanitized.spawnZMax).toBeGreaterThanOrEqual(sanitized.spawnZMin);
   });

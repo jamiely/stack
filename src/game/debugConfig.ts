@@ -52,6 +52,12 @@ export const defaultDebugConfig: DebugConfig = {
   distractionFireworksParticleLifetimeMinSeconds: 1.2,
   distractionFireworksParticleLifetimeMaxSeconds: 2,
   distractionFireworksMaxActiveParticles: 240,
+  distractionFireworksPrimaryParticleCount: 20,
+  distractionFireworksSecondaryParticleCount: 12,
+  distractionFireworksRingBias: 0,
+  distractionFireworksRadialJitter: 0,
+  distractionFireworksVerticalBias: 0,
+  distractionFireworksSpeedJitter: 0,
   dayNightCycleBlocks: 20,
   integrityPrecariousThreshold: 0.55,
   integrityUnstableThreshold: 0.9,
@@ -165,6 +171,42 @@ export function clampDebugConfig(config: DebugConfig): DebugConfig {
     distractionFireworksParticleLifetimeMinSeconds: fireworksParticleLifetime.min,
     distractionFireworksParticleLifetimeMaxSeconds: fireworksParticleLifetime.max,
     distractionFireworksMaxActiveParticles: Math.round(clamp(config.distractionFireworksMaxActiveParticles, 32, 10000)),
+    distractionFireworksPrimaryParticleCount: clampIntFinite(
+      config.distractionFireworksPrimaryParticleCount,
+      1,
+      120,
+      defaultDebugConfig.distractionFireworksPrimaryParticleCount,
+    ),
+    distractionFireworksSecondaryParticleCount: clampIntFinite(
+      config.distractionFireworksSecondaryParticleCount,
+      1,
+      120,
+      defaultDebugConfig.distractionFireworksSecondaryParticleCount,
+    ),
+    distractionFireworksRingBias: clampFinite(
+      config.distractionFireworksRingBias,
+      0,
+      1,
+      defaultDebugConfig.distractionFireworksRingBias,
+    ),
+    distractionFireworksRadialJitter: clampFinite(
+      config.distractionFireworksRadialJitter,
+      0,
+      1,
+      defaultDebugConfig.distractionFireworksRadialJitter,
+    ),
+    distractionFireworksVerticalBias: clampFinite(
+      config.distractionFireworksVerticalBias,
+      -1,
+      1,
+      defaultDebugConfig.distractionFireworksVerticalBias,
+    ),
+    distractionFireworksSpeedJitter: clampFinite(
+      config.distractionFireworksSpeedJitter,
+      0,
+      1,
+      defaultDebugConfig.distractionFireworksSpeedJitter,
+    ),
     dayNightCycleBlocks: Math.round(clamp(config.dayNightCycleBlocks, 4, 80)),
     integrityPrecariousThreshold: clamp(config.integrityPrecariousThreshold, 0.35, 0.85),
     integrityUnstableThreshold: clamp(
@@ -216,4 +258,20 @@ function normalizeClampedIntegerPair(minValue: number, maxValue: number, rangeMi
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function clampFinite(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return clamp(value, min, max);
+}
+
+function clampIntFinite(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.round(clamp(value, min, max));
 }

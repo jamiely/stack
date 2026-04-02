@@ -60,6 +60,12 @@ describe("clampDebugConfig", () => {
         distractionFireworksParticleLifetimeMinSeconds: 0,
         distractionFireworksParticleLifetimeMaxSeconds: 99,
         distractionFireworksMaxActiveParticles: 2,
+        distractionFireworksPrimaryParticleCount: 999,
+        distractionFireworksSecondaryParticleCount: -99,
+        distractionFireworksRingBias: 7,
+        distractionFireworksRadialJitter: -3,
+        distractionFireworksVerticalBias: -7,
+        distractionFireworksSpeedJitter: 4,
         dayNightCycleBlocks: 1,
         integrityPrecariousThreshold: 0,
         integrityUnstableThreshold: 2,
@@ -135,6 +141,12 @@ describe("clampDebugConfig", () => {
       distractionFireworksParticleLifetimeMinSeconds: 0.1,
       distractionFireworksParticleLifetimeMaxSeconds: 8,
       distractionFireworksMaxActiveParticles: 32,
+      distractionFireworksPrimaryParticleCount: 120,
+      distractionFireworksSecondaryParticleCount: 1,
+      distractionFireworksRingBias: 1,
+      distractionFireworksRadialJitter: 0,
+      distractionFireworksVerticalBias: -1,
+      distractionFireworksSpeedJitter: 1,
       dayNightCycleBlocks: 4,
       integrityPrecariousThreshold: 0.35,
       integrityUnstableThreshold: 1.2,
@@ -188,6 +200,44 @@ describe("clampDebugConfig", () => {
     expect(clamped.distractionFireworksParticleLifetimeMinSeconds).toBe(1.2);
     expect(clamped.distractionFireworksParticleLifetimeMaxSeconds).toBe(3.2);
     expect(clamped.distractionFireworksMaxActiveParticles).toBe(10000);
+  });
+
+  it("clamps fireworks morphology controls and rounds count controls", () => {
+    const clamped = clampDebugConfig({
+      ...defaultDebugConfig,
+      distractionFireworksPrimaryParticleCount: 40.7,
+      distractionFireworksSecondaryParticleCount: 0.2,
+      distractionFireworksRingBias: 9,
+      distractionFireworksRadialJitter: -1,
+      distractionFireworksVerticalBias: 4,
+      distractionFireworksSpeedJitter: 0.34,
+    });
+
+    expect(clamped.distractionFireworksPrimaryParticleCount).toBe(41);
+    expect(clamped.distractionFireworksSecondaryParticleCount).toBe(1);
+    expect(clamped.distractionFireworksRingBias).toBe(1);
+    expect(clamped.distractionFireworksRadialJitter).toBe(0);
+    expect(clamped.distractionFireworksVerticalBias).toBe(1);
+    expect(clamped.distractionFireworksSpeedJitter).toBe(0.34);
+  });
+
+  it("sanitizes non-finite fireworks morphology controls to finite defaults", () => {
+    const clamped = clampDebugConfig({
+      ...defaultDebugConfig,
+      distractionFireworksPrimaryParticleCount: Number.NaN,
+      distractionFireworksSecondaryParticleCount: Number.POSITIVE_INFINITY,
+      distractionFireworksRingBias: Number.NaN,
+      distractionFireworksRadialJitter: Number.NEGATIVE_INFINITY,
+      distractionFireworksVerticalBias: Number.NaN,
+      distractionFireworksSpeedJitter: Number.NaN,
+    });
+
+    expect(clamped.distractionFireworksPrimaryParticleCount).toBe(defaultDebugConfig.distractionFireworksPrimaryParticleCount);
+    expect(clamped.distractionFireworksSecondaryParticleCount).toBe(defaultDebugConfig.distractionFireworksSecondaryParticleCount);
+    expect(clamped.distractionFireworksRingBias).toBe(defaultDebugConfig.distractionFireworksRingBias);
+    expect(clamped.distractionFireworksRadialJitter).toBe(defaultDebugConfig.distractionFireworksRadialJitter);
+    expect(clamped.distractionFireworksVerticalBias).toBe(defaultDebugConfig.distractionFireworksVerticalBias);
+    expect(clamped.distractionFireworksSpeedJitter).toBe(defaultDebugConfig.distractionFireworksSpeedJitter);
   });
 
   it("sanitizes cloud lifecycle controls and preserves explicit zero drift", () => {
