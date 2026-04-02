@@ -59,6 +59,35 @@ function stepForDuration({
   return state;
 }
 
+function stepUntilFirstPrimaryBurst({
+  seed,
+  config = baseConfig,
+  deltaSeconds = 1 / 60,
+  maxSteps = 720,
+}: {
+  seed: number;
+  config?: FireworksConfig;
+  deltaSeconds?: number;
+  maxSteps?: number;
+}): FireworksState {
+  let state = initializeFireworksState({ seed, config });
+
+  for (let step = 0; step < maxSteps; step += 1) {
+    state = stepFireworksState({
+      previousState: state,
+      config,
+      deltaSeconds,
+      isChannelActive: true,
+    });
+
+    if (state.telemetry.primaryBurstEvents.length > 0) {
+      return state;
+    }
+  }
+
+  throw new Error("Expected a primary burst before maxSteps");
+}
+
 describe("fireworks config sanitization", () => {
   it("clamps and normalizes adversarial values", () => {
     const sanitized = sanitizeFireworksConfig({
@@ -510,5 +539,49 @@ describe("fireworks simulation determinism", () => {
   it("replays fixed-step sequences identically", () => {
     const run = () => stepForDuration({ seed: 7, seconds: 20, isChannelActive: true }).snapshot;
     expect(run()).toEqual(run());
+  });
+
+  it("keeps neutral primary burst directions approximately isotropic across deterministic seeds", () => {
+    let sumUnitX = 0;
+    let sumUnitY = 0;
+    let sumUnitZ = 0;
+    let positiveYCount = 0;
+    let sampleCount = 0;
+
+    for (let seed = 1; seed <= 128; seed += 1) {
+      const state = stepUntilFirstPrimaryBurst({ seed });
+      const firstPrimary = state.telemetry.primaryBurstEvents[0];
+      expect(firstPrimary).toBeDefined();
+
+      const shellId = firstPrimary?.shellId ?? "";
+      const particles = state.particles.filter((particle) => particle.shellId === shellId && particle.stage === "primary");
+      expect(particles.length).toBeGreaterThan(0);
+
+      for (const particle of particles) {
+        const magnitude = Math.hypot(particle.vx, particle.initialVy, particle.vz);
+        expect(magnitude).toBeGreaterThan(0);
+
+        const unitX = particle.vx / magnitude;
+        const unitY = particle.initialVy / magnitude;
+        const unitZ = particle.vz / magnitude;
+
+        sumUnitX += unitX;
+        sumUnitY += unitY;
+        sumUnitZ += unitZ;
+        positiveYCount += unitY >= 0 ? 1 : 0;
+        sampleCount += 1;
+      }
+    }
+
+    const meanUnitX = sumUnitX / sampleCount;
+    const meanUnitY = sumUnitY / sampleCount;
+    const meanUnitZ = sumUnitZ / sampleCount;
+    const positiveYRatio = positiveYCount / sampleCount;
+
+    expect(Math.abs(meanUnitX)).toBeLessThan(0.08);
+    expect(Math.abs(meanUnitY)).toBeLessThan(0.08);
+    expect(Math.abs(meanUnitZ)).toBeLessThan(0.08);
+    expect(positiveYRatio).toBeGreaterThan(0.42);
+    expect(positiveYRatio).toBeLessThan(0.58);
   });
 });

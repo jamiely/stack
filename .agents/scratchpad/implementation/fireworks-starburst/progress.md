@@ -1,23 +1,28 @@
 # Progress — fireworks-starburst
 
 ## Current Step
-- Step 1: Extend fireworks config schema + clamp/sanitize contracts
+- Step 2: Implement deterministic isotropic burst direction sampler
 
 ## Active Wave
-- Runtime task id: task-1775094463-a9d7
-- Runtime task key: pdd:fireworks-starburst:step-01:extend-fireworks-config-schema-clamp-sanitize-contracts
-- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-01-extend-fireworks-config-schema-clamp-sanitize-contracts.code-task.md
-- Wave status: active (Step 1 only mirrored)
+- Runtime task id: task-1775095329-2ecf
+- Runtime task key: pdd:fireworks-starburst:step-02:implement-deterministic-isotropic-burst-direction-sampler
+- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-02-implement-deterministic-isotropic-burst-direction-sampler.code-task.md
+- Wave status: active (Step 2 only mirrored)
 
 ## Step Status
-- Step 1: active
-- Step 2: pending
+- Step 1: completed
+- Step 2: active
 - Step 3: pending
 - Step 4: pending
 - Step 5: pending
 - Step 6: pending
 - Step 7: pending
 - Step 8: pending
+
+## 2026-04-02 — Queue advance to Step 2
+- Closed Step 1 runtime wave after passed re-review/finalizer handoff.
+- Mirrored only Step 2 into runtime queue as `task-1775095329-2ecf`.
+- Next handoff event should target Builder for Step 2 TDD execution.
 
 ## 2026-04-02 — Step 1 TDD Evidence (task-1775094463-a9d7)
 - **RED**
@@ -41,6 +46,24 @@
 - Logs captured:
   - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
   - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`
+
+## 2026-04-02 — Step 2 TDD Evidence (task-1775095329-2ecf)
+- **RED**
+  - Added failing isotropic-sanity coverage in `tests/unit/fireworks.test.ts` (`keeps neutral primary burst directions approximately isotropic across deterministic seeds`) plus a helper that deterministically steps to first primary burst.
+  - Verified failure with `npm run test:unit -- tests/unit/fireworks.test.ts` (`meanUnitY` exceeded tolerance, confirming vertical bias in the previous sampler).
+- **GREEN**
+  - Replaced primary/secondary burst direction generation in `src/game/logic/fireworks.ts` with deterministic isotropic spherical sampling (`unitY ∈ [-1,1]`, radial magnitude from sphere surface).
+  - Preserved RNG cursor contract (still four samples/particle: azimuth, vertical component, speed, lifetime).
+  - Removed legacy emission-time gravity/drag directional skew so neutral settings produce balanced direction vectors.
+- **REFACTOR / ALIGNMENT**
+  - Removed now-unused `gravity`/`drag` parameters from `emitBurstParticles` call sites/signature to keep the sampler API minimal and explicit.
+  - Updated feature documentation mentions in `docs/features.md` and `README.md` to reflect isotropic neutral burst sampling behavior.
+- **Verification**
+  - Targeted: `npm run test:unit -- tests/unit/fireworks.test.ts` ✅
+  - Full gates: `npm run test:unit && npm run test:e2e` ✅, `npm run build` ✅
+  - Logs refreshed at:
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`
 
 ## 2026-04-02 — Step 1 review-reject fix (rounding parity)
 - **RED**

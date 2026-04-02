@@ -468,8 +468,6 @@ export function stepFireworksState({
       lifetimeMax: Math.min(MAX_PRIMARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMaxSeconds),
       speedMin: 6,
       speedMax: 14,
-      gravity: sanitizedConfig.shellGravity,
-      drag: 0.94,
       activeParticles: nextParticles.length,
       maxActiveParticles: sanitizedConfig.maxActiveParticles,
     });
@@ -529,8 +527,6 @@ export function stepFireworksState({
       lifetimeMax: Math.min(MAX_SECONDARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMaxSeconds),
       speedMin: 4,
       speedMax: 10,
-      gravity: sanitizedConfig.shellGravity * 1.45,
-      drag: 0.9,
       activeParticles: nextParticles.length,
       maxActiveParticles: sanitizedConfig.maxActiveParticles,
     });
@@ -760,8 +756,6 @@ function emitBurstParticles({
   lifetimeMax,
   speedMin,
   speedMax,
-  gravity,
-  drag,
   activeParticles,
   maxActiveParticles,
 }: {
@@ -778,8 +772,6 @@ function emitBurstParticles({
   lifetimeMax: number;
   speedMin: number;
   speedMax: number;
-  gravity: number;
-  drag: number;
   activeParticles: number;
   maxActiveParticles: number;
 }): {
@@ -805,12 +797,13 @@ function emitBurstParticles({
     cursor = lifetimeSample.cursor;
 
     const azimuth = azimuthSample.value * Math.PI * 2;
-    const elevation = (elevationSample.value - 0.5) * Math.PI;
+    const unitY = elevationSample.value * 2 - 1;
+    const radialMagnitude = Math.sqrt(Math.max(0, 1 - unitY * unitY));
     const speed = lerp(speedMin, speedMax, speedSample.value);
 
-    const vx = Math.cos(azimuth) * Math.cos(elevation) * speed * drag;
-    const vy = Math.sin(elevation) * speed - gravity * 0.12;
-    const vz = Math.sin(azimuth) * Math.cos(elevation) * speed * drag;
+    const vx = Math.cos(azimuth) * radialMagnitude * speed;
+    const vy = unitY * speed;
+    const vz = Math.sin(azimuth) * radialMagnitude * speed;
 
     const normalizedLifetimeMin = Math.min(lifetimeMin, lifetimeMax);
     const normalizedLifetimeMax = Math.max(lifetimeMin, lifetimeMax);
