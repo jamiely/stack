@@ -659,9 +659,11 @@ function createShell({
   const normalizedMin = Math.min(speedMin, speedMax);
   const normalizedMax = Math.max(speedMin, speedMax);
 
+  const lateralNoise = shellId % 2 === 0 ? 0.5 + spawnNoise * 0.5 : spawnNoise * 0.5;
+
   return {
     id: `shell-${shellId}`,
-    x: launchOriginX + lerp(config.spawnXMin, config.spawnXMax, spawnNoise),
+    x: launchOriginX + lerp(config.spawnXMin, config.spawnXMax, lateralNoise),
     y: launchOriginY,
     z: launchOriginZ + lerp(config.spawnZMin, config.spawnZMax, depthNoise),
     vy: lerp(normalizedMin, normalizedMax, heightNoise),

@@ -1741,8 +1741,8 @@ export class Game {
       maxActiveParticles: this.debugConfig.distractionFireworksMaxActiveParticles,
       spawnXMin: -10,
       spawnXMax: 10,
-      spawnZMin: -24,
-      spawnZMax: -10,
+      spawnZMin: -10,
+      spawnZMax: 10,
     };
   }
 
