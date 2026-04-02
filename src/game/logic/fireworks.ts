@@ -41,6 +41,7 @@ const MAX_AZIMUTH_JITTER_RADIANS = Math.PI / 10;
 const MAX_VERTICAL_JITTER = 0.2;
 const VERTICAL_BIAS_STRENGTH = 0.35;
 const RING_VERTICAL_RETAIN = 0.85;
+const GOLDEN_ANGLE_RADIANS = Math.PI * (3 - Math.sqrt(5));
 
 export interface FireworksConfig {
   launchIntervalMinSeconds: number;
@@ -808,6 +809,10 @@ function emitBurstParticles({
   let particleId = nextParticleId;
   const room = Math.max(0, maxActiveParticles - activeParticles);
   const emitCount = Math.min(count, room);
+  const shellRotationSample = emitCount > 0 ? sampleWithCursor(seed, cursor) : null;
+  if (shellRotationSample) {
+    cursor = shellRotationSample.cursor;
+  }
 
   for (let index = 0; index < emitCount; index += 1) {
     const azimuthSample = sampleWithCursor(seed, cursor);
@@ -819,20 +824,27 @@ function emitBurstParticles({
     const lifetimeSample = sampleWithCursor(seed, cursor);
     cursor = lifetimeSample.cursor;
 
-    const azimuth = azimuthSample.value * Math.PI * 2;
-    const unitY = elevationSample.value * 2 - 1;
+    const shellRotation = shellRotationSample?.value ?? 0;
+    const baseAzimuth = shellRotation * Math.PI * 2 + index * GOLDEN_ANGLE_RADIANS;
+    const stratifiedUnitY = emitCount <= 1 ? 0 : 1 - 2 * ((index + 0.5) / emitCount);
 
-    const compressedUnitY = unitY * (1 - ringBias * RING_VERTICAL_RETAIN);
+    const compressedUnitY = stratifiedUnitY * (1 - ringBias * RING_VERTICAL_RETAIN);
     const verticalBiasWeight = 1 - Math.abs(compressedUnitY);
     const biasedUnitY = clamp(
       compressedUnitY + verticalBias * VERTICAL_BIAS_STRENGTH * verticalBiasWeight,
       -1,
       1,
     );
-    const azimuthJitter = (lifetimeSample.value * 2 - 1) * radialJitter * MAX_AZIMUTH_JITTER_RADIANS;
-    const verticalJitter = (speedSample.value * 2 - 1) * radialJitter * MAX_VERTICAL_JITTER;
+    const azimuthJitter =
+      ((azimuthSample.value * 2 - 1) * 0.35 + (lifetimeSample.value * 2 - 1) * 0.65)
+      * radialJitter
+      * MAX_AZIMUTH_JITTER_RADIANS;
+    const verticalJitter =
+      ((elevationSample.value * 2 - 1) * 0.6 + (speedSample.value * 2 - 1) * 0.4)
+      * radialJitter
+      * MAX_VERTICAL_JITTER;
     const shapedUnitY = clamp(biasedUnitY + verticalJitter, -1, 1);
-    const shapedAzimuth = azimuth + azimuthJitter;
+    const shapedAzimuth = baseAzimuth + azimuthJitter;
     const radialMagnitude = Math.sqrt(Math.max(0, 1 - shapedUnitY * shapedUnitY));
 
     const baseSpeed = lerp(speedMin, speedMax, speedSample.value);
