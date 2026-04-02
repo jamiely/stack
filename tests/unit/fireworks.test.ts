@@ -605,53 +605,30 @@ describe("fireworks morphology controls", () => {
 });
 
 describe("fireworks particle cap guardrails", () => {
-  it("never exceeds maxActiveParticles under sustained deterministic stress", () => {
-    const stressConfig: FireworksConfig = {
-      ...baseConfig,
-      launchIntervalMinSeconds: 0.2,
-      launchIntervalMaxSeconds: 0.2,
-      shellSpeedMin: 18,
-      shellSpeedMax: 24,
-      particleLifetimeMinSeconds: 2.4,
-      particleLifetimeMaxSeconds: 8,
-      secondaryDelayMinSeconds: 0.05,
-      secondaryDelayMaxSeconds: 0.05,
-      maxActiveParticles: 48,
-    };
+  const stressConfig: FireworksConfig = {
+    ...baseConfig,
+    launchIntervalMinSeconds: 0.2,
+    launchIntervalMaxSeconds: 0.2,
+    shellSpeedMin: 18,
+    shellSpeedMax: 24,
+    particleLifetimeMinSeconds: 2.8,
+    particleLifetimeMaxSeconds: 8,
+    secondaryDelayMinSeconds: 0.05,
+    secondaryDelayMaxSeconds: 0.05,
+    maxActiveParticles: 48,
+    primaryParticleCount: 120,
+    secondaryParticleCount: 120,
+    ringBias: 1,
+    radialJitter: 1,
+    verticalBias: -1,
+    speedJitter: 1,
+  };
 
-    let state = initializeFireworksState({ seed: 42, config: stressConfig });
-    const deltaSeconds = 1 / 30;
-
-    for (let step = 0; step < 900; step += 1) {
-      state = stepFireworksState({
-        previousState: state,
-        config: stressConfig,
-        deltaSeconds,
-        isChannelActive: true,
-      });
-      expect(state.snapshot.activeParticles).toBeLessThanOrEqual(stressConfig.maxActiveParticles);
-      expect(state.particles.length).toBeLessThanOrEqual(stressConfig.maxActiveParticles);
-    }
-
-    expect(state.telemetry.droppedSecondary).toBeGreaterThan(0);
-  });
-
-  it("records secondary degradation before any primary reductions under cap pressure", () => {
-    const stressConfig: FireworksConfig = {
-      ...baseConfig,
-      launchIntervalMinSeconds: 0.2,
-      launchIntervalMaxSeconds: 0.2,
-      shellSpeedMin: 18,
-      shellSpeedMax: 24,
-      particleLifetimeMinSeconds: 2.8,
-      particleLifetimeMaxSeconds: 8,
-      secondaryDelayMinSeconds: 0.05,
-      secondaryDelayMaxSeconds: 0.05,
-      maxActiveParticles: 48,
-    };
-
+  function runCapStress(deltaSeconds: number): {
+    state: FireworksState;
+    firstDropCounters: { droppedSecondary: number; droppedPrimary: number } | null;
+  } {
     let state = initializeFireworksState({ seed: 7, config: stressConfig });
-    const deltaSeconds = 1 / 30;
     let firstDropCounters: { droppedSecondary: number; droppedPrimary: number } | null = null;
 
     for (let step = 0; step < 900; step += 1) {
@@ -665,6 +642,9 @@ describe("fireworks particle cap guardrails", () => {
         isChannelActive: true,
       });
 
+      expect(state.snapshot.activeParticles).toBeLessThanOrEqual(stressConfig.maxActiveParticles);
+      expect(state.particles.length).toBeLessThanOrEqual(stressConfig.maxActiveParticles);
+
       if (
         firstDropCounters === null
         && (state.telemetry.droppedSecondary > previousSecondaryDrops || state.telemetry.droppedPrimary > previousPrimaryDrops)
@@ -676,12 +656,42 @@ describe("fireworks particle cap guardrails", () => {
       }
     }
 
-    expect(firstDropCounters).not.toBeNull();
-    expect(firstDropCounters?.droppedSecondary ?? 0).toBeGreaterThan(0);
-    expect(firstDropCounters?.droppedPrimary ?? 0).toBe(0);
+    return { state, firstDropCounters };
+  }
 
-    if (state.telemetry.droppedPrimary > 0) {
-      expect(state.telemetry.droppedSecondary).toBeGreaterThan(0);
+  it("keeps cap safety and burst activity under extreme morphology/count stress", () => {
+    const fine = runCapStress(1 / 60);
+    const coarse = runCapStress(1 / 30);
+
+    expect(fine.state.telemetry.launches).toBeGreaterThan(0);
+    expect(fine.state.telemetry.primaryBursts).toBeGreaterThan(0);
+    expect(fine.state.telemetry.secondaryBursts).toBeGreaterThan(0);
+    expect(fine.state.telemetry.droppedSecondary).toBeGreaterThan(0);
+
+    expect(coarse.state.telemetry.launches).toBeGreaterThan(0);
+    expect(coarse.state.telemetry.primaryBursts).toBeGreaterThan(0);
+    expect(coarse.state.telemetry.secondaryBursts).toBeGreaterThan(0);
+    expect(coarse.state.telemetry.droppedSecondary).toBeGreaterThan(0);
+  });
+
+  it("records secondary degradation before any primary reductions under cap pressure", () => {
+    const fine = runCapStress(1 / 60);
+    const coarse = runCapStress(1 / 30);
+
+    expect(fine.firstDropCounters).not.toBeNull();
+    expect(fine.firstDropCounters?.droppedSecondary ?? 0).toBeGreaterThan(0);
+    expect(fine.firstDropCounters?.droppedPrimary ?? 0).toBe(0);
+
+    expect(coarse.firstDropCounters).not.toBeNull();
+    expect(coarse.firstDropCounters?.droppedSecondary ?? 0).toBeGreaterThan(0);
+    expect(coarse.firstDropCounters?.droppedPrimary ?? 0).toBe(0);
+
+    if (fine.state.telemetry.droppedPrimary > 0) {
+      expect(fine.state.telemetry.droppedSecondary).toBeGreaterThan(0);
+    }
+
+    if (coarse.state.telemetry.droppedPrimary > 0) {
+      expect(coarse.state.telemetry.droppedSecondary).toBeGreaterThan(0);
     }
   });
 });

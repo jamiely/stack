@@ -1,23 +1,46 @@
 # Progress — fireworks-starburst
 
 ## Current Step
-- Step 3: Add morphology shaping controls + configurable particle counts
+- Step 4: Preserve cap guardrails under new morphology/count envelope
 
 ## Active Wave
-- Runtime task id: task-1775095818-f279
-- Runtime task key: pdd:fireworks-starburst:step-03:add-morphology-shaping-controls-and-configurable-particle-counts
-- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-03-add-morphology-shaping-controls-and-configurable-particle-counts.code-task.md
-- Wave status: active (Step 3 only mirrored)
+- Runtime task id: task-1775096280-6688
+- Runtime task key: pdd:fireworks-starburst:step-04:preserve-cap-guardrails-under-new-morphology-count-envelope
+- Code task file: .agents/scratchpad/implementation/fireworks-starburst/tasks/task-04-preserve-cap-guardrails-under-new-morphology-count-envelope.code-task.md
+- Wave status: active (Step 4 only mirrored)
 
 ## Step Status
 - Step 1: completed
 - Step 2: completed
-- Step 3: completed (awaiting critic review)
-- Step 4: pending
+- Step 3: completed
+- Step 4: completed
 - Step 5: pending
 - Step 6: pending
 - Step 7: pending
 - Step 8: pending
+
+## 2026-04-02 — Step 4 TDD Evidence (task-1775096280-6688)
+- **RED**
+  - Replaced cap-guardrail stress assertions in `tests/unit/fireworks.test.ts` with elevated morphology/count pressure (`primaryParticleCount=120`, `secondaryParticleCount=120`, ring/jitter extremes) and dual-step-size runs (`1/60`, `1/30`).
+  - Added failing assertions that stress runs still produce launches/bursts, stay cap-bounded every tick, and keep first degradation secondary-first.
+  - Verified failures via `npm run test:unit -- tests/unit/fireworks.test.ts` (launches remained `0`, firstDrop counters `null`).
+- **GREEN**
+  - Updated `src/game/logic/fireworks.ts` to use cap-aware effective emission counts (`min(configuredCount, maxActiveParticles)`) for launch demand checks, primary reclaim demand, and primary/secondary emission targets.
+  - This preserves activity when configured counts exceed cap while keeping per-tick hard cap enforcement and deterministic cursor flow intact.
+  - Re-ran targeted suite to green: `npm run test:unit -- tests/unit/fireworks.test.ts` ✅.
+- **REFACTOR / ALIGNMENT**
+  - Consolidated effective-count derivation once per step and reused at all cap decision points to avoid divergent guardrail math.
+  - Left lifecycle cleanup/completion telemetry code paths unchanged; stress tests now exercise them under elevated morphology pressure.
+- **Verification**
+  - Full gates: `npm run test:unit && npm run test:e2e` ✅; `npm run build` ✅
+  - Logs refreshed:
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/test.log`
+    - `.agents/scratchpad/implementation/fireworks-starburst/logs/build.log`
+
+## 2026-04-02 — Queue advance to Step 4
+- Closed Step 3 runtime wave after passed review/finalizer handoff.
+- Mirrored only Step 4 into runtime queue as `task-1775096280-6688`.
+- Next handoff event should target Builder for Step 4 TDD execution.
 
 ## 2026-04-02 — Queue advance to Step 3
 - Closed Step 2 runtime wave after passed review/finalizer handoff.

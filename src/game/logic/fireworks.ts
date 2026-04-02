@@ -342,6 +342,8 @@ export function stepFireworksState({
   const cleanupEvents = [...previousState.telemetry.cleanupEvents];
 
   const launchByShell = new Map(launchEvents.map((event) => [event.shellId, event]));
+  const effectivePrimaryParticleCount = Math.min(sanitizedConfig.primaryParticleCount, sanitizedConfig.maxActiveParticles);
+  const effectiveSecondaryParticleCount = Math.min(sanitizedConfig.secondaryParticleCount, sanitizedConfig.maxActiveParticles);
 
   const nextShells: FireworkShellState[] = [];
   const burstOrigins: Array<{
@@ -400,7 +402,7 @@ export function stepFireworksState({
 
   if (isChannelActive && nextLaunchInSeconds <= 0) {
     const availableParticleRoom = Math.max(0, sanitizedConfig.maxActiveParticles - previousState.particles.length);
-    const projectedPrimaryDemand = (nextShells.length + 1) * sanitizedConfig.primaryParticleCount;
+    const projectedPrimaryDemand = (nextShells.length + 1) * effectivePrimaryParticleCount;
 
     if (availableParticleRoom >= projectedPrimaryDemand) {
       const spawnNoise = sampleNoise(previousState.seed, nextRngCursor);
@@ -454,7 +456,7 @@ export function stepFireworksState({
     const reclaimedSecondary = reclaimSecondaryParticlesForPrimary({
       particles: nextParticles,
       maxActiveParticles: sanitizedConfig.maxActiveParticles,
-      requiredPrimaryParticles: sanitizedConfig.primaryParticleCount,
+      requiredPrimaryParticles: effectivePrimaryParticleCount,
     });
     nextParticles = reclaimedSecondary.particles;
     droppedSecondary += reclaimedSecondary.droppedSecondary;
@@ -468,7 +470,7 @@ export function stepFireworksState({
       x: origin.x,
       y: origin.y,
       z: origin.z,
-      count: sanitizedConfig.primaryParticleCount,
+      count: effectivePrimaryParticleCount,
       lifetimeMin: Math.max(MIN_PRIMARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMinSeconds),
       lifetimeMax: Math.min(MAX_PRIMARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMaxSeconds),
       speedMin: 6,
@@ -531,7 +533,7 @@ export function stepFireworksState({
       x: event.x,
       y: event.y,
       z: event.z,
-      count: sanitizedConfig.secondaryParticleCount,
+      count: effectiveSecondaryParticleCount,
       lifetimeMin: Math.max(MIN_SECONDARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMinSeconds),
       lifetimeMax: Math.min(MAX_SECONDARY_COMPLETION_SECONDS, sanitizedConfig.particleLifetimeMaxSeconds),
       speedMin: 4,
