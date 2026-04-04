@@ -78,7 +78,7 @@ Runtime tuning panel includes:
 - Performance: quality preset (`0` low / `1` medium / `2` high), auto-quality toggle, frame-budget target, archival keep-level/chunk sizing, distraction LOD near/far distances, active debris cap, and debris pool limit
 - Setup: prebuilt starting levels (default raised so the base extends below the bottom screen edge) plus `Normalize W/L/H` quick action to unify block width/length/height
 - Block motion: `Pause Block Motion` / `Resume Block Motion` debug action to freeze the active slab path for close placement inspection
-- Remy placement: side-aware baseline pose presets now auto-apply by ledge face, with runtime rotation controls on all axes (X/Y/Z) plus translation controls on all axes (X/Y/Z), and a `Reset Remy Placement` action for rapid model anchoring/orientation tuning
+- Remy placement: runtime rotation controls on all axes (X/Y/Z) plus translation controls on all axes (X/Y/Z) now map directly to the applied transform (with tuned defaults for this rig), and a `Reset Remy Placement` action for rapid model anchoring/orientation tuning
 - Atmosphere: configurable day/night cycle duration
 - Effects: debris lifetime and placement camera shake amount
 - Scene: grid visibility (off by default)

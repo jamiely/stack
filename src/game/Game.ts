@@ -271,11 +271,11 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
 };
 
 const REMY_DEBUG_DEFAULTS: RemyDebugConfig = {
-  yawDegrees: 0,
-  pitchDegrees: 0,
-  rollDegrees: 0,
+  yawDegrees: -9,
+  pitchDegrees: -7,
+  rollDegrees: 89,
   translateX: 0,
-  translateY: 0,
+  translateY: 0.85,
   translateZ: 0,
 };
 
@@ -289,16 +289,16 @@ const REMY_DEBUG_RANGES: Record<RemyDebugKey, { min: number; max: number; step: 
 };
 
 const REMY_SIDE_POSE_PRESETS: Record<FaceId, RemyDebugConfig> = {
-  posX: { pitchDegrees: 100, yawDegrees: 2, rollDegrees: 88, translateX: 0, translateY: 0, translateZ: 0.54 },
-  negX: { pitchDegrees: 100, yawDegrees: -2, rollDegrees: -88, translateX: 0, translateY: 0, translateZ: 0.54 },
-  posZ: { pitchDegrees: 100, yawDegrees: 2, rollDegrees: 88, translateX: 0, translateY: 0, translateZ: 0.54 },
-  negZ: { pitchDegrees: 100, yawDegrees: -2, rollDegrees: -88, translateX: 0, translateY: 0, translateZ: 0.54 },
+  posX: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
+  negX: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
+  posZ: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
+  negZ: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
 };
 
 const REMY_FALLBACK_POSE_PRESET: RemyDebugConfig = {
-  pitchDegrees: 100,
+  pitchDegrees: 0,
   yawDegrees: 0,
-  rollDegrees: 88,
+  rollDegrees: 0,
   translateX: 0,
   translateY: 0,
   translateZ: 0,
@@ -537,7 +537,9 @@ export class Game {
   private tentacleBurstKeys: string[] = [];
   private lastTentacleBurstAtSeconds = Number.NEGATIVE_INFINITY;
   private remyCharacter: Group | null = null;
-  private remyPosePivot: Group | null = null;
+  private remyPoseRotateX: Group | null = null;
+  private remyPoseRotateY: Group | null = null;
+  private remyPoseRotateZ: Group | null = null;
   private remyMixer: AnimationMixer | null = null;
   private remyBaseHeight = 1;
   private remyBaseDepth = 1;
@@ -2436,11 +2438,24 @@ export class Game {
         const posePivot = new Group();
         posePivot.name = "remy-pose-pivot";
         posePivot.position.y = centerOffsetFromFeet;
-        posePivot.add(model);
+
+        const poseRotateX = new Group();
+        poseRotateX.name = "remy-pose-rotate-x";
+        const poseRotateY = new Group();
+        poseRotateY.name = "remy-pose-rotate-y";
+        const poseRotateZ = new Group();
+        poseRotateZ.name = "remy-pose-rotate-z";
+
+        posePivot.add(poseRotateX);
+        poseRotateX.add(poseRotateY);
+        poseRotateY.add(poseRotateZ);
+        poseRotateZ.add(model);
         characterRoot.add(posePivot);
 
         this.remyCharacter = characterRoot;
-        this.remyPosePivot = posePivot;
+        this.remyPoseRotateX = poseRotateX;
+        this.remyPoseRotateY = poseRotateY;
+        this.remyPoseRotateZ = poseRotateZ;
         this.remyBaseHeight = modelSize.y;
         this.remyBaseDepth = Math.max(modelSize.x, modelSize.z);
         this.loadRemyAnimationClip(model, gltf.animations);
@@ -2682,10 +2697,10 @@ export class Game {
       ledgeMesh.position.z + insetOffset.z,
     );
     this.remyCharacter.rotation.set(0, ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y, 0);
-    this.remyPosePivot?.rotation.set(
-      this.toRadians(sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees),
-      this.toRadians(sidePose.yawDegrees + this.remyDebugConfig.yawDegrees),
-      this.toRadians(sidePose.rollDegrees + this.remyDebugConfig.rollDegrees),
+    this.applyRemyDebugRotation(
+      sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees,
+      sidePose.yawDegrees + this.remyDebugConfig.yawDegrees,
+      sidePose.rollDegrees + this.remyDebugConfig.rollDegrees,
     );
 
     slabMesh.add(this.remyCharacter);
@@ -2735,6 +2750,12 @@ export class Game {
     });
   }
 
+  private applyRemyDebugRotation(pitchDegrees: number, yawDegrees: number, rollDegrees: number): void {
+    this.remyPoseRotateX?.rotation.set(this.toRadians(pitchDegrees), 0, 0);
+    this.remyPoseRotateY?.rotation.set(0, this.toRadians(yawDegrees), 0);
+    this.remyPoseRotateZ?.rotation.set(0, 0, this.toRadians(rollDegrees));
+  }
+
   private readRemyFaceId(ledgeMesh: Mesh): FaceId | null {
     const faceId = ledgeMesh.userData.faceId;
     if (faceId === "posX" || faceId === "negX" || faceId === "posZ" || faceId === "negZ") {
@@ -2778,10 +2799,10 @@ export class Game {
       sidePose.translateZ + this.remyDebugConfig.translateZ,
     );
     this.remyCharacter.rotation.set(0, REMY_ROTATION_OFFSET_Y, 0);
-    this.remyPosePivot?.rotation.set(
-      this.toRadians(sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees),
-      this.toRadians(sidePose.yawDegrees + this.remyDebugConfig.yawDegrees),
-      this.toRadians(sidePose.rollDegrees + this.remyDebugConfig.rollDegrees),
+    this.applyRemyDebugRotation(
+      sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees,
+      sidePose.yawDegrees + this.remyDebugConfig.yawDegrees,
+      sidePose.rollDegrees + this.remyDebugConfig.rollDegrees,
     );
     topSlabMesh.add(this.remyCharacter);
   }
