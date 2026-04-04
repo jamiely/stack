@@ -518,6 +518,7 @@ export class Game {
   private tentacleBurstKeys: string[] = [];
   private lastTentacleBurstAtSeconds = Number.NEGATIVE_INFINITY;
   private remyCharacter: Group | null = null;
+  private remyPosePivot: Group | null = null;
   private remyMixer: AnimationMixer | null = null;
   private remyBaseHeight = 1;
   private remyBaseDepth = 1;
@@ -2410,10 +2411,17 @@ export class Game {
         }
 
         const modelCenter = modelBounds.getCenter(new Vector3());
-        model.position.set(-modelCenter.x, -modelBounds.min.y, -modelCenter.z);
-        characterRoot.add(model);
+        const centerOffsetFromFeet = modelCenter.y - modelBounds.min.y;
+        model.position.set(-modelCenter.x, -modelCenter.y, -modelCenter.z);
+
+        const posePivot = new Group();
+        posePivot.name = "remy-pose-pivot";
+        posePivot.position.y = centerOffsetFromFeet;
+        posePivot.add(model);
+        characterRoot.add(posePivot);
 
         this.remyCharacter = characterRoot;
+        this.remyPosePivot = posePivot;
         this.remyBaseHeight = modelSize.y;
         this.remyBaseDepth = Math.max(modelSize.x, modelSize.z);
         this.loadRemyAnimationClip(model, gltf.animations);
@@ -2638,9 +2646,10 @@ export class Game {
       ledgeMesh.position.y + ledgeHeight / 2 + REMY_LEDGE_CLEARANCE + insetOffset.y,
       ledgeMesh.position.z + insetOffset.z,
     );
-    this.remyCharacter.rotation.set(
+    this.remyCharacter.rotation.set(0, ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y, 0);
+    this.remyPosePivot?.rotation.set(
       this.toRadians(this.remyDebugConfig.pitchDegrees),
-      ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y + this.toRadians(this.remyDebugConfig.yawDegrees),
+      this.toRadians(this.remyDebugConfig.yawDegrees),
       this.toRadians(this.remyDebugConfig.rollDegrees),
     );
 
@@ -2715,9 +2724,10 @@ export class Game {
       topSlab.dimensions.height / 2 + REMY_LEDGE_CLEARANCE + this.remyDebugConfig.translateY,
       this.remyDebugConfig.translateZ,
     );
-    this.remyCharacter.rotation.set(
+    this.remyCharacter.rotation.set(0, REMY_ROTATION_OFFSET_Y, 0);
+    this.remyPosePivot?.rotation.set(
       this.toRadians(this.remyDebugConfig.pitchDegrees),
-      REMY_ROTATION_OFFSET_Y + this.toRadians(this.remyDebugConfig.yawDegrees),
+      this.toRadians(this.remyDebugConfig.yawDegrees),
       this.toRadians(this.remyDebugConfig.rollDegrees),
     );
     topSlabMesh.add(this.remyCharacter);
