@@ -13,10 +13,7 @@ export interface TentacleBurstMarker {
 }
 
 export interface TentacleSpawnCheck {
-  elapsedSeconds: number;
-  lastBurstAtSeconds: number;
-  minIntervalSeconds: number;
-  cycleNoise: number;
+  placementNoise: number;
   burstChance: number;
 }
 
@@ -50,12 +47,9 @@ export function hasRecentTentacleBurstOnFace(
 }
 
 export function shouldSpawnTentacleBurst(check: TentacleSpawnCheck): boolean {
-  const minIntervalSeconds = Math.max(0, check.minIntervalSeconds);
-  const secondsSinceLastBurst = check.elapsedSeconds - check.lastBurstAtSeconds;
-  if (secondsSinceLastBurst < minIntervalSeconds) {
-    return false;
-  }
-
   const burstChance = Math.min(1, Math.max(0, check.burstChance));
-  return check.cycleNoise < burstChance;
+  const placementNoise = Number.isFinite(check.placementNoise)
+    ? Math.min(1, Math.max(0, check.placementNoise))
+    : 1;
+  return placementNoise < burstChance;
 }

@@ -49,57 +49,42 @@ describe("hasRecentTentacleBurstOnFace", () => {
 });
 
 describe("shouldSpawnTentacleBurst", () => {
-  it("requires both cooldown completion and probability gate", () => {
+  it("uses a per-placement probability gate", () => {
     expect(
       shouldSpawnTentacleBurst({
-        elapsedSeconds: 4,
-        lastBurstAtSeconds: 2,
-        minIntervalSeconds: 2.4,
-        cycleNoise: 0.01,
+        placementNoise: 0.2,
         burstChance: 0.12,
       }),
     ).toBe(false);
 
     expect(
       shouldSpawnTentacleBurst({
-        elapsedSeconds: 4.5,
-        lastBurstAtSeconds: 2,
-        minIntervalSeconds: 2.4,
-        cycleNoise: 0.2,
-        burstChance: 0.12,
-      }),
-    ).toBe(false);
-
-    expect(
-      shouldSpawnTentacleBurst({
-        elapsedSeconds: 4.5,
-        lastBurstAtSeconds: 2,
-        minIntervalSeconds: 2.4,
-        cycleNoise: 0.08,
+        placementNoise: 0.08,
         burstChance: 0.12,
       }),
     ).toBe(true);
   });
 
-  it("clamps invalid chance and interval inputs", () => {
+  it("clamps invalid chance/noise inputs", () => {
     expect(
       shouldSpawnTentacleBurst({
-        elapsedSeconds: 1,
-        lastBurstAtSeconds: 0,
-        minIntervalSeconds: -5,
-        cycleNoise: 0,
+        placementNoise: 0,
         burstChance: -3,
       }),
     ).toBe(false);
 
     expect(
       shouldSpawnTentacleBurst({
-        elapsedSeconds: 1,
-        lastBurstAtSeconds: 0,
-        minIntervalSeconds: -5,
-        cycleNoise: 0.999,
+        placementNoise: 0.999,
         burstChance: 7,
       }),
     ).toBe(true);
+
+    expect(
+      shouldSpawnTentacleBurst({
+        placementNoise: Number.NaN,
+        burstChance: 0.9,
+      }),
+    ).toBe(false);
   });
 });

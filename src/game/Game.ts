@@ -349,9 +349,7 @@ const PLACEMENT_SHAKE_DURATION_SECONDS = 0.16;
 const COLLAPSE_VOXEL_SIZE = 0.38;
 const COLLAPSE_VOXEL_LIFETIME_SECONDS = 2.2;
 const COLLAPSE_VOXEL_MAX_COUNT = 2200;
-const TENTACLE_SIDE_SWITCH_SPEED = 0.75;
 const TENTACLE_BURST_CHANCE = 0.12;
-const TENTACLE_BURST_MIN_INTERVAL_SECONDS = 2.4;
 const REMY_TENTACLE_SUPPRESSION_WINDOW_SECONDS = 0.45;
 const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
@@ -535,7 +533,6 @@ export class Game {
   private fireworksState: FireworksState | null = null;
   private fireworksSimulationSeed = 0;
   private tentacleBurstKeys: string[] = [];
-  private lastTentacleBurstAtSeconds = Number.NEGATIVE_INFINITY;
   private remyCharacter: Group | null = null;
   private remyPoseRotateX: Group | null = null;
   private remyPoseRotateY: Group | null = null;
@@ -1292,7 +1289,6 @@ export class Game {
       config: this.buildFireworksSimulationConfig(),
     });
     this.tentacleBurstKeys = [];
-    this.lastTentacleBurstAtSeconds = Number.NEGATIVE_INFINITY;
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
@@ -1409,6 +1405,7 @@ export class Game {
     this.triggerImpactPulse(result.outcome === "perfect" ? 0.25 : 0.18);
     this.triggerPlacementShake();
     this.landedSlabs.push(rewardedLandedSlab);
+    this.maybeSpawnTentacleBurstForPlacedSlab(rewardedLandedSlab);
     const landedMesh = this.createSlabMesh(rewardedLandedSlab, false);
     this.slabMeshes.set(rewardedLandedSlab.level, landedMesh);
     this.stackGroup.add(landedMesh);
@@ -2132,51 +2129,64 @@ export class Game {
       return;
     }
 
-    const slab = this.landedSlabs[this.landedSlabs.length - 1];
-    if (!slab || slab.dimensions.height < 0.9) {
-      this.syncRemyTentacleSuppression();
+    this.animateTentacles(snapshot.signals.tentacle);
+    this.syncRemyTentacleSuppression();
+  }
+
+  private maybeSpawnTentacleBurstForPlacedSlab(slab: SlabData): void {
+    if (!this.isTentacleChannelActiveForPlacementLevel(slab.level) || slab.dimensions.height < 0.9) {
       return;
     }
 
     const visibleFaces = this.getVisibleFaceDescriptors(slab);
-    if (visibleFaces.length > 0) {
-      const cycle = Math.floor(this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * TENTACLE_SIDE_SWITCH_SPEED);
-      const cycleNoise = sampleDecorNoise(slab.level * 0.29 + cycle * 0.91, 24.8);
-      if (
-        shouldSpawnTentacleBurst({
-          elapsedSeconds: this.distractionState.elapsedSeconds,
-          lastBurstAtSeconds: this.lastTentacleBurstAtSeconds,
-          minIntervalSeconds: TENTACLE_BURST_MIN_INTERVAL_SECONDS,
-          cycleNoise,
-          burstChance: TENTACLE_BURST_CHANCE,
-        })
-      ) {
-        const sideNoise = sampleDecorNoise(slab.level * 0.43 + cycle * 0.67, 18.3);
-        const visibleFaceIndex = Math.min(visibleFaces.length - 1, Math.floor(sideNoise * visibleFaces.length));
-        const face = visibleFaces[visibleFaceIndex];
-        const burstKey = `${slab.level}:${face?.noiseSalt ?? -1}`;
-        if (face && !this.tentacleBurstKeys.includes(burstKey)) {
-          const created = this.createTentacleBurstForFace(slab, face);
-          if (created) {
-            this.lastTentacleBurstAtSeconds = this.distractionState.elapsedSeconds;
-            this.tentacleBurstKeys.push(burstKey);
-            while (this.tentacleBurstKeys.length > TENTACLE_MAX_PERSISTED_BURSTS) {
-              const removedKey = this.tentacleBurstKeys.shift();
-              const removedRoot = removedKey
-                ? this.tentacleGroup.children.find((child) => child.userData.burstKey === removedKey)
-                : null;
-              if (removedRoot) {
-                this.tentacleGroup.remove(removedRoot);
-                this.disposeObject3DMeshes(removedRoot);
-              }
-            }
-          }
-        }
-      }
+    if (visibleFaces.length === 0) {
+      return;
     }
 
-    this.animateTentacles(snapshot.signals.tentacle);
-    this.syncRemyTentacleSuppression();
+    const spawnNoise = sampleDecorNoise(slab.level * 0.29 + this.distractionState.phases.tentacle * 0.53, 24.8);
+    if (!shouldSpawnTentacleBurst({ placementNoise: spawnNoise, burstChance: TENTACLE_BURST_CHANCE })) {
+      return;
+    }
+
+    const sideNoise = sampleDecorNoise(slab.level * 0.43 + this.distractionState.phases.tentacle * 0.17, 18.3);
+    const visibleFaceIndex = Math.min(visibleFaces.length - 1, Math.floor(sideNoise * visibleFaces.length));
+    const face = visibleFaces[visibleFaceIndex];
+    if (!face) {
+      return;
+    }
+
+    const burstKey = `${slab.level}:${face.noiseSalt}`;
+    if (this.tentacleBurstKeys.includes(burstKey)) {
+      return;
+    }
+
+    if (!this.createTentacleBurstForFace(slab, face)) {
+      return;
+    }
+
+    this.tentacleBurstKeys.push(burstKey);
+    while (this.tentacleBurstKeys.length > TENTACLE_MAX_PERSISTED_BURSTS) {
+      const removedKey = this.tentacleBurstKeys.shift();
+      const removedRoot = removedKey
+        ? this.tentacleGroup.children.find((child) => child.userData.burstKey === removedKey)
+        : null;
+      if (removedRoot) {
+        this.tentacleGroup.remove(removedRoot);
+        this.disposeObject3DMeshes(removedRoot);
+      }
+    }
+  }
+
+  private isTentacleChannelActiveForPlacementLevel(level: number): boolean {
+    const levelGatedChannelActive =
+      this.gameState === "playing" &&
+      this.debugConfig.distractionsEnabled &&
+      this.debugConfig.distractionTentacleEnabled &&
+      level >= this.debugConfig.distractionTentacleStartLevel;
+
+    const debugForcedChannelActive = this.forcedDistractionTimers.tentacle > 0 && this.canForceDistractionChannel("tentacle");
+
+    return levelGatedChannelActive || debugForcedChannelActive;
   }
 
   private animateTentacles(signal: number): void {
