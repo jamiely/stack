@@ -26,7 +26,9 @@ import {
   WebGLRenderer,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
@@ -307,7 +309,8 @@ const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
 const CLOUD_DEFAULT_COUNT = defaultDebugConfig.distractionCloudCount;
-const REMY_MODEL_URL = new URL("../../assets/remy_hip_hop.glb", import.meta.url).href;
+const REMY_MODEL_URL = new URL("../../assets/remy_character_t_pose.glb", import.meta.url).href;
+const REMY_ANIMATION_URL = new URL("../../assets/remy_hip_hop_animation.fbx", import.meta.url).href;
 const DRACO_DECODER_PATH = `${import.meta.env.BASE_URL}draco/`;
 const REMY_TARGET_HEIGHT_RATIO = 0.42;
 const REMY_MIN_HEIGHT = 0.54;
@@ -2243,15 +2246,7 @@ export class Game {
 
         this.remyCharacter = characterRoot;
         this.remyBaseHeight = modelSize.y;
-
-        if (gltf.animations.length > 0) {
-          this.remyMixer = new AnimationMixer(model);
-          const preferredClip = this.selectPreferredRemyClip(gltf.animations);
-          this.remyMixer.clipAction(preferredClip).play();
-        } else {
-          this.remyMixer = null;
-        }
-
+        this.loadRemyAnimationClip(model, gltf.animations);
         this.placeRemyOnTopLedge();
         dracoLoader.dispose();
       },
@@ -2261,6 +2256,59 @@ export class Game {
         dracoLoader.dispose();
       },
     );
+  }
+
+  private loadRemyAnimationClip(targetModel: Object3D, fallbackClips: readonly AnimationClip[]): void {
+    const animationLoader = new FBXLoader();
+
+    animationLoader.load(
+      REMY_ANIMATION_URL,
+      (animationSource) => {
+        const preferredSourceClip = this.selectPreferredRemyClip(animationSource.animations);
+        if (!preferredSourceClip) {
+          this.playRemyFallbackClip(targetModel, fallbackClips);
+          return;
+        }
+
+        const clip =
+          this.tryRetargetRemyClip(targetModel, animationSource, preferredSourceClip) ??
+          preferredSourceClip;
+
+        this.remyMixer = new AnimationMixer(targetModel);
+        this.remyMixer.clipAction(clip).play();
+      },
+      undefined,
+      (error) => {
+        console.warn("Failed to load Remy animation clip.", error);
+        this.playRemyFallbackClip(targetModel, fallbackClips);
+      },
+    );
+  }
+
+  private playRemyFallbackClip(targetModel: Object3D, clips: readonly AnimationClip[]): void {
+    const preferredClip = this.selectPreferredRemyClip(clips);
+    if (!preferredClip) {
+      this.remyMixer = null;
+      return;
+    }
+
+    this.remyMixer = new AnimationMixer(targetModel);
+    this.remyMixer.clipAction(preferredClip).play();
+  }
+
+  private tryRetargetRemyClip(targetModel: Object3D, sourceRig: Object3D, clip: AnimationClip): AnimationClip | null {
+    try {
+      const retargetedClip = retargetClip(targetModel, sourceRig, clip, {
+        preserveBoneMatrix: true,
+        preserveHipPosition: true,
+        useTargetMatrix: true,
+      });
+
+      return retargetedClip.tracks.length > 0 ? retargetedClip : null;
+    } catch (error) {
+      console.warn("Failed to retarget Remy animation clip; using source clip directly.", error);
+      return null;
+    }
   }
 
   private selectLargestRemyScene(scenes: readonly Object3D[]): Object3D | null {
@@ -2318,13 +2366,22 @@ export class Game {
     });
   }
 
-  private selectPreferredRemyClip(clips: readonly AnimationClip[]): AnimationClip {
+  private selectPreferredRemyClip(clips: readonly AnimationClip[]): AnimationClip | null {
+    if (clips.length === 0) {
+      return null;
+    }
+
     const explicitClip = clips.find((clip) => clip.name === "Armature.001|mixamo.com|Layer0.001");
     if (explicitClip) {
       return explicitClip;
     }
 
-    return clips[0]!;
+    const hipHopClip = clips.find((clip) => /hip\s*hop/i.test(clip.name));
+    if (hipHopClip) {
+      return hipHopClip;
+    }
+
+    return clips.reduce((longest, clip) => (clip.duration > longest.duration ? clip : longest), clips[0]!);
   }
 
   private placeRemyOnTopLedge(): void {
