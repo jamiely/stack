@@ -157,7 +157,10 @@ interface LedgeAnimation {
   targetScaleX: number;
 }
 
+type FaceId = "posX" | "negX" | "posZ" | "negZ";
+
 interface WindowFaceDescriptor {
+  id: FaceId;
   span: number;
   createPosition: (offset: number, outDepth: number) => { x: number; y: number; z: number };
   rotationY: number;
@@ -283,6 +286,22 @@ const REMY_DEBUG_RANGES: Record<RemyDebugKey, { min: number; max: number; step: 
   translateX: { min: -2, max: 2, step: 0.01, label: "Remy Move X" },
   translateY: { min: -2, max: 2, step: 0.01, label: "Remy Move Y" },
   translateZ: { min: -2, max: 2, step: 0.01, label: "Remy Move Z" },
+};
+
+const REMY_SIDE_POSE_PRESETS: Record<FaceId, RemyDebugConfig> = {
+  posX: { pitchDegrees: -100, yawDegrees: 2, rollDegrees: 88, translateX: 0, translateY: 0, translateZ: -0.82 },
+  negX: { pitchDegrees: -100, yawDegrees: -2, rollDegrees: -88, translateX: 0, translateY: 0, translateZ: -0.82 },
+  posZ: { pitchDegrees: -100, yawDegrees: 2, rollDegrees: 88, translateX: 0, translateY: 0, translateZ: -0.82 },
+  negZ: { pitchDegrees: -100, yawDegrees: -2, rollDegrees: -88, translateX: 0, translateY: 0, translateZ: -0.82 },
+};
+
+const REMY_FALLBACK_POSE_PRESET: RemyDebugConfig = {
+  pitchDegrees: -100,
+  yawDegrees: 0,
+  rollDegrees: 88,
+  translateX: 0,
+  translateY: 0,
+  translateZ: 0,
 };
 
 const CAMERA_X = 8;
@@ -2619,6 +2638,8 @@ export class Game {
     }
 
     const { slab, slabMesh, ledgeMesh } = anchor;
+    const faceId = this.readRemyFaceId(ledgeMesh);
+    const sidePose = this.resolveRemySidePose(faceId);
     const ledgeHeight =
       typeof ledgeMesh.userData.ledgeHeight === "number"
         ? ledgeMesh.userData.ledgeHeight
@@ -2636,9 +2657,9 @@ export class Game {
     const overlapIntoWall = Math.max(0, (scaledRemyDepth - ledgeDepth) / 2);
     const outwardOffset = ledgeDepth * REMY_LEDGE_INSET_RATIO + overlapIntoWall + REMY_WALL_CLEARANCE;
     const insetOffset = new Vector3(
-      this.remyDebugConfig.translateX,
-      this.remyDebugConfig.translateY,
-      outwardOffset + this.remyDebugConfig.translateZ,
+      sidePose.translateX + this.remyDebugConfig.translateX,
+      sidePose.translateY + this.remyDebugConfig.translateY,
+      outwardOffset + sidePose.translateZ + this.remyDebugConfig.translateZ,
     ).applyAxisAngle(WORLD_UP_AXIS, ledgeMesh.rotation.y);
 
     this.remyCharacter.position.set(
@@ -2648,9 +2669,9 @@ export class Game {
     );
     this.remyCharacter.rotation.set(0, ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y, 0);
     this.remyPosePivot?.rotation.set(
-      this.toRadians(this.remyDebugConfig.pitchDegrees),
-      this.toRadians(this.remyDebugConfig.yawDegrees),
-      this.toRadians(this.remyDebugConfig.rollDegrees),
+      this.toRadians(sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees),
+      this.toRadians(sidePose.yawDegrees + this.remyDebugConfig.yawDegrees),
+      this.toRadians(sidePose.rollDegrees + this.remyDebugConfig.rollDegrees),
     );
 
     slabMesh.add(this.remyCharacter);
@@ -2700,6 +2721,23 @@ export class Game {
     });
   }
 
+  private readRemyFaceId(ledgeMesh: Mesh): FaceId | null {
+    const faceId = ledgeMesh.userData.faceId;
+    if (faceId === "posX" || faceId === "negX" || faceId === "posZ" || faceId === "negZ") {
+      return faceId;
+    }
+
+    return null;
+  }
+
+  private resolveRemySidePose(faceId: FaceId | null): RemyDebugConfig {
+    if (!faceId) {
+      return REMY_FALLBACK_POSE_PRESET;
+    }
+
+    return REMY_SIDE_POSE_PRESETS[faceId];
+  }
+
   private placeRemyAtTopFallback(): void {
     this.detachRemyCharacter();
     if (!this.remyCharacter) {
@@ -2716,19 +2754,20 @@ export class Game {
       return;
     }
 
+    const sidePose = this.resolveRemySidePose(null);
     const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, topSlab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
     const uniformScale = targetHeight / Math.max(0.001, this.remyBaseHeight);
     this.remyCharacter.scale.setScalar(uniformScale);
     this.remyCharacter.position.set(
-      this.remyDebugConfig.translateX,
-      topSlab.dimensions.height / 2 + REMY_LEDGE_CLEARANCE + this.remyDebugConfig.translateY,
-      this.remyDebugConfig.translateZ,
+      sidePose.translateX + this.remyDebugConfig.translateX,
+      topSlab.dimensions.height / 2 + REMY_LEDGE_CLEARANCE + sidePose.translateY + this.remyDebugConfig.translateY,
+      sidePose.translateZ + this.remyDebugConfig.translateZ,
     );
     this.remyCharacter.rotation.set(0, REMY_ROTATION_OFFSET_Y, 0);
     this.remyPosePivot?.rotation.set(
-      this.toRadians(this.remyDebugConfig.pitchDegrees),
-      this.toRadians(this.remyDebugConfig.yawDegrees),
-      this.toRadians(this.remyDebugConfig.rollDegrees),
+      this.toRadians(sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees),
+      this.toRadians(sidePose.yawDegrees + this.remyDebugConfig.yawDegrees),
+      this.toRadians(sidePose.rollDegrees + this.remyDebugConfig.rollDegrees),
     );
     topSlabMesh.add(this.remyCharacter);
   }
@@ -3585,24 +3624,28 @@ export class Game {
   private getWindowFaceDescriptors(slab: SlabData): WindowFaceDescriptor[] {
     return [
       {
+        id: "posX",
         span: slab.dimensions.depth,
         createPosition: (offset, outDepth) => ({ x: slab.dimensions.width / 2 + outDepth, y: 0, z: offset }),
         rotationY: FACE_ROTATION.posX,
         noiseSalt: 1.7,
       },
       {
+        id: "negX",
         span: slab.dimensions.depth,
         createPosition: (offset, outDepth) => ({ x: -(slab.dimensions.width / 2 + outDepth), y: 0, z: offset }),
         rotationY: FACE_ROTATION.negX,
         noiseSalt: 2.9,
       },
       {
+        id: "posZ",
         span: slab.dimensions.width,
         createPosition: (offset, outDepth) => ({ x: offset, y: 0, z: slab.dimensions.depth / 2 + outDepth }),
         rotationY: FACE_ROTATION.posZ,
         noiseSalt: 4.3,
       },
       {
+        id: "negZ",
         span: slab.dimensions.width,
         createPosition: (offset, outDepth) => ({ x: offset, y: 0, z: -(slab.dimensions.depth / 2 + outDepth) }),
         rotationY: FACE_ROTATION.negZ,
@@ -4070,6 +4113,7 @@ export class Game {
     ledge.userData.ledgeHeight = ledgeHeight;
     ledge.userData.ledgeDepth = ledgeDepth;
     ledge.userData.faceNoiseSalt = face.noiseSalt;
+    ledge.userData.faceId = face.id;
     ledge.userData.slabLevel = slab.level;
 
     const shouldAnimate = slab.level >= this.startingStackLevels;
@@ -4097,7 +4141,7 @@ export class Game {
     const elevationY = slab.dimensions.height / 2 - eaveHeight * 0.42;
 
     const faces: Array<{
-      id: "posX" | "negX" | "posZ" | "negZ";
+      id: FaceId;
       span: number;
       createPosition: () => { x: number; y: number; z: number };
       rotationY: number;
