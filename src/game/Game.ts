@@ -125,6 +125,17 @@ type DebugToggleKey =
   | "performanceAutoQualityEnabled";
 type DebugNumberKey = Exclude<keyof DebugConfig, DebugToggleKey>;
 
+type RemyDebugKey = "yawDegrees" | "pitchDegrees" | "rollDegrees" | "translateX" | "translateY" | "translateZ";
+
+interface RemyDebugConfig {
+  yawDegrees: number;
+  pitchDegrees: number;
+  rollDegrees: number;
+  translateX: number;
+  translateY: number;
+  translateZ: number;
+}
+
 interface DebrisPiece {
   mesh: Mesh;
   velocity: { x: number; y: number; z: number };
@@ -256,6 +267,24 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   tremorShakeAmount: { min: 0, max: 3, step: 0.05, label: "Tremor Y Shake" },
 };
 
+const REMY_DEBUG_DEFAULTS: RemyDebugConfig = {
+  yawDegrees: 0,
+  pitchDegrees: 0,
+  rollDegrees: 0,
+  translateX: 0,
+  translateY: 0,
+  translateZ: 0,
+};
+
+const REMY_DEBUG_RANGES: Record<RemyDebugKey, { min: number; max: number; step: number; label: string; suffix?: string }> = {
+  yawDegrees: { min: -180, max: 180, step: 1, label: "Remy Rot Y", suffix: "°" },
+  pitchDegrees: { min: -180, max: 180, step: 1, label: "Remy Rot X", suffix: "°" },
+  rollDegrees: { min: -180, max: 180, step: 1, label: "Remy Rot Z", suffix: "°" },
+  translateX: { min: -2, max: 2, step: 0.01, label: "Remy Move X" },
+  translateY: { min: -2, max: 2, step: 0.01, label: "Remy Move Y" },
+  translateZ: { min: -2, max: 2, step: 0.01, label: "Remy Move Z" },
+};
+
 const CAMERA_X = 8;
 const DEBUG_TOGGLE_META: Record<DebugToggleKey, { label: string }> = {
   gridVisible: { label: "Grid Visible" },
@@ -317,8 +346,10 @@ const REMY_MIN_HEIGHT = 0.54;
 const REMY_MAX_HEIGHT = 1.28;
 const REMY_LEDGE_CLEARANCE = 0.03;
 const REMY_LEDGE_INSET_RATIO = 0.14;
+const REMY_WALL_CLEARANCE = 0.01;
 const REMY_ROTATION_OFFSET_Y = 0;
-const REMY_MODEL_ROTATION_OFFSET_Z = Math.PI / 2;
+const REMY_AUTO_UP_AXIS_DETECTION_ENABLED = true;
+const REMY_MODEL_ROTATION_OFFSET_Z = 0;
 const WORLD_UP_AXIS = new Vector3(0, 1, 0);
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
@@ -489,8 +520,12 @@ export class Game {
   private remyCharacter: Group | null = null;
   private remyMixer: AnimationMixer | null = null;
   private remyBaseHeight = 1;
+  private remyBaseDepth = 1;
+  private remyDebugConfig: RemyDebugConfig = { ...REMY_DEBUG_DEFAULTS };
   private remyAnchor: RemyAnchor | null = null;
   private remySuppressedByTentacles = false;
+  private activeBlockMotionPaused = false;
+  private pauseBlockMotionButton: HTMLButtonElement | null = null;
 
   public constructor(container: HTMLDivElement) {
     this.container = container;
@@ -716,7 +751,13 @@ export class Game {
     const fragment = document.createDocumentFragment();
     const title = document.createElement("h2");
     title.textContent = "Runtime Debug";
-    fragment.append(title, this.createDistractionLaunchControls(), this.createNormalizeBlockControl());
+    fragment.append(
+      title,
+      this.createDistractionLaunchControls(),
+      this.createNormalizeBlockControl(),
+      this.createBlockMotionControl(),
+      this.createRemyPlacementControls(),
+    );
 
     (Object.entries(DEBUG_RANGES) as [DebugNumberKey, (typeof DEBUG_RANGES)[DebugNumberKey]][]).forEach(
       ([key, meta]) => {
@@ -855,6 +896,128 @@ export class Game {
 
     section.append(title, normalizeButton);
     return section;
+  }
+
+  private createBlockMotionControl(): HTMLElement {
+    const section = document.createElement("section");
+    section.className = "debug-panel__actions";
+
+    const title = document.createElement("h3");
+    title.className = "debug-panel__actions-title";
+    title.textContent = "Block Motion";
+
+    const toggleButton = document.createElement("button");
+    toggleButton.type = "button";
+    toggleButton.className = "button button--secondary debug-panel__action";
+    toggleButton.dataset.testid = "debug-toggle-block-motion";
+    toggleButton.addEventListener("click", () => {
+      this.activeBlockMotionPaused = !this.activeBlockMotionPaused;
+      this.updateBlockMotionButtonLabel();
+    });
+
+    this.pauseBlockMotionButton = toggleButton;
+    this.updateBlockMotionButtonLabel();
+
+    section.append(title, toggleButton);
+    return section;
+  }
+
+  private updateBlockMotionButtonLabel(): void {
+    if (!this.pauseBlockMotionButton) {
+      return;
+    }
+
+    this.pauseBlockMotionButton.textContent = this.activeBlockMotionPaused ? "Resume Block Motion" : "Pause Block Motion";
+  }
+
+  private createRemyPlacementControls(): HTMLElement {
+    const section = document.createElement("section");
+    section.className = "debug-panel__actions";
+
+    const title = document.createElement("h3");
+    title.className = "debug-panel__actions-title";
+    title.textContent = "Remy Placement";
+    section.append(title);
+
+    (Object.entries(REMY_DEBUG_RANGES) as [RemyDebugKey, (typeof REMY_DEBUG_RANGES)[RemyDebugKey]][]).forEach(
+      ([key, meta]) => {
+        const label = document.createElement("label");
+        const row = document.createElement("div");
+        row.className = "debug-panel__row";
+
+        const value = document.createElement("span");
+        value.dataset.remyDebugValue = key;
+
+        const name = document.createElement("span");
+        name.textContent = meta.label;
+        row.append(name, value);
+
+        const input = document.createElement("input");
+        input.type = "range";
+        input.min = String(meta.min);
+        input.max = String(meta.max);
+        input.step = String(meta.step);
+        input.value = String(this.remyDebugConfig[key]);
+        input.dataset.remyDebugKey = key;
+        input.addEventListener("input", () => {
+          this.applyRemyDebugConfig({
+            [key]: Number(input.value),
+          });
+        });
+
+        label.append(row, input);
+        section.append(label);
+      },
+    );
+
+    const resetButton = document.createElement("button");
+    resetButton.type = "button";
+    resetButton.className = "button button--secondary debug-panel__action";
+    resetButton.dataset.testid = "debug-reset-remy-placement";
+    resetButton.textContent = "Reset Remy Placement";
+    resetButton.addEventListener("click", () => {
+      this.applyRemyDebugConfig({ ...REMY_DEBUG_DEFAULTS });
+    });
+
+    section.append(resetButton);
+    this.updateRemyDebugValueLabels();
+    return section;
+  }
+
+  private applyRemyDebugConfig(config: Partial<RemyDebugConfig>): void {
+    this.remyDebugConfig = {
+      ...this.remyDebugConfig,
+      ...config,
+    };
+
+    this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]").forEach((input) => {
+      const key = input.dataset.remyDebugKey as RemyDebugKey | undefined;
+      if (!key) {
+        return;
+      }
+
+      input.value = String(this.remyDebugConfig[key]);
+    });
+
+    this.updateRemyDebugValueLabels();
+    this.placeRemyOnTopLedge();
+  }
+
+  private updateRemyDebugValueLabels(): void {
+    this.debugPanel.querySelectorAll<HTMLElement>("[data-remy-debug-value]").forEach((node) => {
+      const key = node.dataset.remyDebugValue as RemyDebugKey | undefined;
+      if (!key) {
+        return;
+      }
+
+      const value = this.remyDebugConfig[key];
+      const suffix = REMY_DEBUG_RANGES[key].suffix ?? "";
+      node.textContent = `${value.toFixed(2)}${suffix}`;
+    });
+  }
+
+  private toRadians(degrees: number): number {
+    return (degrees * Math.PI) / 180;
   }
 
   private readonly handlePrimaryAction = (): void => {
@@ -2109,6 +2272,10 @@ export class Game {
       return;
     }
 
+    if (this.activeBlockMotionPaused) {
+      return;
+    }
+
     this.oscillation = advanceOscillation(
       this.oscillation,
       deltaSeconds,
@@ -2227,7 +2394,9 @@ export class Game {
         characterRoot.name = "remy-character";
 
         const model = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
-        this.applyBestRemyUpAxisRotation(model);
+        if (REMY_AUTO_UP_AXIS_DETECTION_ENABLED) {
+          this.applyBestRemyUpAxisRotation(model);
+        }
         model.rotation.z += REMY_MODEL_ROTATION_OFFSET_Z;
         model.updateMatrixWorld(true);
         this.prepareRemyModelForRendering(model);
@@ -2246,6 +2415,7 @@ export class Game {
 
         this.remyCharacter = characterRoot;
         this.remyBaseHeight = modelSize.y;
+        this.remyBaseDepth = Math.max(modelSize.x, modelSize.z);
         this.loadRemyAnimationClip(model, gltf.animations);
         this.placeRemyOnTopLedge();
         dracoLoader.dispose();
@@ -2270,10 +2440,7 @@ export class Game {
           return;
         }
 
-        const clip =
-          this.tryRetargetRemyClip(targetModel, animationSource, preferredSourceClip) ??
-          preferredSourceClip;
-
+        const clip = this.resolveRemyClipForTarget(targetModel, animationSource, preferredSourceClip);
         this.remyMixer = new AnimationMixer(targetModel);
         this.remyMixer.clipAction(clip).play();
       },
@@ -2283,6 +2450,37 @@ export class Game {
         this.playRemyFallbackClip(targetModel, fallbackClips);
       },
     );
+  }
+
+  private resolveRemyClipForTarget(targetModel: Object3D, sourceRig: Object3D, clip: AnimationClip): AnimationClip {
+    if (this.isClipCompatibleWithModel(targetModel, clip)) {
+      return clip;
+    }
+
+    return this.tryRetargetRemyClip(targetModel, sourceRig, clip) ?? clip;
+  }
+
+  private isClipCompatibleWithModel(targetModel: Object3D, clip: AnimationClip): boolean {
+    const targetNodeNames = new Set<string>();
+    targetModel.traverse((node) => {
+      if (node.name) {
+        targetNodeNames.add(node.name);
+      }
+    });
+
+    if (targetNodeNames.size === 0) {
+      return false;
+    }
+
+    let matchedTracks = 0;
+    clip.tracks.forEach((track) => {
+      const [targetName] = track.name.split(".");
+      if (targetName && targetNodeNames.has(targetName)) {
+        matchedTracks += 1;
+      }
+    });
+
+    return matchedTracks > 0;
   }
 
   private playRemyFallbackClip(targetModel: Object3D, clips: readonly AnimationClip[]): void {
@@ -2426,14 +2624,25 @@ export class Game {
     const uniformScale = targetHeight / Math.max(0.001, this.remyBaseHeight);
     this.remyCharacter.scale.setScalar(uniformScale);
 
-    const insetOffset = new Vector3(0, 0, -ledgeDepth * REMY_LEDGE_INSET_RATIO).applyAxisAngle(WORLD_UP_AXIS, ledgeMesh.rotation.y);
+    const scaledRemyDepth = this.remyBaseDepth * uniformScale;
+    const overlapIntoWall = Math.max(0, (scaledRemyDepth - ledgeDepth) / 2);
+    const outwardOffset = ledgeDepth * REMY_LEDGE_INSET_RATIO + overlapIntoWall + REMY_WALL_CLEARANCE;
+    const insetOffset = new Vector3(
+      this.remyDebugConfig.translateX,
+      this.remyDebugConfig.translateY,
+      outwardOffset + this.remyDebugConfig.translateZ,
+    ).applyAxisAngle(WORLD_UP_AXIS, ledgeMesh.rotation.y);
 
     this.remyCharacter.position.set(
       ledgeMesh.position.x + insetOffset.x,
-      ledgeMesh.position.y + ledgeHeight / 2 + REMY_LEDGE_CLEARANCE,
+      ledgeMesh.position.y + ledgeHeight / 2 + REMY_LEDGE_CLEARANCE + insetOffset.y,
       ledgeMesh.position.z + insetOffset.z,
     );
-    this.remyCharacter.rotation.set(0, ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y, 0);
+    this.remyCharacter.rotation.set(
+      this.toRadians(this.remyDebugConfig.pitchDegrees),
+      ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y + this.toRadians(this.remyDebugConfig.yawDegrees),
+      this.toRadians(this.remyDebugConfig.rollDegrees),
+    );
 
     slabMesh.add(this.remyCharacter);
   }
@@ -2501,8 +2710,16 @@ export class Game {
     const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, topSlab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
     const uniformScale = targetHeight / Math.max(0.001, this.remyBaseHeight);
     this.remyCharacter.scale.setScalar(uniformScale);
-    this.remyCharacter.position.set(0, topSlab.dimensions.height / 2 + REMY_LEDGE_CLEARANCE, 0);
-    this.remyCharacter.rotation.set(0, REMY_ROTATION_OFFSET_Y, 0);
+    this.remyCharacter.position.set(
+      this.remyDebugConfig.translateX,
+      topSlab.dimensions.height / 2 + REMY_LEDGE_CLEARANCE + this.remyDebugConfig.translateY,
+      this.remyDebugConfig.translateZ,
+    );
+    this.remyCharacter.rotation.set(
+      this.toRadians(this.remyDebugConfig.pitchDegrees),
+      REMY_ROTATION_OFFSET_Y + this.toRadians(this.remyDebugConfig.yawDegrees),
+      this.toRadians(this.remyDebugConfig.rollDegrees),
+    );
     topSlabMesh.add(this.remyCharacter);
   }
 
