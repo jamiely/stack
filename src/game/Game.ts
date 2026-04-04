@@ -21,6 +21,7 @@ import {
   Points,
   PointsMaterial,
   RepeatWrapping,
+  LoopPingPong,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -2468,8 +2469,7 @@ export class Game {
         }
 
         const clip = this.resolveRemyClipForTarget(targetModel, animationSource, preferredSourceClip);
-        this.remyMixer = new AnimationMixer(targetModel);
-        this.remyMixer.clipAction(clip).play();
+        this.playRemyClip(targetModel, clip);
       },
       undefined,
       (error) => {
@@ -2517,8 +2517,15 @@ export class Game {
       return;
     }
 
+    this.playRemyClip(targetModel, preferredClip);
+  }
+
+  private playRemyClip(targetModel: Object3D, clip: AnimationClip): void {
     this.remyMixer = new AnimationMixer(targetModel);
-    this.remyMixer.clipAction(preferredClip).play();
+    const action = this.remyMixer.clipAction(clip);
+    action.reset();
+    action.setLoop(LoopPingPong, Number.POSITIVE_INFINITY);
+    action.play();
   }
 
   private tryRetargetRemyClip(targetModel: Object3D, sourceRig: Object3D, clip: AnimationClip): AnimationClip | null {
