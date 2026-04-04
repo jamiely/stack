@@ -1,5 +1,8 @@
 import {
   AmbientLight,
+  AnimationClip,
+  AnimationMixer,
+  Box3,
   BoxGeometry,
   BufferGeometry,
   CanvasTexture,
@@ -22,6 +25,8 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
@@ -82,6 +87,12 @@ import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import { createSeededRandom } from "./logic/random";
+import {
+  hasRecentTentacleBurstOnFace,
+  shouldKeepCurrentRemyAnchor,
+  shouldSpawnTentacleBurst,
+  type TentacleBurstMarker,
+} from "./logic/remy";
 import { applyPlacementRecoveryTick, createRecoveryState, getRecoverySpeedMultiplier, resolveRecoveryReward } from "./logic/recovery";
 import { createComboState, updateComboState } from "./logic/streak";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
@@ -138,6 +149,18 @@ interface WindowFaceDescriptor {
   createPosition: (offset: number, outDepth: number) => { x: number; y: number; z: number };
   rotationY: number;
   noiseSalt: number;
+}
+
+interface LedgeAnchor {
+  slab: SlabData;
+  slabMesh: Mesh;
+  ledgeMesh: Mesh;
+  faceNoiseSalt: number;
+}
+
+interface RemyAnchor {
+  level: number;
+  faceNoiseSalt: number;
 }
 
 interface PerformanceSnapshot {
@@ -277,11 +300,23 @@ const COLLAPSE_VOXEL_SIZE = 0.38;
 const COLLAPSE_VOXEL_LIFETIME_SECONDS = 2.2;
 const COLLAPSE_VOXEL_MAX_COUNT = 2200;
 const TENTACLE_SIDE_SWITCH_SPEED = 0.75;
-const TENTACLE_BURST_CHANCE = 0.5;
+const TENTACLE_BURST_CHANCE = 0.12;
+const TENTACLE_BURST_MIN_INTERVAL_SECONDS = 2.4;
+const REMY_TENTACLE_SUPPRESSION_WINDOW_SECONDS = 0.45;
 const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
 const CLOUD_DEFAULT_COUNT = defaultDebugConfig.distractionCloudCount;
+const REMY_MODEL_URL = new URL("../../assets/remy_hip_hop.glb", import.meta.url).href;
+const DRACO_DECODER_PATH = `${import.meta.env.BASE_URL}draco/`;
+const REMY_TARGET_HEIGHT_RATIO = 0.42;
+const REMY_MIN_HEIGHT = 0.54;
+const REMY_MAX_HEIGHT = 1.28;
+const REMY_LEDGE_CLEARANCE = 0.03;
+const REMY_LEDGE_INSET_RATIO = 0.14;
+const REMY_ROTATION_OFFSET_Y = 0;
+const REMY_MODEL_ROTATION_OFFSET_Z = Math.PI / 2;
+const WORLD_UP_AXIS = new Vector3(0, 1, 0);
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -447,6 +482,12 @@ export class Game {
   private fireworksState: FireworksState | null = null;
   private fireworksSimulationSeed = 0;
   private tentacleBurstKeys: string[] = [];
+  private lastTentacleBurstAtSeconds = Number.NEGATIVE_INFINITY;
+  private remyCharacter: Group | null = null;
+  private remyMixer: AnimationMixer | null = null;
+  private remyBaseHeight = 1;
+  private remyAnchor: RemyAnchor | null = null;
+  private remySuppressedByTentacles = false;
 
   public constructor(container: HTMLDivElement) {
     this.container = container;
@@ -510,6 +551,7 @@ export class Game {
     this.buildHud();
     this.buildDistractionOverlay();
     this.resetWorld();
+    this.loadRemyCharacter();
   }
 
   public mount(): void {
@@ -925,6 +967,7 @@ export class Game {
     this.updateDistractionActors(deltaSeconds);
     this.updateDayNightCycle(deltaSeconds);
     this.updateActiveSlab(deltaSeconds);
+    this.updateRemyAnimation(deltaSeconds);
     this.updateDebris(deltaSeconds);
     this.updateCollapseVoxels(deltaSeconds);
     this.updateLedgeAnimations(deltaSeconds);
@@ -1003,6 +1046,7 @@ export class Game {
   }
 
   private resetWorld(): void {
+    this.detachRemyCharacter();
     this.lastFrameTime = 0;
     this.simulationElapsedSeconds = 0;
     this.score = 0;
@@ -1060,6 +1104,9 @@ export class Game {
       config: this.buildFireworksSimulationConfig(),
     });
     this.tentacleBurstKeys = [];
+    this.lastTentacleBurstAtSeconds = Number.NEGATIVE_INFINITY;
+    this.remyAnchor = null;
+    this.remySuppressedByTentacles = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
 
@@ -1110,6 +1157,7 @@ export class Game {
 
     this.activeMesh = this.createSlabMesh(activeSlab, true);
     this.scene.add(this.activeMesh);
+    this.placeRemyOnTopLedge();
   }
 
   private stopActiveSlab(): void {
@@ -1892,11 +1940,13 @@ export class Game {
         this.clearGroup(this.tentacleGroup, true);
       }
       this.tentacleBurstKeys = [];
+      this.syncRemyTentacleSuppression();
       return;
     }
 
     const slab = this.landedSlabs[this.landedSlabs.length - 1];
     if (!slab || slab.dimensions.height < 0.9) {
+      this.syncRemyTentacleSuppression();
       return;
     }
 
@@ -1904,7 +1954,15 @@ export class Game {
     if (visibleFaces.length > 0) {
       const cycle = Math.floor(this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * TENTACLE_SIDE_SWITCH_SPEED);
       const cycleNoise = sampleDecorNoise(slab.level * 0.29 + cycle * 0.91, 24.8);
-      if (cycleNoise < TENTACLE_BURST_CHANCE) {
+      if (
+        shouldSpawnTentacleBurst({
+          elapsedSeconds: this.distractionState.elapsedSeconds,
+          lastBurstAtSeconds: this.lastTentacleBurstAtSeconds,
+          minIntervalSeconds: TENTACLE_BURST_MIN_INTERVAL_SECONDS,
+          cycleNoise,
+          burstChance: TENTACLE_BURST_CHANCE,
+        })
+      ) {
         const sideNoise = sampleDecorNoise(slab.level * 0.43 + cycle * 0.67, 18.3);
         const visibleFaceIndex = Math.min(visibleFaces.length - 1, Math.floor(sideNoise * visibleFaces.length));
         const face = visibleFaces[visibleFaceIndex];
@@ -1912,6 +1970,7 @@ export class Game {
         if (face && !this.tentacleBurstKeys.includes(burstKey)) {
           const created = this.createTentacleBurstForFace(slab, face);
           if (created) {
+            this.lastTentacleBurstAtSeconds = this.distractionState.elapsedSeconds;
             this.tentacleBurstKeys.push(burstKey);
             while (this.tentacleBurstKeys.length > TENTACLE_MAX_PERSISTED_BURSTS) {
               const removedKey = this.tentacleBurstKeys.shift();
@@ -1929,6 +1988,7 @@ export class Game {
     }
 
     this.animateTentacles(snapshot.signals.tentacle);
+    this.syncRemyTentacleSuppression();
   }
 
   private animateTentacles(signal: number): void {
@@ -1990,6 +2050,9 @@ export class Game {
 
     const burstRoot = new Group();
     burstRoot.userData.burstKey = `${slab.level}:${face.noiseSalt}`;
+    burstRoot.userData.slabLevel = slab.level;
+    burstRoot.userData.faceNoiseSalt = face.noiseSalt;
+    burstRoot.userData.createdAtSeconds = this.distractionState.elapsedSeconds;
 
     offsets.forEach((localOffset, index) => {
       const root = new Group();
@@ -2137,6 +2200,298 @@ export class Game {
       animation.mesh.scale.x = frame.scaleX;
       return !frame.completed;
     });
+  }
+
+  private updateRemyAnimation(deltaSeconds: number): void {
+    if (!this.remyMixer || deltaSeconds <= 0) {
+      return;
+    }
+
+    this.remyMixer.update(deltaSeconds);
+  }
+
+  private loadRemyCharacter(): void {
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
+
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(dracoLoader);
+
+    loader.load(
+      REMY_MODEL_URL,
+      (gltf) => {
+        const characterRoot = new Group();
+        characterRoot.name = "remy-character";
+
+        const model = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
+        this.applyBestRemyUpAxisRotation(model);
+        model.rotation.z += REMY_MODEL_ROTATION_OFFSET_Z;
+        model.updateMatrixWorld(true);
+        this.prepareRemyModelForRendering(model);
+
+        const modelBounds = new Box3().setFromObject(model);
+        const modelSize = modelBounds.getSize(new Vector3());
+        if (modelSize.y <= 0) {
+          console.warn("Unable to place Remy character because model bounds height is invalid.");
+          dracoLoader.dispose();
+          return;
+        }
+
+        const modelCenter = modelBounds.getCenter(new Vector3());
+        model.position.set(-modelCenter.x, -modelBounds.min.y, -modelCenter.z);
+        characterRoot.add(model);
+
+        this.remyCharacter = characterRoot;
+        this.remyBaseHeight = modelSize.y;
+
+        if (gltf.animations.length > 0) {
+          this.remyMixer = new AnimationMixer(model);
+          const preferredClip = this.selectPreferredRemyClip(gltf.animations);
+          this.remyMixer.clipAction(preferredClip).play();
+        } else {
+          this.remyMixer = null;
+        }
+
+        this.placeRemyOnTopLedge();
+        dracoLoader.dispose();
+      },
+      undefined,
+      (error) => {
+        console.warn("Failed to load Remy character model.", error);
+        dracoLoader.dispose();
+      },
+    );
+  }
+
+  private selectLargestRemyScene(scenes: readonly Object3D[]): Object3D | null {
+    let selectedScene: Object3D | null = null;
+    let selectedScore = -1;
+
+    scenes.forEach((sceneCandidate) => {
+      const bounds = new Box3().setFromObject(sceneCandidate);
+      const size = bounds.getSize(new Vector3());
+      if (size.x <= 0 || size.y <= 0 || size.z <= 0) {
+        return;
+      }
+
+      const score = size.x * size.y * size.z;
+      if (score > selectedScore) {
+        selectedScene = sceneCandidate;
+        selectedScore = score;
+      }
+    });
+
+    return selectedScene;
+  }
+
+  private applyBestRemyUpAxisRotation(model: Object3D): void {
+    const candidateRotations = [
+      { x: 0, y: 0, z: 0 },
+      { x: -Math.PI / 2, y: 0, z: 0 },
+      { x: Math.PI / 2, y: 0, z: 0 },
+      { x: 0, y: 0, z: -Math.PI / 2 },
+      { x: 0, y: 0, z: Math.PI / 2 },
+    ];
+
+    let bestRotation = candidateRotations[0]!;
+    let bestHeight = Number.NEGATIVE_INFINITY;
+
+    candidateRotations.forEach((rotation) => {
+      model.rotation.set(rotation.x, rotation.y, rotation.z);
+      model.updateMatrixWorld(true);
+      const size = new Box3().setFromObject(model).getSize(new Vector3());
+      if (size.y > bestHeight) {
+        bestHeight = size.y;
+        bestRotation = rotation;
+      }
+    });
+
+    model.rotation.set(bestRotation.x, bestRotation.y, bestRotation.z);
+    model.updateMatrixWorld(true);
+  }
+
+  private prepareRemyModelForRendering(model: Object3D): void {
+    model.traverse((node) => {
+      if (node instanceof Mesh) {
+        node.frustumCulled = false;
+      }
+    });
+  }
+
+  private selectPreferredRemyClip(clips: readonly AnimationClip[]): AnimationClip {
+    const explicitClip = clips.find((clip) => clip.name === "Armature.001|mixamo.com|Layer0.001");
+    if (explicitClip) {
+      return explicitClip;
+    }
+
+    return clips[0]!;
+  }
+
+  private placeRemyOnTopLedge(): void {
+    if (!this.remyCharacter) {
+      return;
+    }
+
+    const shouldKeepCurrentAnchor = this.remyAnchor !== null && this.isRemyAnchorVisible(this.remyAnchor);
+    const anchor = shouldKeepCurrentAnchor && this.remyAnchor
+      ? this.findLedgeAnchorByLevelAndFace(this.remyAnchor.level, this.remyAnchor.faceNoiseSalt)
+      : this.findTopLedgeAnchor();
+
+    if (!anchor) {
+      this.remyAnchor = null;
+      this.remySuppressedByTentacles = false;
+      this.placeRemyAtTopFallback();
+      return;
+    }
+
+    this.remyAnchor = {
+      level: anchor.slab.level,
+      faceNoiseSalt: anchor.faceNoiseSalt,
+    };
+    this.remySuppressedByTentacles = this.hasTentacleBurstOnFace(anchor.slab.level, anchor.faceNoiseSalt);
+
+    if (this.remySuppressedByTentacles) {
+      this.detachRemyCharacter();
+      return;
+    }
+
+    const { slab, slabMesh, ledgeMesh } = anchor;
+    const ledgeHeight =
+      typeof ledgeMesh.userData.ledgeHeight === "number"
+        ? ledgeMesh.userData.ledgeHeight
+        : Math.max(0.1, slab.dimensions.height * 0.1);
+    const ledgeDepth =
+      typeof ledgeMesh.userData.ledgeDepth === "number"
+        ? ledgeMesh.userData.ledgeDepth
+        : Math.max(0.24, slab.dimensions.height * 0.18);
+
+    const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, slab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
+    const uniformScale = targetHeight / Math.max(0.001, this.remyBaseHeight);
+    this.remyCharacter.scale.setScalar(uniformScale);
+
+    const insetOffset = new Vector3(0, 0, -ledgeDepth * REMY_LEDGE_INSET_RATIO).applyAxisAngle(WORLD_UP_AXIS, ledgeMesh.rotation.y);
+
+    this.remyCharacter.position.set(
+      ledgeMesh.position.x + insetOffset.x,
+      ledgeMesh.position.y + ledgeHeight / 2 + REMY_LEDGE_CLEARANCE,
+      ledgeMesh.position.z + insetOffset.z,
+    );
+    this.remyCharacter.rotation.set(0, ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y, 0);
+
+    slabMesh.add(this.remyCharacter);
+  }
+
+  private syncRemyTentacleSuppression(): void {
+    this.placeRemyOnTopLedge();
+  }
+
+  private isRemyAnchorVisible(anchor: RemyAnchor): boolean {
+    const anchoredLedge = this.findLedgeAnchorByLevelAndFace(anchor.level, anchor.faceNoiseSalt);
+    const visibleFaces = anchoredLedge ? this.getVisibleFaceDescriptors(anchoredLedge.slab) : [];
+
+    return shouldKeepCurrentRemyAnchor({
+      hasAnchor: true,
+      hasLedge: anchoredLedge !== null,
+      slabMeshAttached: anchoredLedge?.slabMesh.parent === this.stackGroup,
+      slabNearScreen: anchoredLedge ? this.isSlabNearScreen(anchoredLedge.slab, 2) : false,
+      anchorFaceVisible: visibleFaces.some((face) => face.noiseSalt === anchor.faceNoiseSalt),
+    });
+  }
+
+  private hasTentacleBurstOnFace(level: number, faceNoiseSalt: number): boolean {
+    return hasRecentTentacleBurstOnFace(
+      this.collectTentacleBurstMarkers(),
+      level,
+      faceNoiseSalt,
+      this.distractionState.elapsedSeconds,
+      REMY_TENTACLE_SUPPRESSION_WINDOW_SECONDS,
+    );
+  }
+
+  private collectTentacleBurstMarkers(): TentacleBurstMarker[] {
+    return this.tentacleGroup.children.flatMap((burstRoot) => {
+      const slabLevel = burstRoot.userData.slabLevel;
+      const faceNoiseSalt = burstRoot.userData.faceNoiseSalt;
+      const createdAtSeconds = burstRoot.userData.createdAtSeconds;
+      if (
+        typeof slabLevel !== "number" ||
+        typeof faceNoiseSalt !== "number" ||
+        typeof createdAtSeconds !== "number"
+      ) {
+        return [];
+      }
+
+      return [{ slabLevel, faceNoiseSalt, createdAtSeconds }];
+    });
+  }
+
+  private placeRemyAtTopFallback(): void {
+    this.detachRemyCharacter();
+    if (!this.remyCharacter) {
+      return;
+    }
+
+    const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+    if (!topSlab) {
+      return;
+    }
+
+    const topSlabMesh = this.slabMeshes.get(topSlab.level);
+    if (!topSlabMesh) {
+      return;
+    }
+
+    const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, topSlab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
+    const uniformScale = targetHeight / Math.max(0.001, this.remyBaseHeight);
+    this.remyCharacter.scale.setScalar(uniformScale);
+    this.remyCharacter.position.set(0, topSlab.dimensions.height / 2 + REMY_LEDGE_CLEARANCE, 0);
+    this.remyCharacter.rotation.set(0, REMY_ROTATION_OFFSET_Y, 0);
+    topSlabMesh.add(this.remyCharacter);
+  }
+
+  private findTopLedgeAnchor(): LedgeAnchor | null {
+    const slab = this.landedSlabs[this.landedSlabs.length - 1];
+    if (!slab) {
+      return null;
+    }
+
+    return this.findLedgeAnchorByLevelAndFace(slab.level, null);
+  }
+
+  private findLedgeAnchorByLevelAndFace(level: number, faceNoiseSalt: number | null): LedgeAnchor | null {
+    const slab = this.landedSlabs.find((candidate) => candidate.level === level);
+    if (!slab) {
+      return null;
+    }
+
+    const slabMesh = this.slabMeshes.get(slab.level);
+    if (!slabMesh) {
+      return null;
+    }
+
+    const ledgeMesh = slabMesh.children.find(
+      (child): child is Mesh =>
+        child instanceof Mesh &&
+        child.userData.isLedge === true &&
+        typeof child.userData.faceNoiseSalt === "number" &&
+        (faceNoiseSalt === null || child.userData.faceNoiseSalt === faceNoiseSalt),
+    );
+    if (!ledgeMesh) {
+      return null;
+    }
+
+    return {
+      slab,
+      slabMesh,
+      ledgeMesh,
+      faceNoiseSalt: ledgeMesh.userData.faceNoiseSalt,
+    };
+  }
+
+  private detachRemyCharacter(): void {
+    if (this.remyCharacter?.parent) {
+      this.remyCharacter.parent.remove(this.remyCharacter);
+    }
   }
 
   private triggerImpactPulse(durationSeconds: number): void {
@@ -3428,6 +3783,10 @@ export class Game {
 
     ledge.userData.isLedge = true;
     ledge.userData.usableWidth = ledgeWidth;
+    ledge.userData.ledgeHeight = ledgeHeight;
+    ledge.userData.ledgeDepth = ledgeDepth;
+    ledge.userData.faceNoiseSalt = face.noiseSalt;
+    ledge.userData.slabLevel = slab.level;
 
     const shouldAnimate = slab.level >= this.startingStackLevels;
     if (shouldAnimate) {
