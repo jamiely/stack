@@ -27,7 +27,6 @@ import {
   WebGLRenderer,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
@@ -290,14 +289,14 @@ const REMY_DEBUG_RANGES: Record<RemyDebugKey, { min: number; max: number; step: 
 };
 
 const REMY_SIDE_POSE_PRESETS: Record<FaceId, RemyDebugConfig> = {
-  posX: { pitchDegrees: -100, yawDegrees: 2, rollDegrees: 88, translateX: 0, translateY: 0, translateZ: -0.82 },
-  negX: { pitchDegrees: -100, yawDegrees: -2, rollDegrees: -88, translateX: 0, translateY: 0, translateZ: -0.82 },
-  posZ: { pitchDegrees: -100, yawDegrees: 2, rollDegrees: 88, translateX: 0, translateY: 0, translateZ: -0.82 },
-  negZ: { pitchDegrees: -100, yawDegrees: -2, rollDegrees: -88, translateX: 0, translateY: 0, translateZ: -0.82 },
+  posX: { pitchDegrees: 100, yawDegrees: 2, rollDegrees: 88, translateX: 0, translateY: 0, translateZ: 0.54 },
+  negX: { pitchDegrees: 100, yawDegrees: -2, rollDegrees: -88, translateX: 0, translateY: 0, translateZ: 0.54 },
+  posZ: { pitchDegrees: 100, yawDegrees: 2, rollDegrees: 88, translateX: 0, translateY: 0, translateZ: 0.54 },
+  negZ: { pitchDegrees: 100, yawDegrees: -2, rollDegrees: -88, translateX: 0, translateY: 0, translateZ: 0.54 },
 };
 
 const REMY_FALLBACK_POSE_PRESET: RemyDebugConfig = {
-  pitchDegrees: -100,
+  pitchDegrees: 100,
   yawDegrees: 0,
   rollDegrees: 88,
   translateX: 0,
@@ -359,7 +358,7 @@ const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
 const CLOUD_DEFAULT_COUNT = defaultDebugConfig.distractionCloudCount;
 const REMY_MODEL_URL = new URL("../../assets/remy_character_t_pose.glb", import.meta.url).href;
-const REMY_ANIMATION_URL = new URL("../../assets/remy_hip_hop_animation.fbx", import.meta.url).href;
+const REMY_ANIMATION_URL = new URL("../../assets/remy_hip_hop_animation_inplace.glb", import.meta.url).href;
 const DRACO_DECODER_PATH = `${import.meta.env.BASE_URL}draco/`;
 const REMY_TARGET_HEIGHT_RATIO = 0.42;
 const REMY_MIN_HEIGHT = 0.54;
@@ -2457,24 +2456,32 @@ export class Game {
   }
 
   private loadRemyAnimationClip(targetModel: Object3D, fallbackClips: readonly AnimationClip[]): void {
-    const animationLoader = new FBXLoader();
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
+
+    const animationLoader = new GLTFLoader();
+    animationLoader.setDRACOLoader(dracoLoader);
 
     animationLoader.load(
       REMY_ANIMATION_URL,
-      (animationSource) => {
-        const preferredSourceClip = this.selectPreferredRemyClip(animationSource.animations);
+      (gltf) => {
+        const preferredSourceClip = this.selectPreferredRemyClip(gltf.animations);
         if (!preferredSourceClip) {
           this.playRemyFallbackClip(targetModel, fallbackClips);
+          dracoLoader.dispose();
           return;
         }
 
+        const animationSource = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
         const clip = this.resolveRemyClipForTarget(targetModel, animationSource, preferredSourceClip);
         this.playRemyClip(targetModel, clip);
+        dracoLoader.dispose();
       },
       undefined,
       (error) => {
         console.warn("Failed to load Remy animation clip.", error);
         this.playRemyFallbackClip(targetModel, fallbackClips);
+        dracoLoader.dispose();
       },
     );
   }
