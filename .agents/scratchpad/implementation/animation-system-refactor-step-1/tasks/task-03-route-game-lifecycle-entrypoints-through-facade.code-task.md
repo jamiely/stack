@@ -1,8 +1,8 @@
 ---
-status: pending
+status: completed
 created: 2026-04-05
-started: null
-completed: null
+started: 2026-04-05
+completed: 2026-04-05
 ---
 # Task: Route Game lifecycle entrypoints through facade
 

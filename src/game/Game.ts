@@ -89,6 +89,7 @@ import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import { createSeededRandom } from "./logic/random";
+import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
 import {
   REMY_LEDGE_SPAWN_CHANCE,
   hasRecentTentacleBurstOnFace,
@@ -503,6 +504,15 @@ export class Game {
     audioEnabled: defaultDebugConfig.feedbackAudioEnabled,
     hapticsEnabled: defaultDebugConfig.feedbackHapticsEnabled,
   });
+  private readonly characterAnimationManager = new CharacterAnimationManager(
+    createCharacterAnimationCallbackBridge({
+      preload: () => this.loadRemyCharacter(),
+      spawnLedgeCharacter: () => this.loadRemyCharacter(),
+      update: (deltaSeconds: number) => this.updateRemyAnimation(deltaSeconds),
+      release: () => this.detachRemyCharacter(),
+      disposeAll: () => this.detachRemyCharacter(),
+    }),
+  );
   private landedSlabs: SlabData[] = [];
   private slabMeshes = new Map<number, Mesh>();
   private activeSlab: SlabData | null = null;
@@ -1268,7 +1278,7 @@ export class Game {
     this.updateDistractionActors(deltaSeconds);
     this.updateDayNightCycle(deltaSeconds);
     this.updateActiveSlab(deltaSeconds);
-    this.updateRemyAnimation(deltaSeconds);
+    this.characterAnimationManager.update(deltaSeconds);
     this.updateDebris(deltaSeconds);
     this.updateCollapseVoxels(deltaSeconds);
     this.updateLedgeAnimations(deltaSeconds);
@@ -1351,7 +1361,7 @@ export class Game {
     this.remyIsLoading = false;
     this.remyRefreshPending = false;
     this.remyAppearanceRefreshPending = false;
-    this.detachRemyCharacter();
+    this.characterAnimationManager.disposeAll();
     this.remyCharacter = null;
     this.remyPoseRotateX = null;
     this.remyPoseRotateY = null;
@@ -1453,7 +1463,7 @@ export class Game {
     this.cameraLookAtY = Math.max(1.2, initialFocusY);
 
     if (!this.testMode.enabled) {
-      this.loadRemyCharacter();
+      this.characterAnimationManager.preload();
     }
   }
 
@@ -2623,7 +2633,7 @@ export class Game {
     this.activeRemySecondaryCharacterId = null;
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
-    this.detachRemyCharacter();
+    this.characterAnimationManager.release();
     this.remyCharacter = null;
     this.remyPoseRotateX = null;
     this.remyPoseRotateY = null;
@@ -2638,7 +2648,7 @@ export class Game {
     this.remyBaseDepth = 1;
     this.remySecondaryBaseHeight = 1;
     this.remySecondaryBaseDepth = 1;
-    this.loadRemyCharacter();
+    this.characterAnimationManager.spawnLedgeCharacter();
   }
 
   private loadRemyCharacter(): void {
@@ -3092,7 +3102,7 @@ export class Game {
       this.remyAnchor = null;
       this.remySuppressedByTentacles = false;
       this.remyAppearanceRefreshPending = true;
-      this.detachRemyCharacter();
+      this.characterAnimationManager.release();
     }
 
     const anchor = this.remyAnchor
@@ -3110,7 +3120,7 @@ export class Game {
 
       const hasTopLedge = this.findTopLedgeAnchor(true) !== null;
       if (hasTopLedge) {
-        this.detachRemyCharacter();
+        this.characterAnimationManager.release();
         return;
       }
 
@@ -3131,7 +3141,7 @@ export class Game {
 
     if (this.remySuppressedByTentacles) {
       this.remyRefreshPending = true;
-      this.detachRemyCharacter();
+      this.characterAnimationManager.release();
       return;
     }
 
@@ -3330,7 +3340,7 @@ export class Game {
   }
 
   private placeRemyAtTopFallback(): void {
-    this.detachRemyCharacter();
+    this.characterAnimationManager.release();
     if (!this.remyCharacter) {
       return;
     }
