@@ -565,6 +565,8 @@ export class Game {
   private remySuppressedByTentacles = false;
   private remyLoadGeneration = 0;
   private remySelectionSerial = 0;
+  private remyIsLoading = false;
+  private remyRefreshPending = false;
   private activeBlockMotionPaused = false;
   private pauseBlockMotionButton: HTMLButtonElement | null = null;
 
@@ -1253,6 +1255,8 @@ export class Game {
 
   private resetWorld(): void {
     this.remyLoadGeneration += 1;
+    this.remyIsLoading = false;
+    this.remyRefreshPending = false;
     this.detachRemyCharacter();
     this.remyCharacter = null;
     this.remyPoseRotateX = null;
@@ -1320,7 +1324,6 @@ export class Game {
     this.tentacleBurstKeys = [];
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
-    this.remySelectionSerial += 1;
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
 
@@ -2448,7 +2451,7 @@ export class Game {
       return Math.random;
     }
 
-    const derivedSeed = (this.testMode.seed ^ Math.imul(this.remySelectionSerial + 1, 0x9e3779b1)) >>> 0;
+    const derivedSeed = (this.testMode.seed ^ Math.imul(this.remySelectionSerial, 0x9e3779b1)) >>> 0;
     return createSeededRandom(derivedSeed);
   }
 
@@ -2457,7 +2460,27 @@ export class Game {
     return assets[index]!;
   }
 
+  private refreshRemyCharacterSelection(): void {
+    this.remyLoadGeneration += 1;
+    this.remyIsLoading = false;
+    this.detachRemyCharacter();
+    this.remyCharacter = null;
+    this.remyPoseRotateX = null;
+    this.remyPoseRotateY = null;
+    this.remyPoseRotateZ = null;
+    this.remyMixer = null;
+    this.remyBaseHeight = 1;
+    this.remyBaseDepth = 1;
+    this.loadRemyCharacter();
+  }
+
   private loadRemyCharacter(): void {
+    if (this.remyIsLoading) {
+      return;
+    }
+
+    this.remyIsLoading = true;
+    this.remySelectionSerial += 1;
     const random = this.createRemySelectionRandom();
     const selectedCharacter = this.pickRandomRemyAsset(REMY_CHARACTER_ASSETS, random);
     const selectedAnimation = this.pickRandomRemyAsset(REMY_ANIMATION_ASSETS, random);
@@ -2491,6 +2514,7 @@ export class Game {
         const modelBounds = new Box3().setFromObject(model);
         const modelSize = modelBounds.getSize(new Vector3());
         if (modelSize.y <= 0) {
+          this.remyIsLoading = false;
           console.warn(`Unable to place character ${selectedCharacter.id}; model bounds height is invalid.`);
           dracoLoader.dispose();
           return;
@@ -2533,6 +2557,7 @@ export class Game {
           dracoLoader.dispose();
           return;
         }
+        this.remyIsLoading = false;
         console.warn(`Failed to load character model ${selectedCharacter.id}.`, error);
         dracoLoader.dispose();
       },
@@ -2562,6 +2587,7 @@ export class Game {
 
         const preferredSourceClip = this.selectPreferredRemyClip(gltf.animations);
         if (!preferredSourceClip) {
+          this.remyIsLoading = false;
           this.playRemyFallbackClip(targetModel, fallbackClips);
           dracoLoader.dispose();
           return;
@@ -2570,6 +2596,7 @@ export class Game {
         const animationSource = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
         const clip = this.resolveRemyClipForTarget(targetModel, animationSource, preferredSourceClip);
         this.playRemyClip(targetModel, clip);
+        this.remyIsLoading = false;
         dracoLoader.dispose();
       },
       undefined,
@@ -2578,6 +2605,7 @@ export class Game {
           dracoLoader.dispose();
           return;
         }
+        this.remyIsLoading = false;
         console.warn(`Failed to load animation clip ${animationId}.`, error);
         this.playRemyFallbackClip(targetModel, fallbackClips);
         dracoLoader.dispose();
@@ -2735,6 +2763,11 @@ export class Game {
     if (!anchor) {
       this.remyAnchor = null;
       this.remySuppressedByTentacles = false;
+      if (this.remyRefreshPending) {
+        this.remyRefreshPending = false;
+        this.refreshRemyCharacterSelection();
+        return;
+      }
       this.placeRemyAtTopFallback();
       return;
     }
@@ -2746,7 +2779,14 @@ export class Game {
     this.remySuppressedByTentacles = this.hasTentacleBurstOnFace(anchor.slab.level, anchor.faceNoiseSalt);
 
     if (this.remySuppressedByTentacles) {
+      this.remyRefreshPending = true;
       this.detachRemyCharacter();
+      return;
+    }
+
+    if (this.remyRefreshPending) {
+      this.remyRefreshPending = false;
+      this.refreshRemyCharacterSelection();
       return;
     }
 
