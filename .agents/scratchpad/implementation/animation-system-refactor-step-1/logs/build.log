@@ -18,7 +18,7 @@ dist/assets/timmy_tiny_webp-DnF855X0.glb                 1,149.30 kB
 dist/assets/index-Ce2NoeBZ.css                               8.32 kB │ gzip:   2.62 kB
 dist/assets/index-qdYW9hWK.js                              755.16 kB │ gzip: 194.74 kB
 
-✓ built in 242ms
+✓ built in 245ms
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application

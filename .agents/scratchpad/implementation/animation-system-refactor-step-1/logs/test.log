@@ -1,3 +1,4 @@
+[2026-04-05T19:13:31Z] npm run test:unit
 
 > tower-stacker@0.1.0 test:unit
 > vitest run
@@ -8,9 +9,10 @@
 
  Test Files  29 passed (29)
       Tests  197 passed (197)
-   Start at  15:03:42
-   Duration  907ms (transform 724ms, setup 0ms, import 1.15s, tests 459ms, environment 2ms)
+   Start at  15:13:31
+   Duration  978ms (transform 844ms, setup 0ms, import 1.36s, tests 536ms, environment 2ms)
 
+[2026-04-05T19:13:32Z] npm run test:e2e
 
 > tower-stacker@0.1.0 test:e2e
 > playwright test
@@ -18,35 +20,37 @@
 
 Running 30 tests using 4 workers
 
-  ✓   3 tests/e2e/fireworks.spec.ts:3:1 › fireworks config changes stay stable while paused until stepSimulation (686ms)
-  ✓   4 tests/e2e/gameplay.spec.ts:145:1 › test API is only exposed in test mode and supports deterministic stepping (753ms)
-  ✓   5 tests/e2e/fireworks.spec.ts:66:1 › fireworks morphology/count controls map through debug config and stay step-gated while paused (259ms)
-  ✓   7 tests/e2e/fireworks.spec.ts:181:1 › public state exposes deterministic fireworks lifecycle counters (374ms)
-  ✓   6 tests/e2e/gameplay.spec.ts:194:1 › test mode paused boot can be toggled with query params (730ms)
-  ✓   2 tests/e2e/clouds.spec.ts:15:1 › cloud layer renders and captures entry screenshots (1.7s)
-  ✓   9 tests/e2e/gameplay.spec.ts:228:1 › seeded startup produces stable active-slab spawn states (393ms)
-  ✓   1 tests/e2e/smoke.spec.ts:3:1 › run autostarts and title card briefly animates out (2.0s)
-  ✓  10 tests/e2e/clouds.spec.ts:140:1 › cloud layer toggle off/on cleanly gates simulation mapping (435ms)
-  ✓   8 tests/e2e/fireworks.spec.ts:274:1 › fireworks render nodes mirror simulation ids/stages and cleanup removes expired nodes (993ms)
-  ✓  12 tests/e2e/smoke.spec.ts:17:1 › debug controls and status surfaces render only with the debug query param (343ms)
-  ✓  13 tests/e2e/clouds.spec.ts:245:1 › cloud debug controls apply on the next simulation step (320ms)
-  ✓  11 tests/e2e/gameplay.spec.ts:273:1 › scripted placement sequence is deterministic across runs (753ms)
-  ✓  15 tests/e2e/clouds.spec.ts:348:1 › test API exposes per-cloud diagnostics and stays stable under adversarial cloud thresholds (453ms)
-  ✓  16 tests/e2e/gameplay.spec.ts:318:1 › combo milestone triggers recovery reward growth + slowdown (323ms)
-  ✓  14 tests/e2e/fireworks.spec.ts:408:1 › fireworks stress mode keeps cap bounded and degrades secondary emissions first (767ms)
-  ✓  17 tests/e2e/gameplay.spec.ts:352:1 › keyboard and pointer input both stop slabs (291ms)
-  ✓  19 tests/e2e/gameplay.spec.ts:383:1 › space or touch input restarts immediately from game over (256ms)
-  ✓  18 tests/e2e/fireworks.spec.ts:489:1 › fireworks chrysanthemum canonical snapshot remains stable (411ms)
-  ✓  20 tests/e2e/gameplay.spec.ts:423:1 › miss transitions to game over and restart resets state (228ms)
-  ✓  21 tests/e2e/gameplay.spec.ts:462:1 › debug controls can tune movement speed at runtime (171ms)
-  ✓  22 tests/e2e/gameplay.spec.ts:527:1 › debug combo target + growth tuning changes recovery behavior (190ms)
-  ✓  23 tests/e2e/gameplay.spec.ts:571:1 › debug distraction launch buttons can trigger channels on demand (707ms)
-  ✓  24 tests/e2e/gameplay.spec.ts:653:1 › gorilla/ufo/cloud actors are level-gated and core placement still works while active (375ms)
-  ✓  25 tests/e2e/gameplay.spec.ts:789:1 › integrity telemetry reports deterministic stable/precarious/unstable transitions (195ms)
-  ✓  26 tests/e2e/gameplay.spec.ts:854:1 › unstable integrity no longer ends the run without a hard miss (218ms)
-  ✓  27 tests/e2e/gameplay.spec.ts:916:1 › audio/haptics toggles gate runtime feedback emission (196ms)
-  ✓  28 tests/e2e/gameplay.spec.ts:1016:1 › high-start-stack perf profile keeps input responsive with archival + quality controls (326ms)
-  ✓  29 tests/e2e/gameplay.spec.ts:1069:1 › optimization toggles preserve deterministic scripted outcomes (233ms)
-  ✓  30 tests/e2e/gameplay.spec.ts:1135:3 › mobile touch pass › tap input on a mobile-sized viewport stops the active slab (203ms)
+  ✓   4 tests/e2e/fireworks.spec.ts:3:1 › fireworks config changes stay stable while paused until stepSimulation (766ms)
+  ✓   2 tests/e2e/gameplay.spec.ts:145:1 › test API is only exposed in test mode and supports deterministic stepping (900ms)
+  ✓   5 tests/e2e/fireworks.spec.ts:66:1 › fireworks morphology/count controls map through debug config and stay step-gated while paused (292ms)
+  ✓   7 tests/e2e/fireworks.spec.ts:181:1 › public state exposes deterministic fireworks lifecycle counters (441ms)
+  ✓   6 tests/e2e/gameplay.spec.ts:194:1 › test mode paused boot can be toggled with query params (813ms)
+  ✓   3 tests/e2e/clouds.spec.ts:15:1 › cloud layer renders and captures entry screenshots (2.0s)
+  ✓   1 tests/e2e/smoke.spec.ts:3:1 › run autostarts and title card briefly animates out (2.1s)
+  ✓   9 tests/e2e/gameplay.spec.ts:228:1 › seeded startup produces stable active-slab spawn states (574ms)
+  ✓  11 tests/e2e/smoke.spec.ts:17:1 › debug controls and status surfaces render only with the debug query param (511ms)
+  ✓  10 tests/e2e/clouds.spec.ts:140:1 › cloud layer toggle off/on cleanly gates simulation mapping (649ms)
+  ✓   8 tests/e2e/fireworks.spec.ts:274:1 › fireworks render nodes mirror simulation ids/stages and cleanup removes expired nodes (1.2s)
+  ✓  13 tests/e2e/clouds.spec.ts:245:1 › cloud debug controls apply on the next simulation step (331ms)
+  ✓  12 tests/e2e/gameplay.spec.ts:273:1 › scripted placement sequence is deterministic across runs (859ms)
+  ✓  15 tests/e2e/clouds.spec.ts:348:1 › test API exposes per-cloud diagnostics and stays stable under adversarial cloud thresholds (505ms)
+  ✓  16 tests/e2e/gameplay.spec.ts:318:1 › combo milestone triggers recovery reward growth + slowdown (408ms)
+  ✓  14 tests/e2e/fireworks.spec.ts:408:1 › fireworks stress mode keeps cap bounded and degrades secondary emissions first (970ms)
+  ✓  17 tests/e2e/gameplay.spec.ts:352:1 › keyboard and pointer input both stop slabs (400ms)
+  ✓  18 tests/e2e/fireworks.spec.ts:489:1 › fireworks chrysanthemum canonical snapshot remains stable (469ms)
+  ✓  19 tests/e2e/gameplay.spec.ts:383:1 › space or touch input restarts immediately from game over (270ms)
+  ✓  20 tests/e2e/gameplay.spec.ts:423:1 › miss transitions to game over and restart resets state (242ms)
+  ✓  21 tests/e2e/gameplay.spec.ts:462:1 › debug controls can tune movement speed at runtime (191ms)
+  ✓  22 tests/e2e/gameplay.spec.ts:527:1 › debug combo target + growth tuning changes recovery behavior (197ms)
+  ✓  23 tests/e2e/gameplay.spec.ts:571:1 › debug distraction launch buttons can trigger channels on demand (795ms)
+  ✓  24 tests/e2e/gameplay.spec.ts:653:1 › gorilla/ufo/cloud actors are level-gated and core placement still works while active (366ms)
+  ✓  25 tests/e2e/gameplay.spec.ts:789:1 › integrity telemetry reports deterministic stable/precarious/unstable transitions (240ms)
+  ✓  26 tests/e2e/gameplay.spec.ts:854:1 › unstable integrity no longer ends the run without a hard miss (229ms)
+  ✓  27 tests/e2e/gameplay.spec.ts:916:1 › audio/haptics toggles gate runtime feedback emission (212ms)
+  ✓  28 tests/e2e/gameplay.spec.ts:1016:1 › high-start-stack perf profile keeps input responsive with archival + quality controls (359ms)
+  ✓  29 tests/e2e/gameplay.spec.ts:1069:1 › optimization toggles preserve deterministic scripted outcomes (709ms)
+  ✓  30 tests/e2e/gameplay.spec.ts:1135:3 › mobile touch pass › tap input on a mobile-sized viewport stops the active slab (224ms)
 
-  30 passed (8.2s)
+  30 passed (9.9s)
+[2026-04-05T19:13:43Z] Playwright adversarial paused miss/restart loop
+Adversarial paused miss/restart loop passed (3 cycles)
