@@ -179,6 +179,16 @@ interface RemyAnchor {
   faceNoiseSalt: number;
 }
 
+interface RemyCharacterAsset {
+  id: string;
+  modelUrl: string;
+}
+
+interface RemyAnimationAsset {
+  id: string;
+  animationUrl: string;
+}
+
 interface PerformanceSnapshot {
   qualityPreset: QualityPreset;
   requestedPreset: QualityPreset;
@@ -355,8 +365,18 @@ const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
 const CLOUD_DEFAULT_COUNT = defaultDebugConfig.distractionCloudCount;
-const REMY_MODEL_URL = new URL("../../assets/remy_character_t_pose.glb", import.meta.url).href;
-const REMY_ANIMATION_URL = new URL("../../assets/remy_hip_hop_animation_inplace.glb", import.meta.url).href;
+const REMY_CHARACTER_ASSETS: readonly RemyCharacterAsset[] = [
+  { id: "remy", modelUrl: new URL("../../assets/remy_character_t_pose.glb", import.meta.url).href },
+  { id: "timmy", modelUrl: new URL("../../assets/timmy_tiny_webp.glb", import.meta.url).href },
+  { id: "amy", modelUrl: new URL("../../assets/amy_tiny_webp.glb", import.meta.url).href },
+  { id: "aj", modelUrl: new URL("../../assets/aj_tiny_webp.glb", import.meta.url).href },
+];
+const REMY_ANIMATION_ASSETS: readonly RemyAnimationAsset[] = [
+  { id: "hip-hop", animationUrl: new URL("../../assets/remy_hip_hop_animation_inplace.glb", import.meta.url).href },
+  { id: "house", animationUrl: new URL("../../assets/house_dancing_inplace.glb", import.meta.url).href },
+  { id: "chicken", animationUrl: new URL("../../assets/chicken_dance_inplace.glb", import.meta.url).href },
+  { id: "ymca", animationUrl: new URL("../../assets/ymca_dance_inplace.glb", import.meta.url).href },
+];
 const DRACO_DECODER_PATH = `${import.meta.env.BASE_URL}draco/`;
 const REMY_TARGET_HEIGHT_RATIO = 0.42;
 const REMY_MIN_HEIGHT = 0.54;
@@ -543,6 +563,8 @@ export class Game {
   private remyDebugConfig: RemyDebugConfig = { ...REMY_DEBUG_DEFAULTS };
   private remyAnchor: RemyAnchor | null = null;
   private remySuppressedByTentacles = false;
+  private remyLoadGeneration = 0;
+  private remySelectionSerial = 0;
   private activeBlockMotionPaused = false;
   private pauseBlockMotionButton: HTMLButtonElement | null = null;
 
@@ -608,7 +630,6 @@ export class Game {
     this.buildHud();
     this.buildDistractionOverlay();
     this.resetWorld();
-    this.loadRemyCharacter();
   }
 
   public mount(): void {
@@ -1231,7 +1252,15 @@ export class Game {
   }
 
   private resetWorld(): void {
+    this.remyLoadGeneration += 1;
     this.detachRemyCharacter();
+    this.remyCharacter = null;
+    this.remyPoseRotateX = null;
+    this.remyPoseRotateY = null;
+    this.remyPoseRotateZ = null;
+    this.remyMixer = null;
+    this.remyBaseHeight = 1;
+    this.remyBaseDepth = 1;
     this.lastFrameTime = 0;
     this.simulationElapsedSeconds = 0;
     this.score = 0;
@@ -1291,6 +1320,7 @@ export class Game {
     this.tentacleBurstKeys = [];
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
+    this.remySelectionSerial += 1;
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
 
@@ -1314,6 +1344,7 @@ export class Game {
     const initialTargetY = initialFocusY + this.debugConfig.cameraHeight;
     this.cameraTargetPosition.set(CAMERA_X, initialTargetY, this.debugConfig.cameraDistance);
     this.cameraLookAtY = Math.max(1.2, initialFocusY);
+    this.loadRemyCharacter();
   }
 
   private spawnNextActive(): void {
@@ -2412,7 +2443,26 @@ export class Game {
     this.remyMixer.update(deltaSeconds);
   }
 
+  private createRemySelectionRandom(): () => number {
+    if (this.testMode.seed === null) {
+      return Math.random;
+    }
+
+    const derivedSeed = (this.testMode.seed ^ Math.imul(this.remySelectionSerial + 1, 0x9e3779b1)) >>> 0;
+    return createSeededRandom(derivedSeed);
+  }
+
+  private pickRandomRemyAsset<T>(assets: readonly T[], random: () => number): T {
+    const index = Math.min(assets.length - 1, Math.floor(random() * assets.length));
+    return assets[index]!;
+  }
+
   private loadRemyCharacter(): void {
+    const random = this.createRemySelectionRandom();
+    const selectedCharacter = this.pickRandomRemyAsset(REMY_CHARACTER_ASSETS, random);
+    const selectedAnimation = this.pickRandomRemyAsset(REMY_ANIMATION_ASSETS, random);
+    const loadGeneration = this.remyLoadGeneration;
+
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
 
@@ -2420,8 +2470,13 @@ export class Game {
     loader.setDRACOLoader(dracoLoader);
 
     loader.load(
-      REMY_MODEL_URL,
+      selectedCharacter.modelUrl,
       (gltf) => {
+        if (loadGeneration !== this.remyLoadGeneration) {
+          dracoLoader.dispose();
+          return;
+        }
+
         const characterRoot = new Group();
         characterRoot.name = "remy-character";
 
@@ -2436,7 +2491,7 @@ export class Game {
         const modelBounds = new Box3().setFromObject(model);
         const modelSize = modelBounds.getSize(new Vector3());
         if (modelSize.y <= 0) {
-          console.warn("Unable to place Remy character because model bounds height is invalid.");
+          console.warn(`Unable to place character ${selectedCharacter.id}; model bounds height is invalid.`);
           dracoLoader.dispose();
           return;
         }
@@ -2468,19 +2523,29 @@ export class Game {
         this.remyPoseRotateZ = poseRotateZ;
         this.remyBaseHeight = modelSize.y;
         this.remyBaseDepth = Math.max(modelSize.x, modelSize.z);
-        this.loadRemyAnimationClip(model, gltf.animations);
+        this.loadRemyAnimationClip(model, gltf.animations, selectedAnimation.animationUrl, loadGeneration, selectedAnimation.id);
         this.placeRemyOnTopLedge();
         dracoLoader.dispose();
       },
       undefined,
       (error) => {
-        console.warn("Failed to load Remy character model.", error);
+        if (loadGeneration !== this.remyLoadGeneration) {
+          dracoLoader.dispose();
+          return;
+        }
+        console.warn(`Failed to load character model ${selectedCharacter.id}.`, error);
         dracoLoader.dispose();
       },
     );
   }
 
-  private loadRemyAnimationClip(targetModel: Object3D, fallbackClips: readonly AnimationClip[]): void {
+  private loadRemyAnimationClip(
+    targetModel: Object3D,
+    fallbackClips: readonly AnimationClip[],
+    animationUrl: string,
+    loadGeneration: number,
+    animationId: string,
+  ): void {
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
 
@@ -2488,8 +2553,13 @@ export class Game {
     animationLoader.setDRACOLoader(dracoLoader);
 
     animationLoader.load(
-      REMY_ANIMATION_URL,
+      animationUrl,
       (gltf) => {
+        if (loadGeneration !== this.remyLoadGeneration) {
+          dracoLoader.dispose();
+          return;
+        }
+
         const preferredSourceClip = this.selectPreferredRemyClip(gltf.animations);
         if (!preferredSourceClip) {
           this.playRemyFallbackClip(targetModel, fallbackClips);
@@ -2504,7 +2574,11 @@ export class Game {
       },
       undefined,
       (error) => {
-        console.warn("Failed to load Remy animation clip.", error);
+        if (loadGeneration !== this.remyLoadGeneration) {
+          dracoLoader.dispose();
+          return;
+        }
+        console.warn(`Failed to load animation clip ${animationId}.`, error);
         this.playRemyFallbackClip(targetModel, fallbackClips);
         dracoLoader.dispose();
       },
