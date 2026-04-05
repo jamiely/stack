@@ -28,7 +28,7 @@ import {
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
-import { retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { clone as cloneSkeleton, retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
@@ -91,7 +91,9 @@ import { initializeFireworksState, stepFireworksState, type FireworksConfig, typ
 import { createSeededRandom } from "./logic/random";
 import {
   hasRecentTentacleBurstOnFace,
+  pickNonRepeatingIndex,
   shouldKeepCurrentRemyAnchor,
+  shouldSpawnDualRemyCharacters,
   shouldSpawnTentacleBurst,
   type TentacleBurstMarker,
 } from "./logic/remy";
@@ -403,6 +405,9 @@ const REMY_LEDGE_CLEARANCE = 0.03;
 const REMY_LEDGE_INSET_RATIO = 0.14;
 const REMY_WALL_CLEARANCE = 0.01;
 const REMY_ROTATION_OFFSET_Y = 0;
+const REMY_DUAL_SPAWN_SPREAD_RATIO = 0.22;
+const REMY_DUAL_SPAWN_MIN_SPREAD = 0.08;
+const REMY_DUAL_SPAWN_EDGE_PADDING = 0.04;
 const REMY_AUTO_UP_AXIS_DETECTION_ENABLED = true;
 const REMY_MODEL_ROTATION_OFFSET_Z = 0;
 const WORLD_UP_AXIS = new Vector3(0, 1, 0);
@@ -576,6 +581,11 @@ export class Game {
   private remyPoseRotateY: Group | null = null;
   private remyPoseRotateZ: Group | null = null;
   private remyMixer: AnimationMixer | null = null;
+  private remySecondaryCharacter: Group | null = null;
+  private remySecondaryPoseRotateX: Group | null = null;
+  private remySecondaryPoseRotateY: Group | null = null;
+  private remySecondaryPoseRotateZ: Group | null = null;
+  private remySecondaryMixer: AnimationMixer | null = null;
   private remyBaseHeight = 1;
   private remyBaseDepth = 1;
   private remyDebugConfig: RemyDebugConfig = { ...REMY_LEGACY_DEBUG_DEFAULTS };
@@ -585,6 +595,7 @@ export class Game {
   private remySuppressedByTentacles = false;
   private remyLoadGeneration = 0;
   private remySelectionSerial = 0;
+  private lastRemyCharacterIndex: number | null = null;
   private remyIsLoading = false;
   private remyRefreshPending = false;
   private activeBlockMotionPaused = false;
@@ -1311,6 +1322,11 @@ export class Game {
     this.remyPoseRotateY = null;
     this.remyPoseRotateZ = null;
     this.remyMixer = null;
+    this.remySecondaryCharacter = null;
+    this.remySecondaryPoseRotateX = null;
+    this.remySecondaryPoseRotateY = null;
+    this.remySecondaryPoseRotateZ = null;
+    this.remySecondaryMixer = null;
     this.remyBaseHeight = 1;
     this.remyBaseDepth = 1;
     this.lastFrameTime = 0;
@@ -1371,6 +1387,7 @@ export class Game {
     });
     this.tentacleBurstKeys = [];
     this.activeRemyCharacterId = null;
+    this.lastRemyCharacterIndex = null;
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
@@ -2491,11 +2508,12 @@ export class Game {
   }
 
   private updateRemyAnimation(deltaSeconds: number): void {
-    if (!this.remyMixer || deltaSeconds <= 0) {
+    if (deltaSeconds <= 0) {
       return;
     }
 
-    this.remyMixer.update(deltaSeconds);
+    this.remyMixer?.update(deltaSeconds);
+    this.remySecondaryMixer?.update(deltaSeconds);
   }
 
   private createRemySelectionRandom(): () => number {
@@ -2507,6 +2525,23 @@ export class Game {
     return createSeededRandom(derivedSeed);
   }
 
+  private getRemyCharacterIndex(characterId: string | null): number | null {
+    if (!characterId) {
+      return null;
+    }
+
+    const index = REMY_CHARACTER_ASSETS.findIndex((asset) => asset.id === characterId);
+    return index >= 0 ? index : null;
+  }
+
+  private pickRandomRemyCharacterAsset(random: () => number): { asset: RemyCharacterAsset; index: number } {
+    const index = pickNonRepeatingIndex(REMY_CHARACTER_ASSETS.length, random(), this.lastRemyCharacterIndex);
+    return {
+      asset: REMY_CHARACTER_ASSETS[index]!,
+      index,
+    };
+  }
+
   private pickRandomRemyAsset<T>(assets: readonly T[], random: () => number): T {
     const index = Math.min(assets.length - 1, Math.floor(random() * assets.length));
     return assets[index]!;
@@ -2515,6 +2550,7 @@ export class Game {
   private refreshRemyCharacterSelection(): void {
     this.remyLoadGeneration += 1;
     this.remyIsLoading = false;
+    this.lastRemyCharacterIndex = this.getRemyCharacterIndex(this.activeRemyCharacterId) ?? this.lastRemyCharacterIndex;
     this.activeRemyCharacterId = null;
     this.detachRemyCharacter();
     this.remyCharacter = null;
@@ -2522,6 +2558,11 @@ export class Game {
     this.remyPoseRotateY = null;
     this.remyPoseRotateZ = null;
     this.remyMixer = null;
+    this.remySecondaryCharacter = null;
+    this.remySecondaryPoseRotateX = null;
+    this.remySecondaryPoseRotateY = null;
+    this.remySecondaryPoseRotateZ = null;
+    this.remySecondaryMixer = null;
     this.remyBaseHeight = 1;
     this.remyBaseDepth = 1;
     this.loadRemyCharacter();
@@ -2535,7 +2576,8 @@ export class Game {
     this.remyIsLoading = true;
     this.remySelectionSerial += 1;
     const random = this.createRemySelectionRandom();
-    const selectedCharacter = this.pickRandomRemyAsset(REMY_CHARACTER_ASSETS, random);
+    const selectedCharacterChoice = this.pickRandomRemyCharacterAsset(random);
+    const selectedCharacter = selectedCharacterChoice.asset;
     const selectedAnimation = this.pickRandomRemyAsset(REMY_ANIMATION_ASSETS, random);
     const loadGeneration = this.remyLoadGeneration;
 
@@ -2552,9 +2594,6 @@ export class Game {
           dracoLoader.dispose();
           return;
         }
-
-        const characterRoot = new Group();
-        characterRoot.name = "remy-character";
 
         const model = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
         if (REMY_AUTO_UP_AXIS_DETECTION_ENABLED) {
@@ -2577,30 +2616,24 @@ export class Game {
         const centerOffsetFromFeet = modelCenter.y - modelBounds.min.y;
         model.position.set(-modelCenter.x, -modelCenter.y, -modelCenter.z);
 
-        const posePivot = new Group();
-        posePivot.name = "remy-pose-pivot";
-        posePivot.position.y = centerOffsetFromFeet;
+        const secondaryModel = cloneSkeleton(model);
+        this.prepareRemyModelForRendering(secondaryModel);
 
-        const poseRotateX = new Group();
-        poseRotateX.name = "remy-pose-rotate-x";
-        const poseRotateY = new Group();
-        poseRotateY.name = "remy-pose-rotate-y";
-        const poseRotateZ = new Group();
-        poseRotateZ.name = "remy-pose-rotate-z";
+        const primaryRig = this.createRemyCharacterRig(model, centerOffsetFromFeet, "primary");
+        const secondaryRig = this.createRemyCharacterRig(secondaryModel, centerOffsetFromFeet, "secondary");
 
-        posePivot.add(poseRotateX);
-        poseRotateX.add(poseRotateY);
-        poseRotateY.add(poseRotateZ);
-        poseRotateZ.add(model);
-        characterRoot.add(posePivot);
-
-        this.remyCharacter = characterRoot;
-        this.remyPoseRotateX = poseRotateX;
-        this.remyPoseRotateY = poseRotateY;
-        this.remyPoseRotateZ = poseRotateZ;
+        this.remyCharacter = primaryRig.characterRoot;
+        this.remyPoseRotateX = primaryRig.poseRotateX;
+        this.remyPoseRotateY = primaryRig.poseRotateY;
+        this.remyPoseRotateZ = primaryRig.poseRotateZ;
+        this.remySecondaryCharacter = secondaryRig.characterRoot;
+        this.remySecondaryPoseRotateX = secondaryRig.poseRotateX;
+        this.remySecondaryPoseRotateY = secondaryRig.poseRotateY;
+        this.remySecondaryPoseRotateZ = secondaryRig.poseRotateZ;
         this.remyBaseHeight = modelSize.y;
         this.remyBaseDepth = Math.max(modelSize.x, modelSize.z);
         this.activeRemyCharacterId = selectedCharacter.id;
+        this.lastRemyCharacterIndex = selectedCharacterChoice.index;
         this.remyDebugConfig = this.getDefaultRemyDebugConfig(selectedCharacter.id);
         this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]").forEach((input) => {
           const key = input.dataset.remyDebugKey as RemyDebugKey | undefined;
@@ -2615,7 +2648,12 @@ export class Game {
           selectedAnimation,
           ...REMY_ANIMATION_ASSETS.filter((asset) => asset.id !== selectedAnimation.id),
         ];
-        this.loadRemyAnimationClip(model, gltf.animations, animationCandidates, loadGeneration);
+        this.loadRemyAnimationClip(
+          [primaryRig.animationTarget, secondaryRig.animationTarget],
+          gltf.animations,
+          animationCandidates,
+          loadGeneration,
+        );
         this.placeRemyOnTopLedge();
         dracoLoader.dispose();
       },
@@ -2632,8 +2670,44 @@ export class Game {
     );
   }
 
+  private createRemyCharacterRig(model: Object3D, centerOffsetFromFeet: number, nameSuffix: string): {
+    characterRoot: Group;
+    poseRotateX: Group;
+    poseRotateY: Group;
+    poseRotateZ: Group;
+    animationTarget: Object3D;
+  } {
+    const characterRoot = new Group();
+    characterRoot.name = `remy-character-${nameSuffix}`;
+
+    const posePivot = new Group();
+    posePivot.name = `remy-pose-pivot-${nameSuffix}`;
+    posePivot.position.y = centerOffsetFromFeet;
+
+    const poseRotateX = new Group();
+    poseRotateX.name = `remy-pose-rotate-x-${nameSuffix}`;
+    const poseRotateY = new Group();
+    poseRotateY.name = `remy-pose-rotate-y-${nameSuffix}`;
+    const poseRotateZ = new Group();
+    poseRotateZ.name = `remy-pose-rotate-z-${nameSuffix}`;
+
+    posePivot.add(poseRotateX);
+    poseRotateX.add(poseRotateY);
+    poseRotateY.add(poseRotateZ);
+    poseRotateZ.add(model);
+    characterRoot.add(posePivot);
+
+    return {
+      characterRoot,
+      poseRotateX,
+      poseRotateY,
+      poseRotateZ,
+      animationTarget: model,
+    };
+  }
+
   private loadRemyAnimationClip(
-    targetModel: Object3D,
+    targetModels: readonly Object3D[],
     fallbackClips: readonly AnimationClip[],
     animationCandidates: readonly RemyAnimationAsset[],
     loadGeneration: number,
@@ -2642,7 +2716,7 @@ export class Game {
     const animationCandidate = animationCandidates[candidateIndex];
     if (!animationCandidate) {
       this.remyIsLoading = false;
-      this.playRemyFallbackClip(targetModel, fallbackClips);
+      this.playRemyFallbackClip(targetModels, fallbackClips);
       return;
     }
 
@@ -2661,21 +2735,21 @@ export class Game {
         }
 
         const preferredSourceClip = this.selectPreferredRemyClip(gltf.animations);
-        if (!preferredSourceClip) {
+        if (!preferredSourceClip || targetModels.length === 0) {
           dracoLoader.dispose();
-          this.loadRemyAnimationClip(targetModel, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
+          this.loadRemyAnimationClip(targetModels, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
           return;
         }
 
         const animationSource = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
-        const clip = this.resolveRemyClipForTarget(targetModel, animationSource, preferredSourceClip);
+        const clip = this.resolveRemyClipForTarget(targetModels[0]!, animationSource, preferredSourceClip);
         if (!clip) {
           dracoLoader.dispose();
-          this.loadRemyAnimationClip(targetModel, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
+          this.loadRemyAnimationClip(targetModels, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
           return;
         }
 
-        this.playRemyClip(targetModel, clip);
+        this.playRemyClip(targetModels, clip);
         this.remyIsLoading = false;
         dracoLoader.dispose();
       },
@@ -2687,7 +2761,7 @@ export class Game {
         }
         console.warn(`Failed to load animation clip ${animationCandidate.id}.`, error);
         dracoLoader.dispose();
-        this.loadRemyAnimationClip(targetModel, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
+        this.loadRemyAnimationClip(targetModels, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
       },
     );
   }
@@ -2744,14 +2818,15 @@ export class Game {
     return trackName.slice(0, lastDotIndex);
   }
 
-  private playRemyFallbackClip(targetModel: Object3D, clips: readonly AnimationClip[]): void {
+  private playRemyFallbackClip(targetModels: readonly Object3D[], clips: readonly AnimationClip[]): void {
     const preferredClip = this.selectPreferredRemyClip(clips);
     if (!preferredClip) {
       this.remyMixer = null;
+      this.remySecondaryMixer = null;
       return;
     }
 
-    this.playRemyClip(targetModel, this.stripScaleTracksFromClip(preferredClip));
+    this.playRemyClip(targetModels, this.stripScaleTracksFromClip(preferredClip));
   }
 
   private stripScaleTracksFromClip(clip: AnimationClip): AnimationClip {
@@ -2766,12 +2841,23 @@ export class Game {
     return sanitizedClip;
   }
 
-  private playRemyClip(targetModel: Object3D, clip: AnimationClip): void {
-    this.remyMixer = new AnimationMixer(targetModel);
-    const action = this.remyMixer.clipAction(clip);
-    action.reset();
-    action.setLoop(LoopPingPong, Number.POSITIVE_INFINITY);
-    action.play();
+  private playRemyClip(targetModels: readonly Object3D[], clip: AnimationClip): void {
+    this.remyMixer = null;
+    this.remySecondaryMixer = null;
+
+    targetModels.forEach((targetModel, index) => {
+      const mixer = new AnimationMixer(targetModel);
+      const action = mixer.clipAction(clip);
+      action.reset();
+      action.setLoop(LoopPingPong, Number.POSITIVE_INFINITY);
+      action.play();
+
+      if (index === 0) {
+        this.remyMixer = mixer;
+      } else if (index === 1) {
+        this.remySecondaryMixer = mixer;
+      }
+    });
   }
 
   private tryRetargetRemyClip(targetModel: Object3D, sourceRig: Object3D, clip: AnimationClip): AnimationClip | null {
@@ -2913,33 +2999,53 @@ export class Game {
       typeof ledgeMesh.userData.ledgeDepth === "number"
         ? ledgeMesh.userData.ledgeDepth
         : Math.max(0.24, slab.dimensions.height * 0.18);
+    const ledgeWidthRatio =
+      typeof ledgeMesh.userData.widthRatio === "number"
+        ? ledgeMesh.userData.widthRatio
+        : 0;
+    const useDualCharacters = shouldSpawnDualRemyCharacters(ledgeWidthRatio);
+    const laneOffsets = this.resolveRemyLaneOffsets(ledgeMesh, useDualCharacters);
 
     const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, slab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
     const uniformScale = targetHeight / Math.max(0.001, this.remyBaseHeight);
-    this.remyCharacter.scale.setScalar(uniformScale);
-
     const scaledRemyDepth = this.remyBaseDepth * uniformScale;
     const overlapIntoWall = Math.max(0, (scaledRemyDepth - ledgeDepth) / 2);
     const outwardOffset = ledgeDepth * REMY_LEDGE_INSET_RATIO + overlapIntoWall + REMY_WALL_CLEARANCE;
-    const insetOffset = new Vector3(
-      sidePose.translateX + this.remyDebugConfig.translateX,
-      sidePose.translateY + this.remyDebugConfig.translateY,
-      outwardOffset + sidePose.translateZ + this.remyDebugConfig.translateZ,
-    ).applyAxisAngle(WORLD_UP_AXIS, ledgeMesh.rotation.y);
 
-    this.remyCharacter.position.set(
-      ledgeMesh.position.x + insetOffset.x,
-      ledgeMesh.position.y + ledgeHeight / 2 + REMY_LEDGE_CLEARANCE + insetOffset.y,
-      ledgeMesh.position.z + insetOffset.z,
-    );
-    this.remyCharacter.rotation.set(0, ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y, 0);
     this.applyRemyDebugRotation(
       sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees,
       sidePose.yawDegrees + this.remyDebugConfig.yawDegrees,
       sidePose.rollDegrees + this.remyDebugConfig.rollDegrees,
     );
 
-    slabMesh.add(this.remyCharacter);
+    const placeCharacter = (character: Group | null, laneOffset: number): void => {
+      if (!character) {
+        return;
+      }
+
+      character.scale.setScalar(uniformScale);
+      const insetOffset = new Vector3(
+        laneOffset + sidePose.translateX + this.remyDebugConfig.translateX,
+        sidePose.translateY + this.remyDebugConfig.translateY,
+        outwardOffset + sidePose.translateZ + this.remyDebugConfig.translateZ,
+      ).applyAxisAngle(WORLD_UP_AXIS, ledgeMesh.rotation.y);
+
+      character.position.set(
+        ledgeMesh.position.x + insetOffset.x,
+        ledgeMesh.position.y + ledgeHeight / 2 + REMY_LEDGE_CLEARANCE + insetOffset.y,
+        ledgeMesh.position.z + insetOffset.z,
+      );
+      character.rotation.set(0, ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y, 0);
+      slabMesh.add(character);
+    };
+
+    placeCharacter(this.remyCharacter, laneOffsets[0] ?? 0);
+
+    if (useDualCharacters && this.remySecondaryCharacter && laneOffsets.length > 1) {
+      placeCharacter(this.remySecondaryCharacter, laneOffsets[1]!);
+    } else if (this.remySecondaryCharacter?.parent) {
+      this.remySecondaryCharacter.parent.remove(this.remySecondaryCharacter);
+    }
   }
 
   private syncRemyTentacleSuppression(): void {
@@ -2986,10 +3092,32 @@ export class Game {
     });
   }
 
+  private resolveRemyLaneOffsets(ledgeMesh: Mesh, useDualCharacters: boolean): number[] {
+    if (!useDualCharacters) {
+      return [0];
+    }
+
+    const usableWidth =
+      typeof ledgeMesh.userData.usableWidth === "number"
+        ? Math.max(0, ledgeMesh.userData.usableWidth)
+        : 0;
+    const maxSpread = Math.max(0, usableWidth / 2 - REMY_DUAL_SPAWN_EDGE_PADDING);
+    if (maxSpread <= 0) {
+      return [0];
+    }
+
+    const desiredSpread = Math.max(REMY_DUAL_SPAWN_MIN_SPREAD, usableWidth * REMY_DUAL_SPAWN_SPREAD_RATIO);
+    const spread = Math.min(maxSpread, desiredSpread);
+    return [-spread, spread];
+  }
+
   private applyRemyDebugRotation(pitchDegrees: number, yawDegrees: number, rollDegrees: number): void {
     this.remyPoseRotateX?.rotation.set(this.toRadians(pitchDegrees), 0, 0);
     this.remyPoseRotateY?.rotation.set(0, this.toRadians(yawDegrees), 0);
     this.remyPoseRotateZ?.rotation.set(0, 0, this.toRadians(rollDegrees));
+    this.remySecondaryPoseRotateX?.rotation.set(this.toRadians(pitchDegrees), 0, 0);
+    this.remySecondaryPoseRotateY?.rotation.set(0, this.toRadians(yawDegrees), 0);
+    this.remySecondaryPoseRotateZ?.rotation.set(0, 0, this.toRadians(rollDegrees));
   }
 
   private readRemyFaceId(ledgeMesh: Mesh): FaceId | null {
@@ -3041,6 +3169,10 @@ export class Game {
       sidePose.rollDegrees + this.remyDebugConfig.rollDegrees,
     );
     topSlabMesh.add(this.remyCharacter);
+
+    if (this.remySecondaryCharacter?.parent) {
+      this.remySecondaryCharacter.parent.remove(this.remySecondaryCharacter);
+    }
   }
 
   private findTopLedgeAnchor(): LedgeAnchor | null {
@@ -3085,6 +3217,10 @@ export class Game {
   private detachRemyCharacter(): void {
     if (this.remyCharacter?.parent) {
       this.remyCharacter.parent.remove(this.remyCharacter);
+    }
+
+    if (this.remySecondaryCharacter?.parent) {
+      this.remySecondaryCharacter.parent.remove(this.remySecondaryCharacter);
     }
   }
 
@@ -4381,6 +4517,7 @@ export class Game {
 
     ledge.userData.isLedge = true;
     ledge.userData.usableWidth = ledgeWidth;
+    ledge.userData.widthRatio = widthRatio;
     ledge.userData.ledgeHeight = ledgeHeight;
     ledge.userData.ledgeDepth = ledgeDepth;
     ledge.userData.faceNoiseSalt = face.noiseSalt;

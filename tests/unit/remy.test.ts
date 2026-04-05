@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   hasRecentTentacleBurstOnFace,
+  pickNonRepeatingIndex,
   shouldKeepCurrentRemyAnchor,
+  shouldSpawnDualRemyCharacters,
   shouldSpawnTentacleBurst,
   type TentacleBurstMarker,
 } from "../../src/game/logic/remy";
@@ -45,6 +47,33 @@ describe("hasRecentTentacleBurstOnFace", () => {
   it("ignores stale and future-dated bursts", () => {
     expect(hasRecentTentacleBurstOnFace([{ slabLevel: 5, faceNoiseSalt: 2.9, createdAtSeconds: 1 }], 5, 2.9, 3, 0.45)).toBe(false);
     expect(hasRecentTentacleBurstOnFace([{ slabLevel: 5, faceNoiseSalt: 2.9, createdAtSeconds: 4 }], 5, 2.9, 3, 0.45)).toBe(false);
+  });
+});
+
+describe("shouldSpawnDualRemyCharacters", () => {
+  it("enables dual-character placement only for very wide ledges", () => {
+    expect(shouldSpawnDualRemyCharacters(0.74)).toBe(false);
+    expect(shouldSpawnDualRemyCharacters(0.75)).toBe(true);
+    expect(shouldSpawnDualRemyCharacters(1)).toBe(true);
+  });
+
+  it("rejects invalid ratios", () => {
+    expect(shouldSpawnDualRemyCharacters(Number.NaN)).toBe(false);
+    expect(shouldSpawnDualRemyCharacters(Number.POSITIVE_INFINITY)).toBe(false);
+  });
+});
+
+describe("pickNonRepeatingIndex", () => {
+  it("never repeats the previous index when multiple choices exist", () => {
+    expect(pickNonRepeatingIndex(4, 0, 0)).toBe(1);
+    expect(pickNonRepeatingIndex(4, 0.5, 2)).not.toBe(2);
+    expect(pickNonRepeatingIndex(4, 0.99, 3)).not.toBe(3);
+  });
+
+  it("falls back to bounded selection when previous index is unavailable", () => {
+    expect(pickNonRepeatingIndex(1, 0.8, 0)).toBe(0);
+    expect(pickNonRepeatingIndex(4, 0.1, null)).toBe(0);
+    expect(pickNonRepeatingIndex(4, Number.NaN, null)).toBe(0);
   });
 });
 
