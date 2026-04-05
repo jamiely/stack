@@ -1,0 +1,1 @@
+Implement Step 1 from .agents/planning/2026-04-05-animation-system-refactor/implementation/plan.md
