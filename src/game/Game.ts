@@ -190,6 +190,12 @@ interface RemyAnimationAsset {
   animationUrl: string;
 }
 
+interface RemyAnimationTargetBinding {
+  model: Object3D;
+  role: "primary" | "secondary";
+  fallbackClips: readonly AnimationClip[];
+}
+
 interface PerformanceSnapshot {
   qualityPreset: QualityPreset;
   requestedPreset: QualityPreset;
@@ -615,8 +621,7 @@ export class Game {
   private remySuppressedByTentacles = false;
   private remyLoadGeneration = 0;
   private remySelectionSerial = 0;
-  private lastRemyCharacterIndex: number | null = null;
-  private remyCharacterCycleIndices: number[] = [];
+  private remyCharacterRotationIndex = 0;
   private remyIsLoading = false;
   private remyRefreshPending = false;
   private activeBlockMotionPaused = false;
@@ -2548,54 +2553,31 @@ export class Game {
     return createSeededRandom(derivedSeed);
   }
 
-  private refillRemyCharacterCycle(random: () => number, avoidFirstIndex: number | null): void {
+  private drawNextRemyCharacterIndex(): number {
     if (REMY_CHARACTER_ASSETS.length <= 0) {
-      return;
+      return 0;
     }
 
-    const indices = Array.from({ length: REMY_CHARACTER_ASSETS.length }, (_, index) => index);
-    for (let index = indices.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(random() * (index + 1));
-      const currentValue = indices[index]!;
-      indices[index] = indices[swapIndex]!;
-      indices[swapIndex] = currentValue;
-    }
-
-    if (
-      avoidFirstIndex !== null &&
-      indices.length > 1 &&
-      indices[0] === avoidFirstIndex
-    ) {
-      const safeSwapIndex = indices.findIndex((candidate) => candidate !== avoidFirstIndex);
-      if (safeSwapIndex > 0) {
-        const firstValue = indices[0]!;
-        indices[0] = indices[safeSwapIndex]!;
-        indices[safeSwapIndex] = firstValue;
-      }
-    }
-
-    this.remyCharacterCycleIndices.push(...indices);
+    const index = this.remyCharacterRotationIndex % REMY_CHARACTER_ASSETS.length;
+    this.remyCharacterRotationIndex = (this.remyCharacterRotationIndex + 1) % REMY_CHARACTER_ASSETS.length;
+    return index;
   }
 
-  private drawRemyCharacterIndices(random: () => number, requestedCount: number): number[] {
-    const count = Math.max(1, Math.floor(requestedCount));
-    const selectedIndices: number[] = [];
-    for (let index = 0; index < count; index += 1) {
-      if (this.remyCharacterCycleIndices.length === 0) {
-        const avoidFirstIndex = selectedIndices[selectedIndices.length - 1] ?? this.lastRemyCharacterIndex;
-        this.refillRemyCharacterCycle(random, avoidFirstIndex ?? null);
-      }
+  private shouldLoadSecondaryRemyCharacter(): boolean {
+    const anchor = this.remyAnchor
+      ? this.findLedgeAnchorByLevelAndFace(this.remyAnchor.level, this.remyAnchor.faceNoiseSalt)
+      : this.findTopLedgeAnchor();
 
-      const nextIndex = this.remyCharacterCycleIndices.shift();
-      if (typeof nextIndex !== "number") {
-        continue;
-      }
-
-      selectedIndices.push(nextIndex);
-      this.lastRemyCharacterIndex = nextIndex;
+    if (!anchor) {
+      return false;
     }
 
-    return selectedIndices;
+    const widthRatio =
+      typeof anchor.ledgeMesh.userData.widthRatio === "number"
+        ? anchor.ledgeMesh.userData.widthRatio
+        : 0;
+
+    return shouldSpawnDualRemyCharacters(widthRatio);
   }
 
   private pickRandomRemyAsset<T>(assets: readonly T[], random: () => number): T {
@@ -2634,13 +2616,14 @@ export class Game {
     this.remyIsLoading = true;
     this.remySelectionSerial += 1;
     const random = this.createRemySelectionRandom();
-    const primaryCharacterIndex = this.drawRemyCharacterIndices(random, 1)[0] ?? 0;
+    const primaryCharacterIndex = this.drawNextRemyCharacterIndex();
     const selectedCharacter = REMY_CHARACTER_ASSETS[primaryCharacterIndex] ?? REMY_CHARACTER_ASSETS[0]!;
-    const secondaryCharacterPool = REMY_CHARACTER_ASSETS.filter((_, index) => index !== primaryCharacterIndex);
+    const shouldLoadSecondaryCharacter = this.shouldLoadSecondaryRemyCharacter();
+    const secondaryCharacterIndex = shouldLoadSecondaryCharacter ? this.drawNextRemyCharacterIndex() : null;
     const secondaryCharacter =
-      secondaryCharacterPool.length > 0
-        ? this.pickRandomRemyAsset(secondaryCharacterPool, random)
-        : null;
+      secondaryCharacterIndex === null
+        ? null
+        : (REMY_CHARACTER_ASSETS[secondaryCharacterIndex] ?? null);
     const selectedAnimation = this.pickRandomRemyAsset(REMY_ANIMATION_ASSETS, random);
     const loadGeneration = this.remyLoadGeneration;
 
@@ -2709,16 +2692,23 @@ export class Game {
           selectedAnimation,
           ...REMY_ANIMATION_ASSETS.filter((asset) => asset.id !== selectedAnimation.id),
         ];
-        const animationTargets = [
-          primarySetup.rig.animationTarget,
-          ...(secondarySetup ? [secondarySetup.rig.animationTarget] : []),
+        const animationTargets: RemyAnimationTargetBinding[] = [
+          {
+            model: primarySetup.rig.animationTarget,
+            role: "primary",
+            fallbackClips: primarySetup.animations,
+          },
+          ...(secondarySetup
+            ? [
+                {
+                  model: secondarySetup.rig.animationTarget,
+                  role: "secondary" as const,
+                  fallbackClips: secondarySetup.animations,
+                },
+              ]
+            : []),
         ];
-        this.loadRemyAnimationClip(
-          animationTargets,
-          primarySetup.animations,
-          animationCandidates,
-          loadGeneration,
-        );
+        this.loadRemyAnimationClip(animationTargets, animationCandidates, loadGeneration);
 
         this.placeRemyOnTopLedge();
       } catch (error) {
@@ -2818,8 +2808,7 @@ export class Game {
   }
 
   private loadRemyAnimationClip(
-    targetModels: readonly Object3D[],
-    fallbackClips: readonly AnimationClip[],
+    targets: readonly RemyAnimationTargetBinding[],
     animationCandidates: readonly RemyAnimationAsset[],
     loadGeneration: number,
     candidateIndex = 0,
@@ -2827,7 +2816,7 @@ export class Game {
     const animationCandidate = animationCandidates[candidateIndex];
     if (!animationCandidate) {
       this.remyIsLoading = false;
-      this.playRemyFallbackClip(targetModels, fallbackClips);
+      this.playRemyFallbackClip(targets);
       return;
     }
 
@@ -2846,21 +2835,21 @@ export class Game {
         }
 
         const preferredSourceClip = this.selectPreferredRemyClip(gltf.animations);
-        if (!preferredSourceClip || targetModels.length === 0) {
+        if (!preferredSourceClip || targets.length === 0) {
           dracoLoader.dispose();
-          this.loadRemyAnimationClip(targetModels, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
+          this.loadRemyAnimationClip(targets, animationCandidates, loadGeneration, candidateIndex + 1);
           return;
         }
 
         const animationSource = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
-        const clip = this.resolveRemyClipForTarget(targetModels[0]!, animationSource, preferredSourceClip);
-        if (!clip) {
+        const resolvedClips = targets.map((target) => this.resolveRemyClipForTarget(target.model, animationSource, preferredSourceClip));
+        if (!resolvedClips[0]) {
           dracoLoader.dispose();
-          this.loadRemyAnimationClip(targetModels, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
+          this.loadRemyAnimationClip(targets, animationCandidates, loadGeneration, candidateIndex + 1);
           return;
         }
 
-        this.playRemyClip(targetModels, clip);
+        this.playRemyClip(targets, resolvedClips);
         this.remyIsLoading = false;
         dracoLoader.dispose();
       },
@@ -2872,7 +2861,7 @@ export class Game {
         }
         console.warn(`Failed to load animation clip ${animationCandidate.id}.`, error);
         dracoLoader.dispose();
-        this.loadRemyAnimationClip(targetModels, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
+        this.loadRemyAnimationClip(targets, animationCandidates, loadGeneration, candidateIndex + 1);
       },
     );
   }
@@ -2929,15 +2918,13 @@ export class Game {
     return trackName.slice(0, lastDotIndex);
   }
 
-  private playRemyFallbackClip(targetModels: readonly Object3D[], clips: readonly AnimationClip[]): void {
-    const preferredClip = this.selectPreferredRemyClip(clips);
-    if (!preferredClip) {
-      this.remyMixer = null;
-      this.remySecondaryMixer = null;
-      return;
-    }
+  private playRemyFallbackClip(targets: readonly RemyAnimationTargetBinding[]): void {
+    const fallbackClips = targets.map((target) => {
+      const preferredClip = this.selectPreferredRemyClip(target.fallbackClips);
+      return preferredClip ? this.resolveRemyClipForTarget(target.model, target.model, preferredClip) : null;
+    });
 
-    this.playRemyClip(targetModels, this.stripScaleTracksFromClip(preferredClip));
+    this.playRemyClip(targets, fallbackClips);
   }
 
   private stripScaleTracksFromClip(clip: AnimationClip): AnimationClip {
@@ -2952,20 +2939,25 @@ export class Game {
     return sanitizedClip;
   }
 
-  private playRemyClip(targetModels: readonly Object3D[], clip: AnimationClip): void {
+  private playRemyClip(targets: readonly RemyAnimationTargetBinding[], clips: readonly (AnimationClip | null)[]): void {
     this.remyMixer = null;
     this.remySecondaryMixer = null;
 
-    targetModels.forEach((targetModel, index) => {
-      const mixer = new AnimationMixer(targetModel);
+    targets.forEach((target, index) => {
+      const clip = clips[index];
+      if (!clip) {
+        return;
+      }
+
+      const mixer = new AnimationMixer(target.model);
       const action = mixer.clipAction(clip);
       action.reset();
       action.setLoop(LoopPingPong, Number.POSITIVE_INFINITY);
       action.play();
 
-      if (index === 0) {
+      if (target.role === "primary") {
         this.remyMixer = mixer;
-      } else if (index === 1) {
+      } else if (target.role === "secondary") {
         this.remySecondaryMixer = mixer;
       }
     });
