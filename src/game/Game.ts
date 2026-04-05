@@ -90,9 +90,12 @@ import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import { createSeededRandom } from "./logic/random";
 import {
+  REMY_LEDGE_SPAWN_CHANCE,
   hasRecentTentacleBurstOnFace,
+  pickNonRepeatingIndex,
   shouldKeepCurrentRemyAnchor,
   shouldSpawnDualRemyCharacters,
+  shouldSpawnRemyOnLedge,
   shouldSpawnTentacleBurst,
   type TentacleBurstMarker,
 } from "./logic/remy";
@@ -433,6 +436,9 @@ const REMY_DUAL_SPAWN_MIN_SPREAD = 0.08;
 const REMY_DUAL_SPAWN_EDGE_PADDING = 0.04;
 const REMY_AUTO_UP_AXIS_DETECTION_ENABLED = true;
 const REMY_MODEL_ROTATION_OFFSET_Z = 0;
+const REMY_LEDGE_SPAWN_NOISE_LEVEL_MULTIPLIER = 1.53;
+const REMY_LEDGE_SPAWN_NOISE_LEVEL_OFFSET = 9.41;
+const REMY_LEDGE_SPAWN_NOISE_SALT_BASE = 13.73;
 const WORLD_UP_AXIS = new Vector3(0, 1, 0);
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
@@ -622,8 +628,10 @@ export class Game {
   private remyLoadGeneration = 0;
   private remySelectionSerial = 0;
   private remyCharacterRotationIndex = 0;
+  private remyLastAnimationIndex: number | null = null;
   private remyIsLoading = false;
   private remyRefreshPending = false;
+  private remyAppearanceRefreshPending = false;
   private activeBlockMotionPaused = false;
   private pauseBlockMotionButton: HTMLButtonElement | null = null;
 
@@ -1342,6 +1350,7 @@ export class Game {
     this.remyLoadGeneration += 1;
     this.remyIsLoading = false;
     this.remyRefreshPending = false;
+    this.remyAppearanceRefreshPending = false;
     this.detachRemyCharacter();
     this.remyCharacter = null;
     this.remyPoseRotateX = null;
@@ -1418,6 +1427,7 @@ export class Game {
     this.activeRemySecondaryCharacterId = null;
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
+    this.remyAppearanceRefreshPending = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
 
@@ -1563,9 +1573,6 @@ export class Game {
     this.activeSlab = null;
     this.activeMesh = null;
     this.oscillation = null;
-    if (!this.testMode.enabled) {
-      this.refreshRemyCharacterSelection();
-    }
     this.spawnNextActive();
     this.renderHud();
   }
@@ -2583,14 +2590,35 @@ export class Game {
     return shouldSpawnDualRemyCharacters(widthRatio);
   }
 
-  private pickRandomRemyAsset<T>(assets: readonly T[], random: () => number): T {
-    const index = Math.min(assets.length - 1, Math.floor(random() * assets.length));
-    return assets[index]!;
+  private drawNextRemyAnimationIndex(random: () => number): number {
+    const index = pickNonRepeatingIndex(REMY_ANIMATION_ASSETS.length, random(), this.remyLastAnimationIndex);
+    this.remyLastAnimationIndex = index;
+    return index;
+  }
+
+  private buildRemyAnimationCandidateOrder(selectedIndex: number, random: () => number): RemyAnimationAsset[] {
+    const fallbackIndices = REMY_ANIMATION_ASSETS
+      .map((_, index) => index)
+      .filter((index) => index !== selectedIndex);
+
+    for (let index = fallbackIndices.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(random() * (index + 1));
+      const current = fallbackIndices[index];
+      fallbackIndices[index] = fallbackIndices[swapIndex]!;
+      fallbackIndices[swapIndex] = current!;
+    }
+
+    const orderedIndices = [selectedIndex, ...fallbackIndices];
+    return orderedIndices
+      .map((index) => REMY_ANIMATION_ASSETS[index])
+      .filter((asset): asset is RemyAnimationAsset => Boolean(asset));
   }
 
   private refreshRemyCharacterSelection(): void {
     this.remyLoadGeneration += 1;
     this.remyIsLoading = false;
+    this.remyRefreshPending = false;
+    this.remyAppearanceRefreshPending = false;
     this.activeRemyCharacterId = null;
     this.activeRemySecondaryCharacterId = null;
     this.remyAnchor = null;
@@ -2629,7 +2657,8 @@ export class Game {
       secondaryCharacterIndex === null
         ? null
         : (REMY_CHARACTER_ASSETS[secondaryCharacterIndex] ?? null);
-    const selectedAnimation = this.pickRandomRemyAsset(REMY_ANIMATION_ASSETS, random);
+    const selectedAnimationIndex = this.drawNextRemyAnimationIndex(random);
+    const animationCandidates = this.buildRemyAnimationCandidateOrder(selectedAnimationIndex, random);
     const loadGeneration = this.remyLoadGeneration;
 
     const dracoLoader = new DRACOLoader();
@@ -2693,10 +2722,6 @@ export class Game {
         });
         this.updateRemyDebugValueLabels();
 
-        const animationCandidates = [
-          selectedAnimation,
-          ...REMY_ANIMATION_ASSETS.filter((asset) => asset.id !== selectedAnimation.id),
-        ];
         const animationTargets: RemyAnimationTargetBinding[] = [
           {
             model: primarySetup.rig.animationTarget,
@@ -3061,8 +3086,16 @@ export class Game {
       return;
     }
 
+    const hadAnchor = this.remyAnchor !== null;
     const shouldKeepCurrentAnchor = this.remyAnchor !== null && this.isRemyAnchorVisible(this.remyAnchor);
-    const anchor = shouldKeepCurrentAnchor && this.remyAnchor
+    if (hadAnchor && !shouldKeepCurrentAnchor) {
+      this.remyAnchor = null;
+      this.remySuppressedByTentacles = false;
+      this.remyAppearanceRefreshPending = true;
+      this.detachRemyCharacter();
+    }
+
+    const anchor = this.remyAnchor
       ? this.findLedgeAnchorByLevelAndFace(this.remyAnchor.level, this.remyAnchor.faceNoiseSalt)
       : this.findTopLedgeAnchor();
 
@@ -3074,7 +3107,19 @@ export class Game {
         this.refreshRemyCharacterSelection();
         return;
       }
+
+      const hasTopLedge = this.findTopLedgeAnchor(true) !== null;
+      if (hasTopLedge) {
+        this.detachRemyCharacter();
+        return;
+      }
+
       this.placeRemyAtTopFallback();
+      return;
+    }
+
+    if (this.remyAppearanceRefreshPending && !this.remyIsLoading) {
+      this.refreshRemyCharacterSelection();
       return;
     }
 
@@ -3325,16 +3370,28 @@ export class Game {
     }
   }
 
-  private findTopLedgeAnchor(): LedgeAnchor | null {
+  private isRemySpawnEligibleLedge(ledgeMesh: Mesh): boolean {
+    if (typeof ledgeMesh.userData.remySpawnEligible === "boolean") {
+      return ledgeMesh.userData.remySpawnEligible;
+    }
+
+    return true;
+  }
+
+  private findTopLedgeAnchor(includeIneligible = false): LedgeAnchor | null {
     const slab = this.landedSlabs[this.landedSlabs.length - 1];
     if (!slab) {
       return null;
     }
 
-    return this.findLedgeAnchorByLevelAndFace(slab.level, null);
+    return this.findLedgeAnchorByLevelAndFace(slab.level, null, includeIneligible);
   }
 
-  private findLedgeAnchorByLevelAndFace(level: number, faceNoiseSalt: number | null): LedgeAnchor | null {
+  private findLedgeAnchorByLevelAndFace(
+    level: number,
+    faceNoiseSalt: number | null,
+    includeIneligible = false,
+  ): LedgeAnchor | null {
     const slab = this.landedSlabs.find((candidate) => candidate.level === level);
     if (!slab) {
       return null;
@@ -3350,7 +3407,9 @@ export class Game {
         child instanceof Mesh &&
         child.userData.isLedge === true &&
         typeof child.userData.faceNoiseSalt === "number" &&
-        (faceNoiseSalt === null || child.userData.faceNoiseSalt === faceNoiseSalt),
+        (faceNoiseSalt !== null
+          ? child.userData.faceNoiseSalt === faceNoiseSalt
+          : includeIneligible || this.isRemySpawnEligibleLedge(child)),
     );
     if (!ledgeMesh) {
       return null;
@@ -4629,6 +4688,14 @@ export class Game {
     }
 
     const widthNoise = sampleDecorNoise(slab.level * 1.19 + face.noiseSalt, 8.37);
+    const remySpawnNoise = sampleDecorNoise(
+      slab.level * REMY_LEDGE_SPAWN_NOISE_LEVEL_MULTIPLIER + REMY_LEDGE_SPAWN_NOISE_LEVEL_OFFSET + face.noiseSalt,
+      REMY_LEDGE_SPAWN_NOISE_SALT_BASE + face.noiseSalt * 0.77,
+    );
+    const remySpawnEligible = shouldSpawnRemyOnLedge({
+      spawnNoise: remySpawnNoise,
+      spawnChance: REMY_LEDGE_SPAWN_CHANCE,
+    });
     const { widthRatio, ledgeWidth, ledgeHeight, ledgeDepth, lipHeight, lipDepth } = resolveLedgeDimensions(
       face.span,
       slab.dimensions.height,
@@ -4673,6 +4740,7 @@ export class Game {
     ledge.userData.faceNoiseSalt = face.noiseSalt;
     ledge.userData.faceId = face.id;
     ledge.userData.slabLevel = slab.level;
+    ledge.userData.remySpawnEligible = remySpawnEligible;
 
     const shouldAnimate = slab.level >= this.startingStackLevels;
     if (shouldAnimate) {

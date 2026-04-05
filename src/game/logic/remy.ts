@@ -17,7 +17,13 @@ export interface TentacleSpawnCheck {
   burstChance: number;
 }
 
+export interface RemyLedgeSpawnCheck {
+  spawnNoise: number;
+  spawnChance: number;
+}
+
 export const REMY_DUAL_SPAWN_WIDTH_RATIO = 0.75;
+export const REMY_LEDGE_SPAWN_CHANCE = 0.5;
 
 export function shouldKeepCurrentRemyAnchor(visibility: RemyAnchorVisibility): boolean {
   return (
@@ -48,12 +54,26 @@ export function hasRecentTentacleBurstOnFace(
   });
 }
 
-export function shouldSpawnTentacleBurst(check: TentacleSpawnCheck): boolean {
-  const burstChance = Math.min(1, Math.max(0, check.burstChance));
-  const placementNoise = Number.isFinite(check.placementNoise)
-    ? Math.min(1, Math.max(0, check.placementNoise))
+function clampProbability(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function normalizeNoise(noise: number): number {
+  return Number.isFinite(noise)
+    ? clampProbability(noise)
     : 1;
+}
+
+export function shouldSpawnTentacleBurst(check: TentacleSpawnCheck): boolean {
+  const burstChance = clampProbability(check.burstChance);
+  const placementNoise = normalizeNoise(check.placementNoise);
   return placementNoise < burstChance;
+}
+
+export function shouldSpawnRemyOnLedge(check: RemyLedgeSpawnCheck): boolean {
+  const spawnChance = clampProbability(check.spawnChance);
+  const spawnNoise = normalizeNoise(check.spawnNoise);
+  return spawnNoise < spawnChance;
 }
 
 export function shouldSpawnDualRemyCharacters(widthRatio: number, threshold = REMY_DUAL_SPAWN_WIDTH_RATIO): boolean {

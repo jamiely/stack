@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  REMY_LEDGE_SPAWN_CHANCE,
   hasRecentTentacleBurstOnFace,
   pickNonRepeatingIndex,
   shouldKeepCurrentRemyAnchor,
   shouldSpawnDualRemyCharacters,
+  shouldSpawnRemyOnLedge,
   shouldSpawnTentacleBurst,
   type TentacleBurstMarker,
 } from "../../src/game/logic/remy";
@@ -60,6 +62,47 @@ describe("shouldSpawnDualRemyCharacters", () => {
   it("rejects invalid ratios", () => {
     expect(shouldSpawnDualRemyCharacters(Number.NaN)).toBe(false);
     expect(shouldSpawnDualRemyCharacters(Number.POSITIVE_INFINITY)).toBe(false);
+  });
+});
+
+describe("shouldSpawnRemyOnLedge", () => {
+  it("defaults to a 50% spawn gate for eligible ledges", () => {
+    expect(
+      shouldSpawnRemyOnLedge({
+        spawnNoise: 0.49,
+        spawnChance: REMY_LEDGE_SPAWN_CHANCE,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldSpawnRemyOnLedge({
+        spawnNoise: 0.5,
+        spawnChance: REMY_LEDGE_SPAWN_CHANCE,
+      }),
+    ).toBe(false);
+  });
+
+  it("clamps invalid chance/noise inputs", () => {
+    expect(
+      shouldSpawnRemyOnLedge({
+        spawnNoise: Number.NaN,
+        spawnChance: 1,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldSpawnRemyOnLedge({
+        spawnNoise: 0,
+        spawnChance: -2,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldSpawnRemyOnLedge({
+        spawnNoise: 0.99,
+        spawnChance: 3,
+      }),
+    ).toBe(true);
   });
 });
 
