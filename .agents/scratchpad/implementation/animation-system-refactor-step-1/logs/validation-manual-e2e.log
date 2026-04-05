@@ -1,0 +1,10 @@
+Action 1 PASS: app booted in test/debug/paused seed mode with no runtime page errors
+Action 2 PASS: paused stepping moved incrementally (d1=0.0457, d2=0.0457)
+Action 3 PASS: forced miss transitioned to game_over
+Action 4 PASS: space restart returned to playing with score reset
+Adversarial PASS: repeated paused miss/restart cycles remained stable (no crash/stuck/reset issues)
+Note: captured 3 console error(s) during scenario:
+  [1] THREE.WebGLRenderer: A WebGL context could not be created. Reason:  Could not create a WebGL context, VENDOR = 0xffff, DEVICE = 0xffff, GL_VENDOR = Google Inc. (Google), GL_RENDERER = ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0), GL_VERSION = 5.0.0, Sandboxed = no, Optimus = no, AMD switchable = no, Reset notification strategy = 0x8252, ErrorMessage = BindToCurrentSequence failed: .
+  [2] THREE.WebGLRenderer: A WebGL context could not be created. Reason:  Could not create a WebGL context, VENDOR = 0xffff, DEVICE = 0xffff, GL_VENDOR = Google Inc. (Google), GL_RENDERER = ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0), GL_VERSION = 5.0.0, Sandboxed = no, Optimus = no, AMD switchable = no, Reset notification strategy = 0x8252, ErrorMessage = BindToCurrentSequence failed: .
+  [3] THREE.WebGLRenderer: Error creating WebGL context.
+Manual E2E scenario PASS
