@@ -280,7 +280,16 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   tremorShakeAmount: { min: 0, max: 3, step: 0.05, label: "Tremor Y Shake" },
 };
 
-const REMY_DEBUG_DEFAULTS: RemyDebugConfig = {
+const REMY_LEGACY_DEBUG_DEFAULTS: RemyDebugConfig = {
+  yawDegrees: -9,
+  pitchDegrees: -7,
+  rollDegrees: 89,
+  translateX: 0,
+  translateY: 0.85,
+  translateZ: 0,
+};
+
+const REMY_NON_REMY_DEBUG_DEFAULTS: RemyDebugConfig = {
   yawDegrees: -180,
   pitchDegrees: 180,
   rollDegrees: 180,
@@ -289,14 +298,14 @@ const REMY_DEBUG_DEFAULTS: RemyDebugConfig = {
   translateZ: 0,
 };
 
-const REMY_TEST_MODE_DEBUG_DEFAULTS: RemyDebugConfig = {
-  yawDegrees: -9,
-  pitchDegrees: -7,
-  rollDegrees: 89,
-  translateX: 0,
-  translateY: 0.85,
-  translateZ: 0,
+const REMY_CHARACTER_DEBUG_DEFAULTS: Record<string, RemyDebugConfig> = {
+  remy: REMY_LEGACY_DEBUG_DEFAULTS,
+  timmy: REMY_NON_REMY_DEBUG_DEFAULTS,
+  amy: REMY_NON_REMY_DEBUG_DEFAULTS,
+  aj: REMY_NON_REMY_DEBUG_DEFAULTS,
 };
+
+const REMY_TEST_MODE_DEBUG_DEFAULTS: RemyDebugConfig = REMY_LEGACY_DEBUG_DEFAULTS;
 
 const REMY_DEBUG_RANGES: Record<RemyDebugKey, { min: number; max: number; step: number; label: string; suffix?: string }> = {
   yawDegrees: { min: -180, max: 180, step: 1, label: "Remy Rot Y", suffix: "°" },
@@ -569,7 +578,9 @@ export class Game {
   private remyMixer: AnimationMixer | null = null;
   private remyBaseHeight = 1;
   private remyBaseDepth = 1;
-  private remyDebugConfig: RemyDebugConfig = { ...REMY_DEBUG_DEFAULTS };
+  private remyDebugConfig: RemyDebugConfig = { ...REMY_LEGACY_DEBUG_DEFAULTS };
+  private activeRemyCharacterId: string | null = null;
+  private readonly remyCharacterDebugConfigs = new Map<string, RemyDebugConfig>();
   private remyAnchor: RemyAnchor | null = null;
   private remySuppressedByTentacles = false;
   private remyLoadGeneration = 0;
@@ -1028,7 +1039,7 @@ export class Game {
     resetButton.dataset.testid = "debug-reset-remy-placement";
     resetButton.textContent = "Reset Remy Placement";
     resetButton.addEventListener("click", () => {
-      this.applyRemyDebugConfig(this.getDefaultRemyDebugConfig());
+      this.applyRemyDebugConfig(this.resolveBaseRemyDebugConfig());
     });
 
     section.append(resetButton);
@@ -1036,8 +1047,27 @@ export class Game {
     return section;
   }
 
-  private getDefaultRemyDebugConfig(): RemyDebugConfig {
-    return this.testMode.enabled ? { ...REMY_TEST_MODE_DEBUG_DEFAULTS } : { ...REMY_DEBUG_DEFAULTS };
+  private resolveBaseRemyDebugConfig(characterId: string | null = this.activeRemyCharacterId): RemyDebugConfig {
+    if (this.testMode.enabled) {
+      return { ...REMY_TEST_MODE_DEBUG_DEFAULTS };
+    }
+
+    if (characterId && REMY_CHARACTER_DEBUG_DEFAULTS[characterId]) {
+      return { ...REMY_CHARACTER_DEBUG_DEFAULTS[characterId] };
+    }
+
+    return { ...REMY_LEGACY_DEBUG_DEFAULTS };
+  }
+
+  private getDefaultRemyDebugConfig(characterId: string | null = this.activeRemyCharacterId): RemyDebugConfig {
+    if (characterId) {
+      const storedConfig = this.remyCharacterDebugConfigs.get(characterId);
+      if (storedConfig) {
+        return { ...storedConfig };
+      }
+    }
+
+    return this.resolveBaseRemyDebugConfig(characterId);
   }
 
   private applyRemyDebugConfig(config: Partial<RemyDebugConfig>): void {
@@ -1045,6 +1075,10 @@ export class Game {
       ...this.remyDebugConfig,
       ...config,
     };
+
+    if (this.activeRemyCharacterId) {
+      this.remyCharacterDebugConfigs.set(this.activeRemyCharacterId, { ...this.remyDebugConfig });
+    }
 
     this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]").forEach((input) => {
       const key = input.dataset.remyDebugKey as RemyDebugKey | undefined;
@@ -1336,6 +1370,7 @@ export class Game {
       config: this.buildFireworksSimulationConfig(),
     });
     this.tentacleBurstKeys = [];
+    this.activeRemyCharacterId = null;
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
@@ -1361,7 +1396,10 @@ export class Game {
     const initialTargetY = initialFocusY + this.debugConfig.cameraHeight;
     this.cameraTargetPosition.set(CAMERA_X, initialTargetY, this.debugConfig.cameraDistance);
     this.cameraLookAtY = Math.max(1.2, initialFocusY);
-    this.loadRemyCharacter();
+
+    if (!this.testMode.enabled) {
+      this.loadRemyCharacter();
+    }
   }
 
   private spawnNextActive(): void {
@@ -2477,6 +2515,7 @@ export class Game {
   private refreshRemyCharacterSelection(): void {
     this.remyLoadGeneration += 1;
     this.remyIsLoading = false;
+    this.activeRemyCharacterId = null;
     this.detachRemyCharacter();
     this.remyCharacter = null;
     this.remyPoseRotateX = null;
@@ -2561,6 +2600,17 @@ export class Game {
         this.remyPoseRotateZ = poseRotateZ;
         this.remyBaseHeight = modelSize.y;
         this.remyBaseDepth = Math.max(modelSize.x, modelSize.z);
+        this.activeRemyCharacterId = selectedCharacter.id;
+        this.remyDebugConfig = this.getDefaultRemyDebugConfig(selectedCharacter.id);
+        this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]").forEach((input) => {
+          const key = input.dataset.remyDebugKey as RemyDebugKey | undefined;
+          if (!key) {
+            return;
+          }
+
+          input.value = String(this.remyDebugConfig[key]);
+        });
+        this.updateRemyDebugValueLabels();
         const animationCandidates = [
           selectedAnimation,
           ...REMY_ANIMATION_ASSETS.filter((asset) => asset.id !== selectedAnimation.id),
