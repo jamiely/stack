@@ -1563,6 +1563,9 @@ export class Game {
     this.activeSlab = null;
     this.activeMesh = null;
     this.oscillation = null;
+    if (!this.testMode.enabled) {
+      this.refreshRemyCharacterSelection();
+    }
     this.spawnNextActive();
     this.renderHud();
   }
@@ -2590,6 +2593,8 @@ export class Game {
     this.remyIsLoading = false;
     this.activeRemyCharacterId = null;
     this.activeRemySecondaryCharacterId = null;
+    this.remyAnchor = null;
+    this.remySuppressedByTentacles = false;
     this.detachRemyCharacter();
     this.remyCharacter = null;
     this.remyPoseRotateX = null;
