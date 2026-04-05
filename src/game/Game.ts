@@ -281,6 +281,15 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
 };
 
 const REMY_DEBUG_DEFAULTS: RemyDebugConfig = {
+  yawDegrees: -180,
+  pitchDegrees: 180,
+  rollDegrees: 180,
+  translateX: 0,
+  translateY: 0.85,
+  translateZ: 0,
+};
+
+const REMY_TEST_MODE_DEBUG_DEFAULTS: RemyDebugConfig = {
   yawDegrees: -9,
   pitchDegrees: -7,
   rollDegrees: 89,
@@ -576,6 +585,7 @@ export class Game {
     this.debugEnabled = new URLSearchParams(query).has("debug");
     this.testMode = readTestModeOptions(query);
     this.simulationPaused = this.testMode.enabled && this.testMode.startPaused;
+    this.remyDebugConfig = this.getDefaultRemyDebugConfig();
 
     this.shell = document.createElement("div");
     this.shell.className = "game-shell";
@@ -1018,12 +1028,16 @@ export class Game {
     resetButton.dataset.testid = "debug-reset-remy-placement";
     resetButton.textContent = "Reset Remy Placement";
     resetButton.addEventListener("click", () => {
-      this.applyRemyDebugConfig({ ...REMY_DEBUG_DEFAULTS });
+      this.applyRemyDebugConfig(this.getDefaultRemyDebugConfig());
     });
 
     section.append(resetButton);
     this.updateRemyDebugValueLabels();
     return section;
+  }
+
+  private getDefaultRemyDebugConfig(): RemyDebugConfig {
+    return this.testMode.enabled ? { ...REMY_TEST_MODE_DEBUG_DEFAULTS } : { ...REMY_DEBUG_DEFAULTS };
   }
 
   private applyRemyDebugConfig(config: Partial<RemyDebugConfig>): void {
@@ -2630,7 +2644,7 @@ export class Game {
 
   private resolveRemyClipForTarget(targetModel: Object3D, sourceRig: Object3D, clip: AnimationClip): AnimationClip | null {
     if (this.isClipCompatibleWithModel(targetModel, clip)) {
-      return clip;
+      return this.stripScaleTracksFromClip(clip);
     }
 
     const retargetedClip = this.tryRetargetRemyClip(targetModel, sourceRig, clip);
@@ -2638,7 +2652,9 @@ export class Game {
       return null;
     }
 
-    return this.isClipCompatibleWithModel(targetModel, retargetedClip) ? retargetedClip : null;
+    return this.isClipCompatibleWithModel(targetModel, retargetedClip)
+      ? this.stripScaleTracksFromClip(retargetedClip)
+      : null;
   }
 
   private isClipCompatibleWithModel(targetModel: Object3D, clip: AnimationClip): boolean {
@@ -2685,7 +2701,19 @@ export class Game {
       return;
     }
 
-    this.playRemyClip(targetModel, preferredClip);
+    this.playRemyClip(targetModel, this.stripScaleTracksFromClip(preferredClip));
+  }
+
+  private stripScaleTracksFromClip(clip: AnimationClip): AnimationClip {
+    const nonScaleTracks = clip.tracks.filter((track) => !/\.scale(?:\[\d+\])?$/.test(track.name));
+    if (nonScaleTracks.length === clip.tracks.length || nonScaleTracks.length === 0) {
+      return clip;
+    }
+
+    const sanitizedClip = clip.clone();
+    sanitizedClip.tracks = nonScaleTracks.map((track) => track.clone());
+    sanitizedClip.resetDuration();
+    return sanitizedClip;
   }
 
   private playRemyClip(targetModel: Object3D, clip: AnimationClip): void {
