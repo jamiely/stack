@@ -91,7 +91,6 @@ import { initializeFireworksState, stepFireworksState, type FireworksConfig, typ
 import { createSeededRandom } from "./logic/random";
 import {
   hasRecentTentacleBurstOnFace,
-  pickNonRepeatingIndex,
   shouldKeepCurrentRemyAnchor,
   shouldSpawnDualRemyCharacters,
   shouldSpawnTentacleBurst,
@@ -598,6 +597,7 @@ export class Game {
   private remyLoadGeneration = 0;
   private remySelectionSerial = 0;
   private lastRemyCharacterIndex: number | null = null;
+  private remyCharacterCycleIndices: number[] = [];
   private remyIsLoading = false;
   private remyRefreshPending = false;
   private activeBlockMotionPaused = false;
@@ -1392,6 +1392,7 @@ export class Game {
     this.tentacleBurstKeys = [];
     this.activeRemyCharacterId = null;
     this.lastRemyCharacterIndex = null;
+    this.remyCharacterCycleIndices = [];
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
@@ -2529,29 +2530,54 @@ export class Game {
     return createSeededRandom(derivedSeed);
   }
 
-  private getRemyCharacterIndex(characterId: string | null): number | null {
-    if (!characterId) {
-      return null;
+  private refillRemyCharacterCycle(random: () => number, avoidFirstIndex: number | null): void {
+    if (REMY_CHARACTER_ASSETS.length <= 0) {
+      return;
     }
 
-    const index = REMY_CHARACTER_ASSETS.findIndex((asset) => asset.id === characterId);
-    return index >= 0 ? index : null;
+    const indices = Array.from({ length: REMY_CHARACTER_ASSETS.length }, (_, index) => index);
+    for (let index = indices.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(random() * (index + 1));
+      const currentValue = indices[index]!;
+      indices[index] = indices[swapIndex]!;
+      indices[swapIndex] = currentValue;
+    }
+
+    if (
+      avoidFirstIndex !== null &&
+      indices.length > 1 &&
+      indices[0] === avoidFirstIndex
+    ) {
+      const safeSwapIndex = indices.findIndex((candidate) => candidate !== avoidFirstIndex);
+      if (safeSwapIndex > 0) {
+        const firstValue = indices[0]!;
+        indices[0] = indices[safeSwapIndex]!;
+        indices[safeSwapIndex] = firstValue;
+      }
+    }
+
+    this.remyCharacterCycleIndices.push(...indices);
   }
 
-  private pickRandomRemyCharacterAsset(random: () => number): { asset: RemyCharacterAsset; index: number } {
-    const index = pickNonRepeatingIndex(REMY_CHARACTER_ASSETS.length, random(), this.lastRemyCharacterIndex);
-    return {
-      asset: REMY_CHARACTER_ASSETS[index]!,
-      index,
-    };
-  }
+  private drawRemyCharacterIndices(random: () => number, requestedCount: number): number[] {
+    const count = Math.max(1, Math.floor(requestedCount));
+    const selectedIndices: number[] = [];
+    for (let index = 0; index < count; index += 1) {
+      if (this.remyCharacterCycleIndices.length === 0) {
+        const avoidFirstIndex = selectedIndices[selectedIndices.length - 1] ?? this.lastRemyCharacterIndex;
+        this.refillRemyCharacterCycle(random, avoidFirstIndex ?? null);
+      }
 
-  private pickDistinctRemyCharacterAsset(random: () => number, excludedIndex: number): { asset: RemyCharacterAsset; index: number } {
-    const index = pickNonRepeatingIndex(REMY_CHARACTER_ASSETS.length, random(), excludedIndex);
-    return {
-      asset: REMY_CHARACTER_ASSETS[index]!,
-      index,
-    };
+      const nextIndex = this.remyCharacterCycleIndices.shift();
+      if (typeof nextIndex !== "number") {
+        continue;
+      }
+
+      selectedIndices.push(nextIndex);
+      this.lastRemyCharacterIndex = nextIndex;
+    }
+
+    return selectedIndices;
   }
 
   private pickRandomRemyAsset<T>(assets: readonly T[], random: () => number): T {
@@ -2562,7 +2588,6 @@ export class Game {
   private refreshRemyCharacterSelection(): void {
     this.remyLoadGeneration += 1;
     this.remyIsLoading = false;
-    this.lastRemyCharacterIndex = this.getRemyCharacterIndex(this.activeRemyCharacterId) ?? this.lastRemyCharacterIndex;
     this.activeRemyCharacterId = null;
     this.detachRemyCharacter();
     this.remyCharacter = null;
@@ -2590,10 +2615,13 @@ export class Game {
     this.remyIsLoading = true;
     this.remySelectionSerial += 1;
     const random = this.createRemySelectionRandom();
-    const selectedCharacterChoice = this.pickRandomRemyCharacterAsset(random);
-    const selectedCharacter = selectedCharacterChoice.asset;
-    const secondaryCharacterChoice = this.pickDistinctRemyCharacterAsset(random, selectedCharacterChoice.index);
-    const secondaryCharacter = secondaryCharacterChoice.asset;
+    const primaryCharacterIndex = this.drawRemyCharacterIndices(random, 1)[0] ?? 0;
+    const selectedCharacter = REMY_CHARACTER_ASSETS[primaryCharacterIndex] ?? REMY_CHARACTER_ASSETS[0]!;
+    const secondaryCharacterPool = REMY_CHARACTER_ASSETS.filter((_, index) => index !== primaryCharacterIndex);
+    const secondaryCharacter =
+      secondaryCharacterPool.length > 0
+        ? this.pickRandomRemyAsset(secondaryCharacterPool, random)
+        : null;
     const selectedAnimation = this.pickRandomRemyAsset(REMY_ANIMATION_ASSETS, random);
     const loadGeneration = this.remyLoadGeneration;
 
@@ -2617,15 +2645,17 @@ export class Game {
         }
 
         let secondarySetup: ReturnType<typeof this.buildRemyRigFromLoadedCharacter> = null;
-        try {
-          const secondaryGltf = await loader.loadAsync(secondaryCharacter.modelUrl);
-          if (loadGeneration !== this.remyLoadGeneration) {
-            return;
-          }
+        if (secondaryCharacter) {
+          try {
+            const secondaryGltf = await loader.loadAsync(secondaryCharacter.modelUrl);
+            if (loadGeneration !== this.remyLoadGeneration) {
+              return;
+            }
 
-          secondarySetup = this.buildRemyRigFromLoadedCharacter(secondaryGltf, secondaryCharacter.id, "secondary");
-        } catch (error) {
-          console.warn(`Failed to load secondary character model ${secondaryCharacter.id}.`, error);
+            secondarySetup = this.buildRemyRigFromLoadedCharacter(secondaryGltf, secondaryCharacter.id, "secondary");
+          } catch (error) {
+            console.warn(`Failed to load secondary character model ${secondaryCharacter.id}.`, error);
+          }
         }
 
         this.remyCharacter = primarySetup.rig.characterRoot;
@@ -2644,7 +2674,6 @@ export class Game {
         this.remySecondaryBaseDepth = secondarySetup?.baseDepth ?? primarySetup.baseDepth;
 
         this.activeRemyCharacterId = selectedCharacter.id;
-        this.lastRemyCharacterIndex = selectedCharacterChoice.index;
         this.remyDebugConfig = this.getDefaultRemyDebugConfig(selectedCharacter.id);
         this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]").forEach((input) => {
           const key = input.dataset.remyDebugKey as RemyDebugKey | undefined;
