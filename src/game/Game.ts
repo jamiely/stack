@@ -2655,13 +2655,27 @@ export class Game {
 
     let matchedTracks = 0;
     clip.tracks.forEach((track) => {
-      const [targetName] = track.name.split(".");
+      const targetName = this.readTrackTargetName(track.name);
       if (targetName && targetNodeNames.has(targetName)) {
         matchedTracks += 1;
       }
     });
 
     return matchedTracks > 0;
+  }
+
+  private readTrackTargetName(trackName: string): string | null {
+    const knownPropertyMatch = trackName.match(/^(.*)\.(position|quaternion|scale|morphTargetInfluences)(?:\[\d+\])?$/);
+    if (knownPropertyMatch?.[1]) {
+      return knownPropertyMatch[1];
+    }
+
+    const lastDotIndex = trackName.lastIndexOf(".");
+    if (lastDotIndex <= 0) {
+      return null;
+    }
+
+    return trackName.slice(0, lastDotIndex);
   }
 
   private playRemyFallbackClip(targetModel: Object3D, clips: readonly AnimationClip[]): void {
