@@ -290,7 +290,25 @@ const REMY_LEGACY_DEBUG_DEFAULTS: RemyDebugConfig = {
   translateZ: 0,
 };
 
-const REMY_NON_REMY_DEBUG_DEFAULTS: RemyDebugConfig = {
+const REMY_TIMMY_DEBUG_DEFAULTS: RemyDebugConfig = {
+  yawDegrees: -180,
+  pitchDegrees: 180,
+  rollDegrees: 180,
+  translateX: 0,
+  translateY: 0.85,
+  translateZ: 0,
+};
+
+const REMY_AMY_DEBUG_DEFAULTS: RemyDebugConfig = {
+  yawDegrees: -180,
+  pitchDegrees: 180,
+  rollDegrees: 180,
+  translateX: 0,
+  translateY: 0.85,
+  translateZ: 0,
+};
+
+const REMY_AJ_DEBUG_DEFAULTS: RemyDebugConfig = {
   yawDegrees: -180,
   pitchDegrees: 180,
   rollDegrees: 180,
@@ -301,9 +319,9 @@ const REMY_NON_REMY_DEBUG_DEFAULTS: RemyDebugConfig = {
 
 const REMY_CHARACTER_DEBUG_DEFAULTS: Record<string, RemyDebugConfig> = {
   remy: REMY_LEGACY_DEBUG_DEFAULTS,
-  timmy: REMY_NON_REMY_DEBUG_DEFAULTS,
-  amy: REMY_NON_REMY_DEBUG_DEFAULTS,
-  aj: REMY_NON_REMY_DEBUG_DEFAULTS,
+  timmy: REMY_TIMMY_DEBUG_DEFAULTS,
+  amy: REMY_AMY_DEBUG_DEFAULTS,
+  aj: REMY_AJ_DEBUG_DEFAULTS,
 };
 
 const REMY_TEST_MODE_DEBUG_DEFAULTS: RemyDebugConfig = REMY_LEGACY_DEBUG_DEFAULTS;
@@ -591,6 +609,7 @@ export class Game {
   private remySecondaryBaseDepth = 1;
   private remyDebugConfig: RemyDebugConfig = { ...REMY_LEGACY_DEBUG_DEFAULTS };
   private activeRemyCharacterId: string | null = null;
+  private activeRemySecondaryCharacterId: string | null = null;
   private readonly remyCharacterDebugConfigs = new Map<string, RemyDebugConfig>();
   private remyAnchor: RemyAnchor | null = null;
   private remySuppressedByTentacles = false;
@@ -1391,8 +1410,7 @@ export class Game {
     });
     this.tentacleBurstKeys = [];
     this.activeRemyCharacterId = null;
-    this.lastRemyCharacterIndex = null;
-    this.remyCharacterCycleIndices = [];
+    this.activeRemySecondaryCharacterId = null;
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
@@ -2589,6 +2607,7 @@ export class Game {
     this.remyLoadGeneration += 1;
     this.remyIsLoading = false;
     this.activeRemyCharacterId = null;
+    this.activeRemySecondaryCharacterId = null;
     this.detachRemyCharacter();
     this.remyCharacter = null;
     this.remyPoseRotateX = null;
@@ -2674,6 +2693,7 @@ export class Game {
         this.remySecondaryBaseDepth = secondarySetup?.baseDepth ?? primarySetup.baseDepth;
 
         this.activeRemyCharacterId = selectedCharacter.id;
+        this.activeRemySecondaryCharacterId = secondarySetup ? secondaryCharacter?.id ?? null : null;
         this.remyDebugConfig = this.getDefaultRemyDebugConfig(selectedCharacter.id);
         this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]").forEach((input) => {
           const key = input.dataset.remyDebugKey as RemyDebugKey | undefined;
@@ -3098,18 +3118,20 @@ export class Game {
     const laneOffsets = this.resolveRemyLaneOffsets(ledgeMesh, useDualCharacters);
 
     const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, slab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
-
-    this.applyRemyDebugRotation(
-      sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees,
-      sidePose.yawDegrees + this.remyDebugConfig.yawDegrees,
-      sidePose.rollDegrees + this.remyDebugConfig.rollDegrees,
-    );
+    const primaryPlacementConfig = this.remyDebugConfig;
+    const secondaryPlacementConfig = this.activeRemySecondaryCharacterId
+      ? this.getDefaultRemyDebugConfig(this.activeRemySecondaryCharacterId)
+      : { ...REMY_TIMMY_DEBUG_DEFAULTS };
 
     const placeCharacter = (
       character: Group | null,
       laneOffset: number,
       baseHeight: number,
       baseDepth: number,
+      poseRotateX: Group | null,
+      poseRotateY: Group | null,
+      poseRotateZ: Group | null,
+      placementConfig: RemyDebugConfig,
     ): void => {
       if (!character) {
         return;
@@ -3120,11 +3142,20 @@ export class Game {
       const overlapIntoWall = Math.max(0, (scaledRemyDepth - ledgeDepth) / 2);
       const outwardOffset = ledgeDepth * REMY_LEDGE_INSET_RATIO + overlapIntoWall + REMY_WALL_CLEARANCE;
 
+      this.applyRemyDebugRotation(
+        poseRotateX,
+        poseRotateY,
+        poseRotateZ,
+        sidePose.pitchDegrees + placementConfig.pitchDegrees,
+        sidePose.yawDegrees + placementConfig.yawDegrees,
+        sidePose.rollDegrees + placementConfig.rollDegrees,
+      );
+
       character.scale.setScalar(uniformScale);
       const insetOffset = new Vector3(
-        laneOffset + sidePose.translateX + this.remyDebugConfig.translateX,
-        sidePose.translateY + this.remyDebugConfig.translateY,
-        outwardOffset + sidePose.translateZ + this.remyDebugConfig.translateZ,
+        laneOffset + sidePose.translateX + placementConfig.translateX,
+        sidePose.translateY + placementConfig.translateY,
+        outwardOffset + sidePose.translateZ + placementConfig.translateZ,
       ).applyAxisAngle(WORLD_UP_AXIS, ledgeMesh.rotation.y);
 
       character.position.set(
@@ -3136,7 +3167,16 @@ export class Game {
       slabMesh.add(character);
     };
 
-    placeCharacter(this.remyCharacter, laneOffsets[0] ?? 0, this.remyBaseHeight, this.remyBaseDepth);
+    placeCharacter(
+      this.remyCharacter,
+      laneOffsets[0] ?? 0,
+      this.remyBaseHeight,
+      this.remyBaseDepth,
+      this.remyPoseRotateX,
+      this.remyPoseRotateY,
+      this.remyPoseRotateZ,
+      primaryPlacementConfig,
+    );
 
     if (useDualCharacters && this.remySecondaryCharacter && laneOffsets.length > 1) {
       placeCharacter(
@@ -3144,6 +3184,10 @@ export class Game {
         laneOffsets[1]!,
         this.remySecondaryBaseHeight,
         this.remySecondaryBaseDepth,
+        this.remySecondaryPoseRotateX,
+        this.remySecondaryPoseRotateY,
+        this.remySecondaryPoseRotateZ,
+        secondaryPlacementConfig,
       );
     } else if (this.remySecondaryCharacter?.parent) {
       this.remySecondaryCharacter.parent.remove(this.remySecondaryCharacter);
@@ -3213,13 +3257,17 @@ export class Game {
     return [-spread, spread];
   }
 
-  private applyRemyDebugRotation(pitchDegrees: number, yawDegrees: number, rollDegrees: number): void {
-    this.remyPoseRotateX?.rotation.set(this.toRadians(pitchDegrees), 0, 0);
-    this.remyPoseRotateY?.rotation.set(0, this.toRadians(yawDegrees), 0);
-    this.remyPoseRotateZ?.rotation.set(0, 0, this.toRadians(rollDegrees));
-    this.remySecondaryPoseRotateX?.rotation.set(this.toRadians(pitchDegrees), 0, 0);
-    this.remySecondaryPoseRotateY?.rotation.set(0, this.toRadians(yawDegrees), 0);
-    this.remySecondaryPoseRotateZ?.rotation.set(0, 0, this.toRadians(rollDegrees));
+  private applyRemyDebugRotation(
+    poseRotateX: Group | null,
+    poseRotateY: Group | null,
+    poseRotateZ: Group | null,
+    pitchDegrees: number,
+    yawDegrees: number,
+    rollDegrees: number,
+  ): void {
+    poseRotateX?.rotation.set(this.toRadians(pitchDegrees), 0, 0);
+    poseRotateY?.rotation.set(0, this.toRadians(yawDegrees), 0);
+    poseRotateZ?.rotation.set(0, 0, this.toRadians(rollDegrees));
   }
 
   private readRemyFaceId(ledgeMesh: Mesh): FaceId | null {
@@ -3266,6 +3314,9 @@ export class Game {
     );
     this.remyCharacter.rotation.set(0, REMY_ROTATION_OFFSET_Y, 0);
     this.applyRemyDebugRotation(
+      this.remyPoseRotateX,
+      this.remyPoseRotateY,
+      this.remyPoseRotateZ,
       sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees,
       sidePose.yawDegrees + this.remyDebugConfig.yawDegrees,
       sidePose.rollDegrees + this.remyDebugConfig.rollDegrees,
