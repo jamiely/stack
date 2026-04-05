@@ -2547,7 +2547,11 @@ export class Game {
         this.remyPoseRotateZ = poseRotateZ;
         this.remyBaseHeight = modelSize.y;
         this.remyBaseDepth = Math.max(modelSize.x, modelSize.z);
-        this.loadRemyAnimationClip(model, gltf.animations, selectedAnimation.animationUrl, loadGeneration, selectedAnimation.id);
+        const animationCandidates = [
+          selectedAnimation,
+          ...REMY_ANIMATION_ASSETS.filter((asset) => asset.id !== selectedAnimation.id),
+        ];
+        this.loadRemyAnimationClip(model, gltf.animations, animationCandidates, loadGeneration);
         this.placeRemyOnTopLedge();
         dracoLoader.dispose();
       },
@@ -2567,10 +2571,17 @@ export class Game {
   private loadRemyAnimationClip(
     targetModel: Object3D,
     fallbackClips: readonly AnimationClip[],
-    animationUrl: string,
+    animationCandidates: readonly RemyAnimationAsset[],
     loadGeneration: number,
-    animationId: string,
+    candidateIndex = 0,
   ): void {
+    const animationCandidate = animationCandidates[candidateIndex];
+    if (!animationCandidate) {
+      this.remyIsLoading = false;
+      this.playRemyFallbackClip(targetModel, fallbackClips);
+      return;
+    }
+
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
 
@@ -2578,7 +2589,7 @@ export class Game {
     animationLoader.setDRACOLoader(dracoLoader);
 
     animationLoader.load(
-      animationUrl,
+      animationCandidate.animationUrl,
       (gltf) => {
         if (loadGeneration !== this.remyLoadGeneration) {
           dracoLoader.dispose();
@@ -2587,14 +2598,19 @@ export class Game {
 
         const preferredSourceClip = this.selectPreferredRemyClip(gltf.animations);
         if (!preferredSourceClip) {
-          this.remyIsLoading = false;
-          this.playRemyFallbackClip(targetModel, fallbackClips);
           dracoLoader.dispose();
+          this.loadRemyAnimationClip(targetModel, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
           return;
         }
 
         const animationSource = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
         const clip = this.resolveRemyClipForTarget(targetModel, animationSource, preferredSourceClip);
+        if (!clip) {
+          dracoLoader.dispose();
+          this.loadRemyAnimationClip(targetModel, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
+          return;
+        }
+
         this.playRemyClip(targetModel, clip);
         this.remyIsLoading = false;
         dracoLoader.dispose();
@@ -2605,20 +2621,24 @@ export class Game {
           dracoLoader.dispose();
           return;
         }
-        this.remyIsLoading = false;
-        console.warn(`Failed to load animation clip ${animationId}.`, error);
-        this.playRemyFallbackClip(targetModel, fallbackClips);
+        console.warn(`Failed to load animation clip ${animationCandidate.id}.`, error);
         dracoLoader.dispose();
+        this.loadRemyAnimationClip(targetModel, fallbackClips, animationCandidates, loadGeneration, candidateIndex + 1);
       },
     );
   }
 
-  private resolveRemyClipForTarget(targetModel: Object3D, sourceRig: Object3D, clip: AnimationClip): AnimationClip {
+  private resolveRemyClipForTarget(targetModel: Object3D, sourceRig: Object3D, clip: AnimationClip): AnimationClip | null {
     if (this.isClipCompatibleWithModel(targetModel, clip)) {
       return clip;
     }
 
-    return this.tryRetargetRemyClip(targetModel, sourceRig, clip) ?? clip;
+    const retargetedClip = this.tryRetargetRemyClip(targetModel, sourceRig, clip);
+    if (!retargetedClip) {
+      return null;
+    }
+
+    return this.isClipCompatibleWithModel(targetModel, retargetedClip) ? retargetedClip : null;
   }
 
   private isClipCompatibleWithModel(targetModel: Object3D, clip: AnimationClip): boolean {
