@@ -28,7 +28,7 @@ import {
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
-import { clone as cloneSkeleton, retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
@@ -588,6 +588,8 @@ export class Game {
   private remySecondaryMixer: AnimationMixer | null = null;
   private remyBaseHeight = 1;
   private remyBaseDepth = 1;
+  private remySecondaryBaseHeight = 1;
+  private remySecondaryBaseDepth = 1;
   private remyDebugConfig: RemyDebugConfig = { ...REMY_LEGACY_DEBUG_DEFAULTS };
   private activeRemyCharacterId: string | null = null;
   private readonly remyCharacterDebugConfigs = new Map<string, RemyDebugConfig>();
@@ -1329,6 +1331,8 @@ export class Game {
     this.remySecondaryMixer = null;
     this.remyBaseHeight = 1;
     this.remyBaseDepth = 1;
+    this.remySecondaryBaseHeight = 1;
+    this.remySecondaryBaseDepth = 1;
     this.lastFrameTime = 0;
     this.simulationElapsedSeconds = 0;
     this.score = 0;
@@ -2542,6 +2546,14 @@ export class Game {
     };
   }
 
+  private pickDistinctRemyCharacterAsset(random: () => number, excludedIndex: number): { asset: RemyCharacterAsset; index: number } {
+    const index = pickNonRepeatingIndex(REMY_CHARACTER_ASSETS.length, random(), excludedIndex);
+    return {
+      asset: REMY_CHARACTER_ASSETS[index]!,
+      index,
+    };
+  }
+
   private pickRandomRemyAsset<T>(assets: readonly T[], random: () => number): T {
     const index = Math.min(assets.length - 1, Math.floor(random() * assets.length));
     return assets[index]!;
@@ -2565,6 +2577,8 @@ export class Game {
     this.remySecondaryMixer = null;
     this.remyBaseHeight = 1;
     this.remyBaseDepth = 1;
+    this.remySecondaryBaseHeight = 1;
+    this.remySecondaryBaseDepth = 1;
     this.loadRemyCharacter();
   }
 
@@ -2578,6 +2592,8 @@ export class Game {
     const random = this.createRemySelectionRandom();
     const selectedCharacterChoice = this.pickRandomRemyCharacterAsset(random);
     const selectedCharacter = selectedCharacterChoice.asset;
+    const secondaryCharacterChoice = this.pickDistinctRemyCharacterAsset(random, selectedCharacterChoice.index);
+    const secondaryCharacter = secondaryCharacterChoice.asset;
     const selectedAnimation = this.pickRandomRemyAsset(REMY_ANIMATION_ASSETS, random);
     const loadGeneration = this.remyLoadGeneration;
 
@@ -2587,51 +2603,46 @@ export class Game {
     const loader = new GLTFLoader();
     loader.setDRACOLoader(dracoLoader);
 
-    loader.load(
-      selectedCharacter.modelUrl,
-      (gltf) => {
+    void (async () => {
+      try {
+        const primaryGltf = await loader.loadAsync(selectedCharacter.modelUrl);
         if (loadGeneration !== this.remyLoadGeneration) {
-          dracoLoader.dispose();
           return;
         }
 
-        const model = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
-        if (REMY_AUTO_UP_AXIS_DETECTION_ENABLED) {
-          this.applyBestRemyUpAxisRotation(model);
-        }
-        model.rotation.z += REMY_MODEL_ROTATION_OFFSET_Z;
-        model.updateMatrixWorld(true);
-        this.prepareRemyModelForRendering(model);
-
-        const modelBounds = new Box3().setFromObject(model);
-        const modelSize = modelBounds.getSize(new Vector3());
-        if (modelSize.y <= 0) {
+        const primarySetup = this.buildRemyRigFromLoadedCharacter(primaryGltf, selectedCharacter.id, "primary");
+        if (!primarySetup) {
           this.remyIsLoading = false;
-          console.warn(`Unable to place character ${selectedCharacter.id}; model bounds height is invalid.`);
-          dracoLoader.dispose();
           return;
         }
 
-        const modelCenter = modelBounds.getCenter(new Vector3());
-        const centerOffsetFromFeet = modelCenter.y - modelBounds.min.y;
-        model.position.set(-modelCenter.x, -modelCenter.y, -modelCenter.z);
+        let secondarySetup: ReturnType<typeof this.buildRemyRigFromLoadedCharacter> = null;
+        try {
+          const secondaryGltf = await loader.loadAsync(secondaryCharacter.modelUrl);
+          if (loadGeneration !== this.remyLoadGeneration) {
+            return;
+          }
 
-        const secondaryModel = cloneSkeleton(model);
-        this.prepareRemyModelForRendering(secondaryModel);
+          secondarySetup = this.buildRemyRigFromLoadedCharacter(secondaryGltf, secondaryCharacter.id, "secondary");
+        } catch (error) {
+          console.warn(`Failed to load secondary character model ${secondaryCharacter.id}.`, error);
+        }
 
-        const primaryRig = this.createRemyCharacterRig(model, centerOffsetFromFeet, "primary");
-        const secondaryRig = this.createRemyCharacterRig(secondaryModel, centerOffsetFromFeet, "secondary");
+        this.remyCharacter = primarySetup.rig.characterRoot;
+        this.remyPoseRotateX = primarySetup.rig.poseRotateX;
+        this.remyPoseRotateY = primarySetup.rig.poseRotateY;
+        this.remyPoseRotateZ = primarySetup.rig.poseRotateZ;
 
-        this.remyCharacter = primaryRig.characterRoot;
-        this.remyPoseRotateX = primaryRig.poseRotateX;
-        this.remyPoseRotateY = primaryRig.poseRotateY;
-        this.remyPoseRotateZ = primaryRig.poseRotateZ;
-        this.remySecondaryCharacter = secondaryRig.characterRoot;
-        this.remySecondaryPoseRotateX = secondaryRig.poseRotateX;
-        this.remySecondaryPoseRotateY = secondaryRig.poseRotateY;
-        this.remySecondaryPoseRotateZ = secondaryRig.poseRotateZ;
-        this.remyBaseHeight = modelSize.y;
-        this.remyBaseDepth = Math.max(modelSize.x, modelSize.z);
+        this.remySecondaryCharacter = secondarySetup?.rig.characterRoot ?? null;
+        this.remySecondaryPoseRotateX = secondarySetup?.rig.poseRotateX ?? null;
+        this.remySecondaryPoseRotateY = secondarySetup?.rig.poseRotateY ?? null;
+        this.remySecondaryPoseRotateZ = secondarySetup?.rig.poseRotateZ ?? null;
+
+        this.remyBaseHeight = primarySetup.baseHeight;
+        this.remyBaseDepth = primarySetup.baseDepth;
+        this.remySecondaryBaseHeight = secondarySetup?.baseHeight ?? primarySetup.baseHeight;
+        this.remySecondaryBaseDepth = secondarySetup?.baseDepth ?? primarySetup.baseDepth;
+
         this.activeRemyCharacterId = selectedCharacter.id;
         this.lastRemyCharacterIndex = selectedCharacterChoice.index;
         this.remyDebugConfig = this.getDefaultRemyDebugConfig(selectedCharacter.id);
@@ -2644,30 +2655,81 @@ export class Game {
           input.value = String(this.remyDebugConfig[key]);
         });
         this.updateRemyDebugValueLabels();
+
         const animationCandidates = [
           selectedAnimation,
           ...REMY_ANIMATION_ASSETS.filter((asset) => asset.id !== selectedAnimation.id),
         ];
+        const animationTargets = [
+          primarySetup.rig.animationTarget,
+          ...(secondarySetup ? [secondarySetup.rig.animationTarget] : []),
+        ];
         this.loadRemyAnimationClip(
-          [primaryRig.animationTarget, secondaryRig.animationTarget],
-          gltf.animations,
+          animationTargets,
+          primarySetup.animations,
           animationCandidates,
           loadGeneration,
         );
+
         this.placeRemyOnTopLedge();
-        dracoLoader.dispose();
-      },
-      undefined,
-      (error) => {
+      } catch (error) {
         if (loadGeneration !== this.remyLoadGeneration) {
-          dracoLoader.dispose();
           return;
         }
+
         this.remyIsLoading = false;
         console.warn(`Failed to load character model ${selectedCharacter.id}.`, error);
+      } finally {
         dracoLoader.dispose();
-      },
-    );
+      }
+    })();
+  }
+
+  private buildRemyRigFromLoadedCharacter(
+    gltf: {
+      scene: Object3D;
+      scenes: readonly Object3D[];
+      animations: readonly AnimationClip[];
+    },
+    characterId: string,
+    nameSuffix: string,
+  ): {
+    rig: {
+      characterRoot: Group;
+      poseRotateX: Group;
+      poseRotateY: Group;
+      poseRotateZ: Group;
+      animationTarget: Object3D;
+    };
+    baseHeight: number;
+    baseDepth: number;
+    animations: readonly AnimationClip[];
+  } | null {
+    const model = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
+    if (REMY_AUTO_UP_AXIS_DETECTION_ENABLED) {
+      this.applyBestRemyUpAxisRotation(model);
+    }
+    model.rotation.z += REMY_MODEL_ROTATION_OFFSET_Z;
+    model.updateMatrixWorld(true);
+    this.prepareRemyModelForRendering(model);
+
+    const modelBounds = new Box3().setFromObject(model);
+    const modelSize = modelBounds.getSize(new Vector3());
+    if (modelSize.y <= 0) {
+      console.warn(`Unable to place character ${characterId}; model bounds height is invalid.`);
+      return null;
+    }
+
+    const modelCenter = modelBounds.getCenter(new Vector3());
+    const centerOffsetFromFeet = modelCenter.y - modelBounds.min.y;
+    model.position.set(-modelCenter.x, -modelCenter.y, -modelCenter.z);
+
+    return {
+      rig: this.createRemyCharacterRig(model, centerOffsetFromFeet, nameSuffix),
+      baseHeight: modelSize.y,
+      baseDepth: Math.max(modelSize.x, modelSize.z),
+      animations: gltf.animations,
+    };
   }
 
   private createRemyCharacterRig(model: Object3D, centerOffsetFromFeet: number, nameSuffix: string): {
@@ -3007,10 +3069,6 @@ export class Game {
     const laneOffsets = this.resolveRemyLaneOffsets(ledgeMesh, useDualCharacters);
 
     const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, slab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
-    const uniformScale = targetHeight / Math.max(0.001, this.remyBaseHeight);
-    const scaledRemyDepth = this.remyBaseDepth * uniformScale;
-    const overlapIntoWall = Math.max(0, (scaledRemyDepth - ledgeDepth) / 2);
-    const outwardOffset = ledgeDepth * REMY_LEDGE_INSET_RATIO + overlapIntoWall + REMY_WALL_CLEARANCE;
 
     this.applyRemyDebugRotation(
       sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees,
@@ -3018,10 +3076,20 @@ export class Game {
       sidePose.rollDegrees + this.remyDebugConfig.rollDegrees,
     );
 
-    const placeCharacter = (character: Group | null, laneOffset: number): void => {
+    const placeCharacter = (
+      character: Group | null,
+      laneOffset: number,
+      baseHeight: number,
+      baseDepth: number,
+    ): void => {
       if (!character) {
         return;
       }
+
+      const uniformScale = targetHeight / Math.max(0.001, baseHeight);
+      const scaledRemyDepth = baseDepth * uniformScale;
+      const overlapIntoWall = Math.max(0, (scaledRemyDepth - ledgeDepth) / 2);
+      const outwardOffset = ledgeDepth * REMY_LEDGE_INSET_RATIO + overlapIntoWall + REMY_WALL_CLEARANCE;
 
       character.scale.setScalar(uniformScale);
       const insetOffset = new Vector3(
@@ -3039,10 +3107,15 @@ export class Game {
       slabMesh.add(character);
     };
 
-    placeCharacter(this.remyCharacter, laneOffsets[0] ?? 0);
+    placeCharacter(this.remyCharacter, laneOffsets[0] ?? 0, this.remyBaseHeight, this.remyBaseDepth);
 
     if (useDualCharacters && this.remySecondaryCharacter && laneOffsets.length > 1) {
-      placeCharacter(this.remySecondaryCharacter, laneOffsets[1]!);
+      placeCharacter(
+        this.remySecondaryCharacter,
+        laneOffsets[1]!,
+        this.remySecondaryBaseHeight,
+        this.remySecondaryBaseDepth,
+      );
     } else if (this.remySecondaryCharacter?.parent) {
       this.remySecondaryCharacter.parent.remove(this.remySecondaryCharacter);
     }
