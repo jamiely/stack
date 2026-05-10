@@ -90,6 +90,7 @@ import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
+import { computeRemyPlacementTransform, resolveRemyTargetHeight } from "./characters/placementMath";
 import {
   REMY_LEDGE_SPAWN_CHANCE,
   hasRecentTentacleBurstOnFace,
@@ -105,6 +106,7 @@ import { createComboState, updateComboState } from "./logic/streak";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { RecoveryState } from "./logic/recovery";
 import type { ComboState } from "./logic/streak";
+import type { RemyDebugConfig } from "./characters/contracts";
 import type { DistractionChannel, DistractionSnapshot, DistractionState } from "./logic/distractions";
 import type { CollapseSequenceState, CollapseTrigger } from "./logic/collapse";
 import type { IntegrityTelemetry } from "./logic/integrity";
@@ -131,15 +133,6 @@ type DebugToggleKey =
 type DebugNumberKey = Exclude<keyof DebugConfig, DebugToggleKey>;
 
 type RemyDebugKey = "yawDegrees" | "pitchDegrees" | "rollDegrees" | "translateX" | "translateY" | "translateZ";
-
-interface RemyDebugConfig {
-  yawDegrees: number;
-  pitchDegrees: number;
-  rollDegrees: number;
-  translateX: number;
-  translateY: number;
-  translateZ: number;
-}
 
 interface DebrisPiece {
   mesh: Mesh;
@@ -440,7 +433,6 @@ const REMY_MODEL_ROTATION_OFFSET_Z = 0;
 const REMY_LEDGE_SPAWN_NOISE_LEVEL_MULTIPLIER = 1.53;
 const REMY_LEDGE_SPAWN_NOISE_LEVEL_OFFSET = 9.41;
 const REMY_LEDGE_SPAWN_NOISE_SALT_BASE = 13.73;
-const WORLD_UP_AXIS = new Vector3(0, 1, 0);
 const DEBUG_DISTRACTION_BUTTON_META: Record<DistractionChannel, { label: string }> = {
   tentacle: { label: "Tentacle" },
   gorilla: { label: "Gorilla" },
@@ -3169,7 +3161,12 @@ export class Game {
     const useDualCharacters = shouldSpawnDualRemyCharacters(ledgeWidthRatio);
     const laneOffsets = this.resolveRemyLaneOffsets(ledgeMesh, useDualCharacters);
 
-    const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, slab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
+    const targetHeight = resolveRemyTargetHeight(
+      slab.dimensions.height,
+      REMY_TARGET_HEIGHT_RATIO,
+      REMY_MIN_HEIGHT,
+      REMY_MAX_HEIGHT,
+    );
     const primaryPlacementConfig = this.remyDebugConfig;
     const secondaryPlacementConfig = this.activeRemySecondaryCharacterId
       ? this.getDefaultRemyDebugConfig(this.activeRemySecondaryCharacterId)
@@ -3189,33 +3186,43 @@ export class Game {
         return;
       }
 
-      const uniformScale = targetHeight / Math.max(0.001, baseHeight);
-      const scaledRemyDepth = baseDepth * uniformScale;
-      const overlapIntoWall = Math.max(0, (scaledRemyDepth - ledgeDepth) / 2);
-      const outwardOffset = ledgeDepth * REMY_LEDGE_INSET_RATIO + overlapIntoWall + REMY_WALL_CLEARANCE;
+      const placement = computeRemyPlacementTransform({
+        ledgePosition: {
+          x: ledgeMesh.position.x,
+          y: ledgeMesh.position.y,
+          z: ledgeMesh.position.z,
+        },
+        ledgeRotationY: ledgeMesh.rotation.y,
+        ledgeHeight,
+        ledgeDepth,
+        laneOffset,
+        baseHeight,
+        baseDepth,
+        targetHeight,
+        sidePose,
+        debugConfig: placementConfig,
+        ledgeInsetRatio: REMY_LEDGE_INSET_RATIO,
+        wallClearance: REMY_WALL_CLEARANCE,
+        ledgeClearance: REMY_LEDGE_CLEARANCE,
+        rotationOffsetY: REMY_ROTATION_OFFSET_Y,
+      });
 
       this.applyRemyDebugRotation(
         poseRotateX,
         poseRotateY,
         poseRotateZ,
-        sidePose.pitchDegrees + placementConfig.pitchDegrees,
-        sidePose.yawDegrees + placementConfig.yawDegrees,
-        sidePose.rollDegrees + placementConfig.rollDegrees,
+        placement.poseRotationDegrees.x,
+        placement.poseRotationDegrees.y,
+        placement.poseRotationDegrees.z,
       );
 
-      character.scale.setScalar(uniformScale);
-      const insetOffset = new Vector3(
-        laneOffset + sidePose.translateX + placementConfig.translateX,
-        sidePose.translateY + placementConfig.translateY,
-        outwardOffset + sidePose.translateZ + placementConfig.translateZ,
-      ).applyAxisAngle(WORLD_UP_AXIS, ledgeMesh.rotation.y);
-
+      character.scale.setScalar(placement.uniformScale);
       character.position.set(
-        ledgeMesh.position.x + insetOffset.x,
-        ledgeMesh.position.y + ledgeHeight / 2 + REMY_LEDGE_CLEARANCE + insetOffset.y,
-        ledgeMesh.position.z + insetOffset.z,
+        placement.worldPosition.x,
+        placement.worldPosition.y,
+        placement.worldPosition.z,
       );
-      character.rotation.set(0, ledgeMesh.rotation.y + REMY_ROTATION_OFFSET_Y, 0);
+      character.rotation.set(0, placement.facingRotationY, 0);
       slabMesh.add(character);
     };
 
