@@ -1,3 +1,5 @@
+export type RemyCharacterId = "remy" | "timmy" | "amy" | "aj";
+
 export interface RemyDebugConfig {
   yawDegrees: number;
   pitchDegrees: number;
@@ -42,4 +44,20 @@ export interface RemyPlacementTransformResult {
   };
   worldPosition: RemyVector3Like;
   facingRotationY: number;
+}
+
+export interface RemyCharacterAsset {
+  id: RemyCharacterId;
+  modelUrl: string;
+}
+
+export interface RemyModelConfig {
+  debugDefaults: RemyDebugConfig;
+}
+
+export interface RemyModelNormalizationMetrics {
+  boundsCenter: RemyVector3Like;
+  baseHeight: number;
+  baseDepth: number;
+  centerOffsetFromFeet: number;
 }

@@ -91,6 +91,8 @@ import { initializeFireworksState, stepFireworksState, type FireworksConfig, typ
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
 import { computeRemyPlacementTransform, resolveRemyTargetHeight } from "./characters/placementMath";
+import { REMY_CHARACTER_ASSETS, getRemyDebugDefaults } from "./characters/modelConfigs";
+import { normalizeRemyModel } from "./characters/modelNormalization";
 import {
   REMY_LEDGE_SPAWN_CHANCE,
   hasRecentTentacleBurstOnFace,
@@ -106,7 +108,7 @@ import { createComboState, updateComboState } from "./logic/streak";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { RecoveryState } from "./logic/recovery";
 import type { ComboState } from "./logic/streak";
-import type { RemyDebugConfig } from "./characters/contracts";
+import type { RemyCharacterId, RemyDebugConfig } from "./characters/contracts";
 import type { DistractionChannel, DistractionSnapshot, DistractionState } from "./logic/distractions";
 import type { CollapseSequenceState, CollapseTrigger } from "./logic/collapse";
 import type { IntegrityTelemetry } from "./logic/integrity";
@@ -175,11 +177,6 @@ interface LedgeAnchor {
 interface RemyAnchor {
   level: number;
   faceNoiseSalt: number;
-}
-
-interface RemyCharacterAsset {
-  id: string;
-  modelUrl: string;
 }
 
 interface RemyAnimationAsset {
@@ -284,51 +281,6 @@ const DEBUG_RANGES: Record<DebugNumberKey, { min: number; max: number; step: num
   tremorShakeAmount: { min: 0, max: 3, step: 0.05, label: "Tremor Y Shake" },
 };
 
-const REMY_LEGACY_DEBUG_DEFAULTS: RemyDebugConfig = {
-  yawDegrees: -9,
-  pitchDegrees: -7,
-  rollDegrees: 89,
-  translateX: 0,
-  translateY: 0.85,
-  translateZ: 0,
-};
-
-const REMY_TIMMY_DEBUG_DEFAULTS: RemyDebugConfig = {
-  yawDegrees: -180,
-  pitchDegrees: 180,
-  rollDegrees: 180,
-  translateX: 0,
-  translateY: 0.85,
-  translateZ: 0,
-};
-
-const REMY_AMY_DEBUG_DEFAULTS: RemyDebugConfig = {
-  yawDegrees: -180,
-  pitchDegrees: 180,
-  rollDegrees: 180,
-  translateX: 0,
-  translateY: 0.85,
-  translateZ: 0,
-};
-
-const REMY_AJ_DEBUG_DEFAULTS: RemyDebugConfig = {
-  yawDegrees: -180,
-  pitchDegrees: 180,
-  rollDegrees: 180,
-  translateX: 0,
-  translateY: 0.85,
-  translateZ: 0,
-};
-
-const REMY_CHARACTER_DEBUG_DEFAULTS: Record<string, RemyDebugConfig> = {
-  remy: REMY_LEGACY_DEBUG_DEFAULTS,
-  timmy: REMY_TIMMY_DEBUG_DEFAULTS,
-  amy: REMY_AMY_DEBUG_DEFAULTS,
-  aj: REMY_AJ_DEBUG_DEFAULTS,
-};
-
-const REMY_TEST_MODE_DEBUG_DEFAULTS: RemyDebugConfig = REMY_LEGACY_DEBUG_DEFAULTS;
-
 const REMY_DEBUG_RANGES: Record<RemyDebugKey, { min: number; max: number; step: number; label: string; suffix?: string }> = {
   yawDegrees: { min: -180, max: 180, step: 1, label: "Remy Rot Y", suffix: "°" },
   pitchDegrees: { min: -180, max: 180, step: 1, label: "Remy Rot X", suffix: "°" },
@@ -405,12 +357,6 @@ const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
 const CLOUD_DEFAULT_COUNT = defaultDebugConfig.distractionCloudCount;
-const REMY_CHARACTER_ASSETS: readonly RemyCharacterAsset[] = [
-  { id: "remy", modelUrl: new URL("../../assets/remy_character_t_pose.glb", import.meta.url).href },
-  { id: "timmy", modelUrl: new URL("../../assets/timmy_tiny_webp.glb", import.meta.url).href },
-  { id: "amy", modelUrl: new URL("../../assets/amy_tiny_webp.glb", import.meta.url).href },
-  { id: "aj", modelUrl: new URL("../../assets/aj_tiny_webp.glb", import.meta.url).href },
-];
 const REMY_ANIMATION_ASSETS: readonly RemyAnimationAsset[] = [
   { id: "hip-hop", animationUrl: new URL("../../assets/remy_hip_hop_animation_inplace.glb", import.meta.url).href },
   { id: "house", animationUrl: new URL("../../assets/house_dancing_inplace.glb", import.meta.url).href },
@@ -621,10 +567,10 @@ export class Game {
   private remyBaseDepth = 1;
   private remySecondaryBaseHeight = 1;
   private remySecondaryBaseDepth = 1;
-  private remyDebugConfig: RemyDebugConfig = { ...REMY_LEGACY_DEBUG_DEFAULTS };
-  private activeRemyCharacterId: string | null = null;
-  private activeRemySecondaryCharacterId: string | null = null;
-  private readonly remyCharacterDebugConfigs = new Map<string, RemyDebugConfig>();
+  private remyDebugConfig: RemyDebugConfig = getRemyDebugDefaults("remy");
+  private activeRemyCharacterId: RemyCharacterId | null = null;
+  private activeRemySecondaryCharacterId: RemyCharacterId | null = null;
+  private readonly remyCharacterDebugConfigs = new Map<RemyCharacterId, RemyDebugConfig>();
   private remyAnchor: RemyAnchor | null = null;
   private remySuppressedByTentacles = false;
   private remyLoadGeneration = 0;
@@ -1094,19 +1040,11 @@ export class Game {
     return section;
   }
 
-  private resolveBaseRemyDebugConfig(characterId: string | null = this.activeRemyCharacterId): RemyDebugConfig {
-    if (this.testMode.enabled) {
-      return { ...REMY_TEST_MODE_DEBUG_DEFAULTS };
-    }
-
-    if (characterId && REMY_CHARACTER_DEBUG_DEFAULTS[characterId]) {
-      return { ...REMY_CHARACTER_DEBUG_DEFAULTS[characterId] };
-    }
-
-    return { ...REMY_LEGACY_DEBUG_DEFAULTS };
+  private resolveBaseRemyDebugConfig(characterId: RemyCharacterId | null = this.activeRemyCharacterId): RemyDebugConfig {
+    return getRemyDebugDefaults(characterId, { testMode: this.testMode.enabled });
   }
 
-  private getDefaultRemyDebugConfig(characterId: string | null = this.activeRemyCharacterId): RemyDebugConfig {
+  private getDefaultRemyDebugConfig(characterId: RemyCharacterId | null = this.activeRemyCharacterId): RemyDebugConfig {
     if (characterId) {
       const storedConfig = this.remyCharacterDebugConfigs.get(characterId);
       if (storedConfig) {
@@ -2762,7 +2700,7 @@ export class Game {
       scenes: readonly Object3D[];
       animations: readonly AnimationClip[];
     },
-    characterId: string,
+    characterId: RemyCharacterId,
     nameSuffix: string,
   ): {
     rig: {
@@ -2784,21 +2722,16 @@ export class Game {
     model.updateMatrixWorld(true);
     this.prepareRemyModelForRendering(model);
 
-    const modelBounds = new Box3().setFromObject(model);
-    const modelSize = modelBounds.getSize(new Vector3());
-    if (modelSize.y <= 0) {
+    const normalizedMetrics = normalizeRemyModel(model);
+    if (!normalizedMetrics) {
       console.warn(`Unable to place character ${characterId}; model bounds height is invalid.`);
       return null;
     }
 
-    const modelCenter = modelBounds.getCenter(new Vector3());
-    const centerOffsetFromFeet = modelCenter.y - modelBounds.min.y;
-    model.position.set(-modelCenter.x, -modelCenter.y, -modelCenter.z);
-
     return {
-      rig: this.createRemyCharacterRig(model, centerOffsetFromFeet, nameSuffix),
-      baseHeight: modelSize.y,
-      baseDepth: Math.max(modelSize.x, modelSize.z),
+      rig: this.createRemyCharacterRig(model, normalizedMetrics.centerOffsetFromFeet, nameSuffix),
+      baseHeight: normalizedMetrics.baseHeight,
+      baseDepth: normalizedMetrics.baseDepth,
       animations: gltf.animations,
     };
   }
@@ -3170,7 +3103,7 @@ export class Game {
     const primaryPlacementConfig = this.remyDebugConfig;
     const secondaryPlacementConfig = this.activeRemySecondaryCharacterId
       ? this.getDefaultRemyDebugConfig(this.activeRemySecondaryCharacterId)
-      : { ...REMY_TIMMY_DEBUG_DEFAULTS };
+      : this.getDefaultRemyDebugConfig("timmy");
 
     const placeCharacter = (
       character: Group | null,
