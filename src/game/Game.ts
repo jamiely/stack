@@ -25,8 +25,6 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
@@ -88,7 +86,8 @@ import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
-import { resolveAnimationClipsForTargets, resolveFallbackAnimationClips } from "./characters/animationClipResolver";
+import { resolveFallbackAnimationClips } from "./characters/animationClipResolver";
+import { loadCharacterViewFromAsset, loadResolvedAnimationClipsForTargets } from "./characters/characterAssetLoader";
 import { computeRemyPlacementTransform, resolveRemyTargetHeight } from "./characters/placementMath";
 import {
   REMY_ANIMATION_ASSETS,
@@ -97,10 +96,6 @@ import {
   getRemyDebugDefaults,
   getRemyModelConfig,
 } from "./characters/modelConfigs";
-import {
-  buildCharacterViewFromGltf,
-  selectLargestCharacterScene,
-} from "./characters/modelPreparation";
 import {
   readCharacterFaceId,
   resolveCharacterSidePose,
@@ -352,7 +347,6 @@ const TENTACLE_EXTENSION_MULTIPLIER = 1.75;
 const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
 const CLOUD_DEFAULT_COUNT = defaultDebugConfig.distractionCloudCount;
-const DRACO_DECODER_PATH = `${import.meta.env.BASE_URL}draco/`;
 const REMY_DUAL_SPAWN_SPREAD_RATIO = 0.22;
 const REMY_DUAL_SPAWN_MIN_SPREAD = 0.08;
 const REMY_DUAL_SPAWN_EDGE_PADDING = 0.04;
@@ -2633,46 +2627,37 @@ export class Game {
     const animationCandidates = this.buildRemyAnimationCandidateOrder(selectedAnimationIndex, random);
     const loadGeneration = this.remyLoadGeneration;
 
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
-
-    const loader = new GLTFLoader();
-    loader.setDRACOLoader(dracoLoader);
-
     void (async () => {
       try {
-        const primaryGltf = await loader.loadAsync(selectedCharacter.modelUrl);
-        if (loadGeneration !== this.remyLoadGeneration) {
-          return;
-        }
-
         const primaryPreparationConfig = this.getRemyPreparationConfigForCharacter(selectedCharacter.id);
-        const primarySetup = buildCharacterViewFromGltf(primaryGltf, {
+        const primarySetup = await loadCharacterViewFromAsset(selectedCharacter.modelUrl, {
           characterId: selectedCharacter.id,
           nameSuffix: "primary",
           autoDetectUpAxis: primaryPreparationConfig.autoDetectUpAxis,
           rotationOffsetZ: primaryPreparationConfig.rotationOffsetZ,
         });
+        if (loadGeneration !== this.remyLoadGeneration) {
+          return;
+        }
+
         if (!primarySetup) {
           this.remyIsLoading = false;
           return;
         }
 
-        let secondarySetup: ReturnType<typeof buildCharacterViewFromGltf> = null;
+        let secondarySetup: Awaited<ReturnType<typeof loadCharacterViewFromAsset>> = null;
         if (secondaryCharacter) {
           try {
-            const secondaryGltf = await loader.loadAsync(secondaryCharacter.modelUrl);
-            if (loadGeneration !== this.remyLoadGeneration) {
-              return;
-            }
-
             const secondaryPreparationConfig = this.getRemyPreparationConfigForCharacter(secondaryCharacter.id);
-            secondarySetup = buildCharacterViewFromGltf(secondaryGltf, {
+            secondarySetup = await loadCharacterViewFromAsset(secondaryCharacter.modelUrl, {
               characterId: secondaryCharacter.id,
               nameSuffix: "secondary",
               autoDetectUpAxis: secondaryPreparationConfig.autoDetectUpAxis,
               rotationOffsetZ: secondaryPreparationConfig.rotationOffsetZ,
             });
+            if (loadGeneration !== this.remyLoadGeneration) {
+              return;
+            }
           } catch (error) {
             console.warn(`Failed to load secondary character model ${secondaryCharacter.id}.`, error);
           }
@@ -2710,7 +2695,17 @@ export class Game {
               ]
             : []),
         ];
-        this.loadRemyAnimationClip(animationTargets, animationCandidates, loadGeneration);
+        const resolvedClips = await loadResolvedAnimationClipsForTargets(animationTargets, animationCandidates);
+        if (loadGeneration !== this.remyLoadGeneration) {
+          return;
+        }
+
+        if (resolvedClips) {
+          this.playRemyClip(animationTargets, resolvedClips);
+        } else {
+          this.playRemyFallbackClip(animationTargets);
+        }
+        this.remyIsLoading = false;
 
         this.placeRemyOnTopLedge();
       } catch (error) {
@@ -2720,62 +2715,8 @@ export class Game {
 
         this.remyIsLoading = false;
         console.warn(`Failed to load character model ${selectedCharacter.id}.`, error);
-      } finally {
-        dracoLoader.dispose();
       }
     })();
-  }
-
-  private loadRemyAnimationClip(
-    targets: readonly RemyAnimationTargetBinding[],
-    animationCandidates: readonly RemyAnimationAsset[],
-    loadGeneration: number,
-    candidateIndex = 0,
-  ): void {
-    const animationCandidate = animationCandidates[candidateIndex];
-    if (!animationCandidate) {
-      this.remyIsLoading = false;
-      this.playRemyFallbackClip(targets);
-      return;
-    }
-
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath(DRACO_DECODER_PATH);
-
-    const animationLoader = new GLTFLoader();
-    animationLoader.setDRACOLoader(dracoLoader);
-
-    animationLoader.load(
-      animationCandidate.animationUrl,
-      (gltf) => {
-        if (loadGeneration !== this.remyLoadGeneration) {
-          dracoLoader.dispose();
-          return;
-        }
-
-        const animationSource = selectLargestCharacterScene(gltf.scenes) ?? gltf.scene;
-        const resolvedClips = resolveAnimationClipsForTargets(targets, animationSource, gltf.animations);
-        if (!resolvedClips) {
-          dracoLoader.dispose();
-          this.loadRemyAnimationClip(targets, animationCandidates, loadGeneration, candidateIndex + 1);
-          return;
-        }
-
-        this.playRemyClip(targets, resolvedClips);
-        this.remyIsLoading = false;
-        dracoLoader.dispose();
-      },
-      undefined,
-      (error) => {
-        if (loadGeneration !== this.remyLoadGeneration) {
-          dracoLoader.dispose();
-          return;
-        }
-        console.warn(`Failed to load animation clip ${animationCandidate.id}.`, error);
-        dracoLoader.dispose();
-        this.loadRemyAnimationClip(targets, animationCandidates, loadGeneration, candidateIndex + 1);
-      },
-    );
   }
 
   private playRemyFallbackClip(targets: readonly RemyAnimationTargetBinding[]): void {
