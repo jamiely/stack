@@ -45,18 +45,41 @@ export const REMY_AJ_DEBUG_DEFAULTS: RemyDebugConfig = {
   translateZ: 0,
 };
 
+const DEFAULT_REMY_PREPARATION_CONFIG = {
+  autoDetectUpAxis: true,
+  rotationOffsetZ: 0,
+} as const;
+
+const DEFAULT_REMY_PLACEMENT_CONFIG = {
+  targetHeightRatio: 0.42,
+  minHeight: 0.54,
+  maxHeight: 1.28,
+  ledgeClearance: 0.03,
+  ledgeInsetRatio: 0.14,
+  wallClearance: 0.01,
+  rotationOffsetY: 0,
+} as const;
+
 export const REMY_CHARACTER_MODEL_CONFIGS = {
   remy: {
     debugDefaults: REMY_LEGACY_DEBUG_DEFAULTS,
+    preparation: DEFAULT_REMY_PREPARATION_CONFIG,
+    placement: DEFAULT_REMY_PLACEMENT_CONFIG,
   },
   timmy: {
     debugDefaults: REMY_TIMMY_DEBUG_DEFAULTS,
+    preparation: DEFAULT_REMY_PREPARATION_CONFIG,
+    placement: DEFAULT_REMY_PLACEMENT_CONFIG,
   },
   amy: {
     debugDefaults: REMY_AMY_DEBUG_DEFAULTS,
+    preparation: DEFAULT_REMY_PREPARATION_CONFIG,
+    placement: DEFAULT_REMY_PLACEMENT_CONFIG,
   },
   aj: {
     debugDefaults: REMY_AJ_DEBUG_DEFAULTS,
+    preparation: DEFAULT_REMY_PREPARATION_CONFIG,
+    placement: DEFAULT_REMY_PLACEMENT_CONFIG,
   },
 } satisfies Record<RemyCharacterId, RemyModelConfig>;
 

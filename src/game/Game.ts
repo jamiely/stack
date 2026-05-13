@@ -95,6 +95,7 @@ import {
   REMY_CHARACTER_ASSETS,
   REMY_DEBUG_RANGES,
   getRemyDebugDefaults,
+  getRemyModelConfig,
 } from "./characters/modelConfigs";
 import {
   buildCharacterViewFromGltf,
@@ -352,18 +353,9 @@ const TENTACLE_MAX_PERSISTED_BURSTS = 32;
 const TENTACLE_WAVE_SPEED = 5.8;
 const CLOUD_DEFAULT_COUNT = defaultDebugConfig.distractionCloudCount;
 const DRACO_DECODER_PATH = `${import.meta.env.BASE_URL}draco/`;
-const REMY_TARGET_HEIGHT_RATIO = 0.42;
-const REMY_MIN_HEIGHT = 0.54;
-const REMY_MAX_HEIGHT = 1.28;
-const REMY_LEDGE_CLEARANCE = 0.03;
-const REMY_LEDGE_INSET_RATIO = 0.14;
-const REMY_WALL_CLEARANCE = 0.01;
-const REMY_ROTATION_OFFSET_Y = 0;
 const REMY_DUAL_SPAWN_SPREAD_RATIO = 0.22;
 const REMY_DUAL_SPAWN_MIN_SPREAD = 0.08;
 const REMY_DUAL_SPAWN_EDGE_PADDING = 0.04;
-const REMY_AUTO_UP_AXIS_DETECTION_ENABLED = true;
-const REMY_MODEL_ROTATION_OFFSET_Z = 0;
 const REMY_LEDGE_SPAWN_NOISE_LEVEL_MULTIPLIER = 1.53;
 const REMY_LEDGE_SPAWN_NOISE_LEVEL_OFFSET = 9.41;
 const REMY_LEDGE_SPAWN_NOISE_SALT_BASE = 13.73;
@@ -1069,6 +1061,18 @@ export class Game {
     }
 
     return this.resolveBaseRemyDebugConfig(characterId);
+  }
+
+  private getRemyModelConfigForCharacter(characterId: RemyCharacterId | null = this.activeRemyCharacterId) {
+    return getRemyModelConfig(characterId ?? "remy");
+  }
+
+  private getRemyPlacementConfigForCharacter(characterId: RemyCharacterId | null = this.activeRemyCharacterId) {
+    return this.getRemyModelConfigForCharacter(characterId).placement;
+  }
+
+  private getRemyPreparationConfigForCharacter(characterId: RemyCharacterId | null = this.activeRemyCharacterId) {
+    return this.getRemyModelConfigForCharacter(characterId).preparation;
   }
 
   private applyRemyDebugConfig(config: Partial<RemyDebugConfig>): void {
@@ -2642,11 +2646,12 @@ export class Game {
           return;
         }
 
+        const primaryPreparationConfig = this.getRemyPreparationConfigForCharacter(selectedCharacter.id);
         const primarySetup = buildCharacterViewFromGltf(primaryGltf, {
           characterId: selectedCharacter.id,
           nameSuffix: "primary",
-          autoDetectUpAxis: REMY_AUTO_UP_AXIS_DETECTION_ENABLED,
-          rotationOffsetZ: REMY_MODEL_ROTATION_OFFSET_Z,
+          autoDetectUpAxis: primaryPreparationConfig.autoDetectUpAxis,
+          rotationOffsetZ: primaryPreparationConfig.rotationOffsetZ,
         });
         if (!primarySetup) {
           this.remyIsLoading = false;
@@ -2661,11 +2666,12 @@ export class Game {
               return;
             }
 
+            const secondaryPreparationConfig = this.getRemyPreparationConfigForCharacter(secondaryCharacter.id);
             secondarySetup = buildCharacterViewFromGltf(secondaryGltf, {
               characterId: secondaryCharacter.id,
               nameSuffix: "secondary",
-              autoDetectUpAxis: REMY_AUTO_UP_AXIS_DETECTION_ENABLED,
-              rotationOffsetZ: REMY_MODEL_ROTATION_OFFSET_Z,
+              autoDetectUpAxis: secondaryPreparationConfig.autoDetectUpAxis,
+              rotationOffsetZ: secondaryPreparationConfig.rotationOffsetZ,
             });
           } catch (error) {
             console.warn(`Failed to load secondary character model ${secondaryCharacter.id}.`, error);
@@ -2894,11 +2900,12 @@ export class Game {
       minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
     });
 
+    const primaryPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
     const targetHeight = resolveRemyTargetHeight(
       slab.dimensions.height,
-      REMY_TARGET_HEIGHT_RATIO,
-      REMY_MIN_HEIGHT,
-      REMY_MAX_HEIGHT,
+      primaryPlacementTuning.targetHeightRatio,
+      primaryPlacementTuning.minHeight,
+      primaryPlacementTuning.maxHeight,
     );
     const primaryPlacementConfig = this.remyDebugConfig;
     const secondaryPlacementConfig = this.activeRemySecondaryCharacterId
@@ -2909,6 +2916,7 @@ export class Game {
       view: CharacterView | null,
       laneOffset: number,
       placementConfig: RemyDebugConfig,
+      placementTuning: ReturnType<Game["getRemyPlacementConfigForCharacter"]>,
     ): void => {
       if (!view) {
         return;
@@ -2929,20 +2937,25 @@ export class Game {
         targetHeight,
         sidePose,
         debugConfig: placementConfig,
-        ledgeInsetRatio: REMY_LEDGE_INSET_RATIO,
-        wallClearance: REMY_WALL_CLEARANCE,
-        ledgeClearance: REMY_LEDGE_CLEARANCE,
-        rotationOffsetY: REMY_ROTATION_OFFSET_Y,
+        ledgeInsetRatio: placementTuning.ledgeInsetRatio,
+        wallClearance: placementTuning.wallClearance,
+        ledgeClearance: placementTuning.ledgeClearance,
+        rotationOffsetY: placementTuning.rotationOffsetY,
       });
 
       view.applyPlacement(placement);
       view.attachTo(slabMesh);
     };
 
-    placeCharacter(this.remyView, laneOffsets[0] ?? 0, primaryPlacementConfig);
+    placeCharacter(this.remyView, laneOffsets[0] ?? 0, primaryPlacementConfig, primaryPlacementTuning);
 
     if (useDualCharacters && this.remySecondaryView && laneOffsets.length > 1) {
-      placeCharacter(this.remySecondaryView, laneOffsets[1]!, secondaryPlacementConfig);
+      placeCharacter(
+        this.remySecondaryView,
+        laneOffsets[1]!,
+        secondaryPlacementConfig,
+        this.getRemyPlacementConfigForCharacter(this.activeRemySecondaryCharacterId),
+      );
     } else {
       this.remySecondaryView?.detach();
     }
@@ -3007,7 +3020,12 @@ export class Game {
         ledgeDepth: 0,
         laneOffset: 0,
         targetHeight: topSlab
-          ? resolveRemyTargetHeight(topSlab.dimensions.height, REMY_TARGET_HEIGHT_RATIO, REMY_MIN_HEIGHT, REMY_MAX_HEIGHT)
+          ? resolveRemyTargetHeight(
+              topSlab.dimensions.height,
+              this.getRemyPlacementConfigForCharacter().targetHeightRatio,
+              this.getRemyPlacementConfigForCharacter().minHeight,
+              this.getRemyPlacementConfigForCharacter().maxHeight,
+            )
           : null,
       };
     }
@@ -3031,9 +3049,12 @@ export class Game {
     });
     const targetHeight = resolveRemyTargetHeight(
       anchor.slab.dimensions.height,
-      REMY_TARGET_HEIGHT_RATIO,
-      REMY_MIN_HEIGHT,
-      REMY_MAX_HEIGHT,
+      this.getRemyPlacementConfigForCharacter(role === "primary" ? this.activeRemyCharacterId : this.activeRemySecondaryCharacterId)
+        .targetHeightRatio,
+      this.getRemyPlacementConfigForCharacter(role === "primary" ? this.activeRemyCharacterId : this.activeRemySecondaryCharacterId)
+        .minHeight,
+      this.getRemyPlacementConfigForCharacter(role === "primary" ? this.activeRemyCharacterId : this.activeRemySecondaryCharacterId)
+        .maxHeight,
     );
 
     return {
@@ -3080,7 +3101,13 @@ export class Game {
     }
 
     const sidePose = resolveCharacterSidePose(null);
-    const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, topSlab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
+    const fallbackPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
+    const targetHeight = resolveRemyTargetHeight(
+      topSlab.dimensions.height,
+      fallbackPlacementTuning.targetHeightRatio,
+      fallbackPlacementTuning.minHeight,
+      fallbackPlacementTuning.maxHeight,
+    );
     const placement = computeRemyPlacementTransform({
       ledgePosition: {
         x: 0,
@@ -3098,8 +3125,8 @@ export class Game {
       debugConfig: this.remyDebugConfig,
       ledgeInsetRatio: 0,
       wallClearance: 0,
-      ledgeClearance: REMY_LEDGE_CLEARANCE,
-      rotationOffsetY: REMY_ROTATION_OFFSET_Y,
+      ledgeClearance: fallbackPlacementTuning.ledgeClearance,
+      rotationOffsetY: fallbackPlacementTuning.rotationOffsetY,
     });
     this.remyView.applyPlacement(placement);
     this.remyView.attachTo(topSlabMesh);

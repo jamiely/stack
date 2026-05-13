@@ -17,11 +17,20 @@ describe("remy model configs", () => {
     expect(assetIds).toEqual(configIds);
   });
 
-  it("stores finite per-character debug defaults", () => {
+  it("stores finite per-character debug defaults and placement/preparation config", () => {
     Object.values(REMY_CHARACTER_MODEL_CONFIGS).forEach((config) => {
       Object.values(config.debugDefaults).forEach((value) => {
         expect(Number.isFinite(value)).toBe(true);
       });
+
+      expect(typeof config.preparation.autoDetectUpAxis).toBe("boolean");
+      expect(Number.isFinite(config.preparation.rotationOffsetZ)).toBe(true);
+
+      Object.values(config.placement).forEach((value) => {
+        expect(Number.isFinite(value)).toBe(true);
+      });
+      expect(config.placement.minHeight).toBeLessThanOrEqual(config.placement.maxHeight);
+      expect(config.placement.targetHeightRatio).toBeGreaterThan(0);
     });
   });
 

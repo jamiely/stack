@@ -60,6 +60,19 @@ export interface RemyAnimationAsset {
 
 export interface RemyModelConfig {
   debugDefaults: RemyDebugConfig;
+  preparation: {
+    autoDetectUpAxis: boolean;
+    rotationOffsetZ: number;
+  };
+  placement: {
+    targetHeightRatio: number;
+    minHeight: number;
+    maxHeight: number;
+    ledgeClearance: number;
+    ledgeInsetRatio: number;
+    wallClearance: number;
+    rotationOffsetY: number;
+  };
 }
 
 export interface RemyModelNormalizationMetrics {
