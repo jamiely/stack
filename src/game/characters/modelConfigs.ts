@@ -1,4 +1,13 @@
-import type { RemyCharacterAsset, RemyCharacterId, RemyDebugConfig, RemyModelConfig } from "./contracts";
+import type {
+  RemyAnimationAsset,
+  RemyCharacterAsset,
+  RemyCharacterId,
+  RemyDebugConfig,
+  RemyDebugKey,
+  RemyModelConfig,
+} from "./contracts";
+
+export type CharacterFaceId = "posX" | "negX" | "posZ" | "negZ";
 
 export const REMY_LEGACY_DEBUG_DEFAULTS: RemyDebugConfig = {
   yawDegrees: -9,
@@ -59,6 +68,38 @@ export const REMY_CHARACTER_ASSETS: readonly RemyCharacterAsset[] = [
   { id: "amy", modelUrl: new URL("../../../assets/amy_tiny_webp.glb", import.meta.url).href },
   { id: "aj", modelUrl: new URL("../../../assets/aj_tiny_webp.glb", import.meta.url).href },
 ];
+
+export const REMY_ANIMATION_ASSETS: readonly RemyAnimationAsset[] = [
+  { id: "hip-hop", animationUrl: new URL("../../../assets/remy_hip_hop_animation_inplace.glb", import.meta.url).href },
+  { id: "house", animationUrl: new URL("../../../assets/house_dancing_inplace.glb", import.meta.url).href },
+  { id: "chicken", animationUrl: new URL("../../../assets/chicken_dance_inplace.glb", import.meta.url).href },
+  { id: "ymca", animationUrl: new URL("../../../assets/ymca_dance_inplace.glb", import.meta.url).href },
+];
+
+export const REMY_DEBUG_RANGES: Record<RemyDebugKey, { min: number; max: number; step: number; label: string; suffix?: string }> = {
+  yawDegrees: { min: -180, max: 180, step: 1, label: "Remy Rot Y", suffix: "°" },
+  pitchDegrees: { min: -180, max: 180, step: 1, label: "Remy Rot X", suffix: "°" },
+  rollDegrees: { min: -180, max: 180, step: 1, label: "Remy Rot Z", suffix: "°" },
+  translateX: { min: -2, max: 2, step: 0.01, label: "Remy Move X" },
+  translateY: { min: -2, max: 2, step: 0.01, label: "Remy Move Y" },
+  translateZ: { min: -2, max: 2, step: 0.01, label: "Remy Move Z" },
+};
+
+export const REMY_SIDE_POSE_PRESETS: Record<CharacterFaceId, RemyDebugConfig> = {
+  posX: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
+  negX: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
+  posZ: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0.4 },
+  negZ: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0.4 },
+};
+
+export const REMY_FALLBACK_POSE_PRESET: RemyDebugConfig = {
+  pitchDegrees: 0,
+  yawDegrees: 0,
+  rollDegrees: 0,
+  translateX: 0,
+  translateY: 0,
+  translateZ: 0,
+};
 
 export function getRemyModelConfig(characterId: RemyCharacterId): RemyModelConfig {
   return REMY_CHARACTER_MODEL_CONFIGS[characterId];

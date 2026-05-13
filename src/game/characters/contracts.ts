@@ -9,6 +9,8 @@ export interface RemyDebugConfig {
   translateZ: number;
 }
 
+export type RemyDebugKey = keyof RemyDebugConfig;
+
 export interface RemyVector3Like {
   x: number;
   y: number;
@@ -49,6 +51,11 @@ export interface RemyPlacementTransformResult {
 export interface RemyCharacterAsset {
   id: RemyCharacterId;
   modelUrl: string;
+}
+
+export interface RemyAnimationAsset {
+  id: string;
+  animationUrl: string;
 }
 
 export interface RemyModelConfig {
