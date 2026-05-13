@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  REMY_ANIMATION_ASSETS,
   REMY_CHARACTER_ASSETS,
   REMY_CHARACTER_MODEL_CONFIGS,
+  REMY_DEBUG_RANGES,
   REMY_LEGACY_DEBUG_DEFAULTS,
   REMY_TEST_MODE_DEBUG_DEFAULTS,
   getRemyDebugDefaults,
@@ -26,5 +28,20 @@ describe("remy model configs", () => {
   it("uses the legacy remy defaults when test mode is enabled", () => {
     expect(getRemyDebugDefaults("timmy", { testMode: true })).toEqual(REMY_TEST_MODE_DEBUG_DEFAULTS);
     expect(REMY_TEST_MODE_DEBUG_DEFAULTS).toEqual(REMY_LEGACY_DEBUG_DEFAULTS);
+  });
+
+  it("defines finite animation assets and debug slider metadata", () => {
+    expect(REMY_ANIMATION_ASSETS.length).toBeGreaterThan(0);
+    REMY_ANIMATION_ASSETS.forEach((asset) => {
+      expect(asset.id.length).toBeGreaterThan(0);
+      expect(asset.animationUrl).toContain(".glb");
+    });
+
+    Object.values(REMY_DEBUG_RANGES).forEach((range) => {
+      expect(Number.isFinite(range.min)).toBe(true);
+      expect(Number.isFinite(range.max)).toBe(true);
+      expect(Number.isFinite(range.step)).toBe(true);
+      expect(range.label.length).toBeGreaterThan(0);
+    });
   });
 });
