@@ -26,8 +26,9 @@ describe("Game character animation facade routing", () => {
     expect(runSimulationStepBody).not.toContain("this.updateRemyAnimation(deltaSeconds);");
   });
 
-  it("removes direct preload/spawn/release callsites from Game orchestration paths", () => {
-    expect(countMatches(gameSource, /this\.loadRemyCharacter\(\)/g)).toBe(2);
+  it("keeps direct load/release wiring limited to the manager bridge plus model-lab bootstrap", () => {
+    expect(countMatches(gameSource, /this\.loadRemyCharacter\(\)/g)).toBe(3);
     expect(countMatches(gameSource, /this\.detachRemyCharacter\(\)/g)).toBe(2);
+    expect(gameSource).toContain("private ensureModelLabCharacterLoaded(): void {");
   });
 });

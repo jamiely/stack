@@ -1,3 +1,6 @@
+import type { ModelLabState, ModelLabStatePatch } from "./debug/modelLabState";
+import type { CharacterSpatialSnapshot } from "./debug/spatialDebug";
+
 export type GameState = "idle" | "playing" | "game_over";
 
 export type Axis = "x" | "z";
@@ -249,6 +252,11 @@ export interface PublicGameState {
     };
   };
   debugConfig: DebugConfig;
+  modelLab: ModelLabState;
+  spatialDebug: {
+    primaryCharacter: CharacterSpatialSnapshot | null;
+    secondaryCharacter: CharacterSpatialSnapshot | null;
+  };
   testMode: {
     enabled: boolean;
     paused: boolean;
@@ -263,6 +271,15 @@ export interface TestApi {
   restartGame(): void;
   returnToTitle(): void;
   applyDebugConfig(config: Partial<DebugConfig>): void;
+  applyRemyDebugConfig(config: Partial<{
+    yawDegrees: number;
+    pitchDegrees: number;
+    rollDegrees: number;
+    translateX: number;
+    translateY: number;
+    translateZ: number;
+  }>): void;
+  applyModelLabState(state: ModelLabStatePatch): void;
   stepSimulation(steps?: number): void;
   setPaused(paused: boolean): void;
   setActiveOffset(offset: number): boolean;

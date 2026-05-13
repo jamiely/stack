@@ -95,6 +95,8 @@ import { computeRemyPlacementTransform, resolveRemyTargetHeight } from "./charac
 import { REMY_CHARACTER_ASSETS, getRemyDebugDefaults } from "./characters/modelConfigs";
 import { normalizeRemyModel } from "./characters/modelNormalization";
 import { createCharacterSceneNodes } from "./characters/sceneNodes";
+import { applyModelLabStatePatch, createModelLabState, type ModelLabStatePatch } from "./debug/modelLabState";
+import { createCharacterSpatialSnapshot, createSpatialDebugSurface } from "./debug/spatialDebug";
 import {
   REMY_LEDGE_SPAWN_CHANCE,
   hasRecentTentacleBurstOnFace,
@@ -190,6 +192,18 @@ interface RemyAnimationTargetBinding {
   model: Object3D;
   role: "primary" | "secondary";
   fallbackClips: readonly AnimationClip[];
+}
+
+interface RemySpatialAnchorContext {
+  level: number | null;
+  faceId: FaceId | null;
+  slabPosition: { x: number; y: number; z: number } | null;
+  ledgePosition: { x: number; y: number; z: number } | null;
+  ledgeRotationY: number | null;
+  ledgeHeight: number | null;
+  ledgeDepth: number | null;
+  laneOffset: number | null;
+  targetHeight: number | null;
 }
 
 interface PerformanceSnapshot {
@@ -574,6 +588,8 @@ export class Game {
   private remyAppearanceRefreshPending = false;
   private activeBlockMotionPaused = false;
   private pauseBlockMotionButton: HTMLButtonElement | null = null;
+  private readonly modelLabState = createModelLabState(false);
+  private readonly spatialDebugSurface = createSpatialDebugSurface();
 
   public constructor(container: HTMLDivElement) {
     this.container = container;
@@ -582,6 +598,8 @@ export class Game {
     this.testMode = readTestModeOptions(query);
     this.simulationPaused = this.testMode.enabled && this.testMode.startPaused;
     this.remyDebugConfig = this.getDefaultRemyDebugConfig();
+    const modelLabEnabled = this.debugEnabled || this.testMode.enabled;
+    this.modelLabState.enabled = modelLabEnabled;
 
     this.shell = document.createElement("div");
     this.shell.className = "game-shell";
@@ -674,6 +692,7 @@ export class Game {
       this.debrisGroup,
       this.collapseVoxelGroup,
       this.tentacleGroup,
+      this.spatialDebugSurface.root,
       this.gridHelper,
     );
 
@@ -1028,8 +1047,41 @@ export class Game {
     });
 
     section.append(resetButton);
+
+    if (this.modelLabState.enabled) {
+      section.append(
+        this.createModelLabToggleControl("Show Spatial Helpers", "showSpatialHelpers", "debug-toggle-spatial-helpers"),
+        this.createModelLabToggleControl("Force Top Placement Lab", "forceTopFallback", "debug-toggle-force-top-lab"),
+      );
+    }
+
     this.updateRemyDebugValueLabels();
     return section;
+  }
+
+  private createModelLabToggleControl(
+    labelText: string,
+    key: keyof Omit<typeof this.modelLabState, "enabled">,
+    testId: string,
+  ): HTMLLabelElement {
+    const label = document.createElement("label");
+    label.className = "debug-panel__toggle";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = this.modelLabState[key];
+    input.dataset.modelLabKey = key;
+    input.dataset.testid = testId;
+    input.addEventListener("change", () => {
+      this.applyModelLabState({
+        [key]: input.checked,
+      });
+    });
+
+    const text = document.createElement("span");
+    text.textContent = labelText;
+    label.append(input, text);
+    return label;
   }
 
   private resolveBaseRemyDebugConfig(characterId: RemyCharacterId | null = this.activeRemyCharacterId): RemyDebugConfig {
@@ -1068,6 +1120,35 @@ export class Game {
 
     this.updateRemyDebugValueLabels();
     this.placeRemyOnTopLedge();
+  }
+
+  private applyModelLabState(state: ModelLabStatePatch): void {
+    const nextState = applyModelLabStatePatch(this.modelLabState, state);
+    this.modelLabState.showSpatialHelpers = nextState.showSpatialHelpers;
+    this.modelLabState.forceTopFallback = nextState.forceTopFallback;
+
+    this.debugPanel.querySelectorAll<HTMLInputElement>("[data-model-lab-key]").forEach((input) => {
+      const key = input.dataset.modelLabKey as keyof Omit<typeof this.modelLabState, "enabled"> | undefined;
+      if (!key) {
+        return;
+      }
+
+      input.checked = this.modelLabState[key];
+    });
+
+    this.ensureModelLabCharacterLoaded();
+    this.refreshSpatialDebugSurface();
+    if (state.forceTopFallback !== undefined) {
+      this.placeRemyOnTopLedge();
+    }
+  }
+
+  private ensureModelLabCharacterLoaded(): void {
+    if (!this.modelLabState.enabled || this.remyView || this.remyIsLoading) {
+      return;
+    }
+
+    this.loadRemyCharacter();
   }
 
   private updateRemyDebugValueLabels(): void {
@@ -1179,6 +1260,7 @@ export class Game {
       this.updateImpactPulse(deltaSeconds);
       this.updateDistractionActors(0);
       this.updateCamera(deltaSeconds);
+      this.refreshSpatialDebugSurface();
     }
 
     this.renderer?.render(this.scene, this.camera);
@@ -1203,6 +1285,7 @@ export class Game {
     this.updateImpactPulse(deltaSeconds);
     this.updateCollapseSequence(deltaSeconds);
     this.updateCamera(deltaSeconds);
+    this.refreshSpatialDebugSurface();
   }
 
   private updatePerformanceFrameTimes(deltaSeconds: number): void {
@@ -1369,6 +1452,11 @@ export class Game {
     const initialTargetY = initialFocusY + this.debugConfig.cameraHeight;
     this.cameraTargetPosition.set(CAMERA_X, initialTargetY, this.debugConfig.cameraDistance);
     this.cameraLookAtY = Math.max(1.2, initialFocusY);
+
+    if (this.modelLabState.enabled) {
+      this.ensureModelLabCharacterLoaded();
+      return;
+    }
 
     if (!this.testMode.enabled) {
       this.characterAnimationManager.preload();
@@ -2829,6 +2917,14 @@ export class Game {
 
   private placeRemyOnTopLedge(): void {
     if (!this.remyView) {
+      this.refreshSpatialDebugSurface();
+      return;
+    }
+
+    if (this.modelLabState.forceTopFallback) {
+      this.remyAnchor = null;
+      this.remySuppressedByTentacles = false;
+      this.placeRemyAtTopFallback();
       return;
     }
 
@@ -2957,6 +3053,8 @@ export class Game {
     } else {
       this.remySecondaryView?.detach();
     }
+
+    this.refreshSpatialDebugSurface();
   }
 
   private syncRemyTentacleSuppression(): void {
@@ -3003,6 +3101,65 @@ export class Game {
     });
   }
 
+  private getRemySpatialAnchorContext(role: "primary" | "secondary"): RemySpatialAnchorContext | null {
+    if (this.modelLabState.forceTopFallback) {
+      const topSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? null;
+      return {
+        level: topSlab?.level ?? null,
+        faceId: null,
+        slabPosition: topSlab ? { ...topSlab.position } : null,
+        ledgePosition: topSlab ? { x: 0, y: 0, z: 0 } : null,
+        ledgeRotationY: 0,
+        ledgeHeight: topSlab?.dimensions.height ?? null,
+        ledgeDepth: 0,
+        laneOffset: 0,
+        targetHeight: topSlab
+          ? resolveRemyTargetHeight(topSlab.dimensions.height, REMY_TARGET_HEIGHT_RATIO, REMY_MIN_HEIGHT, REMY_MAX_HEIGHT)
+          : null,
+      };
+    }
+
+    if (!this.remyAnchor) {
+      return null;
+    }
+
+    const anchor = this.findLedgeAnchorByLevelAndFace(this.remyAnchor.level, this.remyAnchor.faceNoiseSalt);
+    if (!anchor) {
+      return null;
+    }
+
+    const faceId = this.readRemyFaceId(anchor.ledgeMesh);
+    const laneOffsets = this.resolveRemyLaneOffsets(anchor.ledgeMesh, shouldSpawnDualRemyCharacters(anchor.ledgeMesh.userData.widthRatio ?? 0));
+    const targetHeight = resolveRemyTargetHeight(
+      anchor.slab.dimensions.height,
+      REMY_TARGET_HEIGHT_RATIO,
+      REMY_MIN_HEIGHT,
+      REMY_MAX_HEIGHT,
+    );
+
+    return {
+      level: anchor.slab.level,
+      faceId,
+      slabPosition: { ...anchor.slab.position },
+      ledgePosition: {
+        x: anchor.ledgeMesh.position.x,
+        y: anchor.ledgeMesh.position.y,
+        z: anchor.ledgeMesh.position.z,
+      },
+      ledgeRotationY: anchor.ledgeMesh.rotation.y,
+      ledgeHeight:
+        typeof anchor.ledgeMesh.userData.ledgeHeight === "number"
+          ? anchor.ledgeMesh.userData.ledgeHeight
+          : Math.max(0.1, anchor.slab.dimensions.height * 0.1),
+      ledgeDepth:
+        typeof anchor.ledgeMesh.userData.ledgeDepth === "number"
+          ? anchor.ledgeMesh.userData.ledgeDepth
+          : Math.max(0.24, anchor.slab.dimensions.height * 0.18),
+      laneOffset: laneOffsets[role === "primary" ? 0 : 1] ?? 0,
+      targetHeight,
+    };
+  }
+
   private resolveRemyLaneOffsets(ledgeMesh: Mesh, useDualCharacters: boolean): number[] {
     if (!useDualCharacters) {
       return [0];
@@ -3042,16 +3199,19 @@ export class Game {
   private placeRemyAtTopFallback(): void {
     this.characterAnimationManager.release();
     if (!this.remyView) {
+      this.refreshSpatialDebugSurface();
       return;
     }
 
     const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
     if (!topSlab) {
+      this.refreshSpatialDebugSurface();
       return;
     }
 
     const topSlabMesh = this.slabMeshes.get(topSlab.level);
     if (!topSlabMesh) {
+      this.refreshSpatialDebugSurface();
       return;
     }
 
@@ -3080,6 +3240,7 @@ export class Game {
     this.remyView.applyPlacement(placement);
     this.remyView.attachTo(topSlabMesh);
     this.remySecondaryView?.detach();
+    this.refreshSpatialDebugSurface();
   }
 
   private isRemySpawnEligibleLedge(ledgeMesh: Mesh): boolean {
@@ -3559,6 +3720,12 @@ export class Game {
         this.applyDebugConfig(config);
         this.renderHud();
       },
+      applyRemyDebugConfig: (config) => {
+        this.applyRemyDebugConfig(config);
+      },
+      applyModelLabState: (state) => {
+        this.applyModelLabState(state);
+      },
       stepSimulation: (steps = 1) => {
         const clampedSteps = Math.max(1, Math.floor(steps));
         for (let index = 0; index < clampedSteps; index += 1) {
@@ -3586,6 +3753,7 @@ export class Game {
   private getPublicState(): PublicGameState {
     const feedback = this.feedbackManager.getSnapshot();
     const distractionSnapshot = this.getEffectiveDistractionSnapshot();
+    const spatialDebug = this.getSpatialDebugState();
 
     return {
       gameState: this.gameState,
@@ -3667,6 +3835,8 @@ export class Game {
       },
       performance: this.getPerformanceSnapshot(),
       debugConfig: { ...this.debugConfig },
+      modelLab: { ...this.modelLabState },
+      spatialDebug,
       testMode: {
         enabled: this.testMode.enabled,
         paused: this.simulationPaused,
@@ -3674,6 +3844,46 @@ export class Game {
         seed: this.testMode.seed,
       },
     };
+  }
+
+  private getSpatialDebugState(): PublicGameState["spatialDebug"] {
+    return {
+      primaryCharacter: this.getCharacterSpatialSnapshot("primary"),
+      secondaryCharacter: this.getCharacterSpatialSnapshot("secondary"),
+    };
+  }
+
+  private getCharacterSpatialSnapshot(role: "primary" | "secondary") {
+    const view = role === "primary" ? this.remyView : this.remySecondaryView;
+    const characterId = role === "primary" ? this.activeRemyCharacterId : this.activeRemySecondaryCharacterId;
+    if (!this.modelLabState.enabled) {
+      return null;
+    }
+
+    if (!view || !characterId) {
+      if (role === "primary") {
+        this.ensureModelLabCharacterLoaded();
+      }
+      return null;
+    }
+
+    const anchorContext = this.getRemySpatialAnchorContext(role);
+    const debugConfig = role === "primary" ? this.remyDebugConfig : this.getDefaultRemyDebugConfig(characterId);
+
+    return createCharacterSpatialSnapshot({
+      role,
+      characterId,
+      view,
+      debugConfig,
+      anchor: anchorContext,
+    });
+  }
+
+  private refreshSpatialDebugSurface(): void {
+    const primaryCharacter = this.getCharacterSpatialSnapshot("primary");
+    this.spatialDebugSurface.update(primaryCharacter, {
+      visible: this.modelLabState.enabled && this.modelLabState.showSpatialHelpers,
+    });
   }
 
   private refreshIntegrityTelemetry(): void {
