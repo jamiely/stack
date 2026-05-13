@@ -61,3 +61,25 @@ export interface RemyModelNormalizationMetrics {
   baseDepth: number;
   centerOffsetFromFeet: number;
 }
+
+export interface CharacterSceneNodes<Object3DLike = import("three").Object3D, GroupLike = import("three").Group> {
+  characterRoot: GroupLike;
+  placementNode: GroupLike;
+  facingNode: GroupLike;
+  scaleNode: GroupLike;
+  correctionNode: GroupLike;
+  poseRotateX: GroupLike;
+  poseRotateY: GroupLike;
+  poseRotateZ: GroupLike;
+  animationTarget: Object3DLike;
+}
+
+export interface CharacterView<Object3DLike = import("three").Object3D, GroupLike = import("three").Group> {
+  readonly sceneNodes: CharacterSceneNodes<Object3DLike, GroupLike>;
+  readonly animationTarget: Object3DLike;
+  readonly baseHeight: number;
+  readonly baseDepth: number;
+  applyPlacement(placement: RemyPlacementTransformResult): void;
+  attachTo(parent: Object3DLike): void;
+  detach(): void;
+}

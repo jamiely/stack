@@ -90,9 +90,11 @@ import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
+import { createCharacterView } from "./characters/characterView";
 import { computeRemyPlacementTransform, resolveRemyTargetHeight } from "./characters/placementMath";
 import { REMY_CHARACTER_ASSETS, getRemyDebugDefaults } from "./characters/modelConfigs";
 import { normalizeRemyModel } from "./characters/modelNormalization";
+import { createCharacterSceneNodes } from "./characters/sceneNodes";
 import {
   REMY_LEDGE_SPAWN_CHANCE,
   hasRecentTentacleBurstOnFace,
@@ -108,7 +110,7 @@ import { createComboState, updateComboState } from "./logic/streak";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { RecoveryState } from "./logic/recovery";
 import type { ComboState } from "./logic/streak";
-import type { RemyCharacterId, RemyDebugConfig } from "./characters/contracts";
+import type { CharacterView, RemyCharacterId, RemyDebugConfig } from "./characters/contracts";
 import type { DistractionChannel, DistractionSnapshot, DistractionState } from "./logic/distractions";
 import type { CollapseSequenceState, CollapseTrigger } from "./logic/collapse";
 import type { IntegrityTelemetry } from "./logic/integrity";
@@ -553,20 +555,10 @@ export class Game {
   private fireworksState: FireworksState | null = null;
   private fireworksSimulationSeed = 0;
   private tentacleBurstKeys: string[] = [];
-  private remyCharacter: Group | null = null;
-  private remyPoseRotateX: Group | null = null;
-  private remyPoseRotateY: Group | null = null;
-  private remyPoseRotateZ: Group | null = null;
+  private remyView: CharacterView | null = null;
   private remyMixer: AnimationMixer | null = null;
-  private remySecondaryCharacter: Group | null = null;
-  private remySecondaryPoseRotateX: Group | null = null;
-  private remySecondaryPoseRotateY: Group | null = null;
-  private remySecondaryPoseRotateZ: Group | null = null;
+  private remySecondaryView: CharacterView | null = null;
   private remySecondaryMixer: AnimationMixer | null = null;
-  private remyBaseHeight = 1;
-  private remyBaseDepth = 1;
-  private remySecondaryBaseHeight = 1;
-  private remySecondaryBaseDepth = 1;
   private remyDebugConfig: RemyDebugConfig = getRemyDebugDefaults("remy");
   private activeRemyCharacterId: RemyCharacterId | null = null;
   private activeRemySecondaryCharacterId: RemyCharacterId | null = null;
@@ -1091,10 +1083,6 @@ export class Game {
     });
   }
 
-  private toRadians(degrees: number): number {
-    return (degrees * Math.PI) / 180;
-  }
-
   private readonly handlePrimaryAction = (): void => {
     this.feedbackManager.primeFromGesture();
 
@@ -1292,20 +1280,10 @@ export class Game {
     this.remyRefreshPending = false;
     this.remyAppearanceRefreshPending = false;
     this.characterAnimationManager.disposeAll();
-    this.remyCharacter = null;
-    this.remyPoseRotateX = null;
-    this.remyPoseRotateY = null;
-    this.remyPoseRotateZ = null;
+    this.remyView = null;
     this.remyMixer = null;
-    this.remySecondaryCharacter = null;
-    this.remySecondaryPoseRotateX = null;
-    this.remySecondaryPoseRotateY = null;
-    this.remySecondaryPoseRotateZ = null;
+    this.remySecondaryView = null;
     this.remySecondaryMixer = null;
-    this.remyBaseHeight = 1;
-    this.remyBaseDepth = 1;
-    this.remySecondaryBaseHeight = 1;
-    this.remySecondaryBaseDepth = 1;
     this.lastFrameTime = 0;
     this.simulationElapsedSeconds = 0;
     this.score = 0;
@@ -2564,20 +2542,10 @@ export class Game {
     this.remyAnchor = null;
     this.remySuppressedByTentacles = false;
     this.characterAnimationManager.release();
-    this.remyCharacter = null;
-    this.remyPoseRotateX = null;
-    this.remyPoseRotateY = null;
-    this.remyPoseRotateZ = null;
+    this.remyView = null;
     this.remyMixer = null;
-    this.remySecondaryCharacter = null;
-    this.remySecondaryPoseRotateX = null;
-    this.remySecondaryPoseRotateY = null;
-    this.remySecondaryPoseRotateZ = null;
+    this.remySecondaryView = null;
     this.remySecondaryMixer = null;
-    this.remyBaseHeight = 1;
-    this.remyBaseDepth = 1;
-    this.remySecondaryBaseHeight = 1;
-    this.remySecondaryBaseDepth = 1;
     this.characterAnimationManager.spawnLedgeCharacter();
   }
 
@@ -2634,20 +2602,8 @@ export class Game {
           }
         }
 
-        this.remyCharacter = primarySetup.rig.characterRoot;
-        this.remyPoseRotateX = primarySetup.rig.poseRotateX;
-        this.remyPoseRotateY = primarySetup.rig.poseRotateY;
-        this.remyPoseRotateZ = primarySetup.rig.poseRotateZ;
-
-        this.remySecondaryCharacter = secondarySetup?.rig.characterRoot ?? null;
-        this.remySecondaryPoseRotateX = secondarySetup?.rig.poseRotateX ?? null;
-        this.remySecondaryPoseRotateY = secondarySetup?.rig.poseRotateY ?? null;
-        this.remySecondaryPoseRotateZ = secondarySetup?.rig.poseRotateZ ?? null;
-
-        this.remyBaseHeight = primarySetup.baseHeight;
-        this.remyBaseDepth = primarySetup.baseDepth;
-        this.remySecondaryBaseHeight = secondarySetup?.baseHeight ?? primarySetup.baseHeight;
-        this.remySecondaryBaseDepth = secondarySetup?.baseDepth ?? primarySetup.baseDepth;
+        this.remyView = primarySetup.view;
+        this.remySecondaryView = secondarySetup?.view ?? null;
 
         this.activeRemyCharacterId = selectedCharacter.id;
         this.activeRemySecondaryCharacterId = secondarySetup ? secondaryCharacter?.id ?? null : null;
@@ -2664,14 +2620,14 @@ export class Game {
 
         const animationTargets: RemyAnimationTargetBinding[] = [
           {
-            model: primarySetup.rig.animationTarget,
+            model: primarySetup.view.animationTarget,
             role: "primary",
             fallbackClips: primarySetup.animations,
           },
           ...(secondarySetup
             ? [
                 {
-                  model: secondarySetup.rig.animationTarget,
+                  model: secondarySetup.view.animationTarget,
                   role: "secondary" as const,
                   fallbackClips: secondarySetup.animations,
                 },
@@ -2703,15 +2659,7 @@ export class Game {
     characterId: RemyCharacterId,
     nameSuffix: string,
   ): {
-    rig: {
-      characterRoot: Group;
-      poseRotateX: Group;
-      poseRotateY: Group;
-      poseRotateZ: Group;
-      animationTarget: Object3D;
-    };
-    baseHeight: number;
-    baseDepth: number;
+    view: CharacterView;
     animations: readonly AnimationClip[];
   } | null {
     const model = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
@@ -2729,46 +2677,16 @@ export class Game {
     }
 
     return {
-      rig: this.createRemyCharacterRig(model, normalizedMetrics.centerOffsetFromFeet, nameSuffix),
-      baseHeight: normalizedMetrics.baseHeight,
-      baseDepth: normalizedMetrics.baseDepth,
+      view: createCharacterView({
+        sceneNodes: createCharacterSceneNodes({
+          model,
+          centerOffsetFromFeet: normalizedMetrics.centerOffsetFromFeet,
+          nameSuffix,
+        }),
+        baseHeight: normalizedMetrics.baseHeight,
+        baseDepth: normalizedMetrics.baseDepth,
+      }),
       animations: gltf.animations,
-    };
-  }
-
-  private createRemyCharacterRig(model: Object3D, centerOffsetFromFeet: number, nameSuffix: string): {
-    characterRoot: Group;
-    poseRotateX: Group;
-    poseRotateY: Group;
-    poseRotateZ: Group;
-    animationTarget: Object3D;
-  } {
-    const characterRoot = new Group();
-    characterRoot.name = `remy-character-${nameSuffix}`;
-
-    const posePivot = new Group();
-    posePivot.name = `remy-pose-pivot-${nameSuffix}`;
-    posePivot.position.y = centerOffsetFromFeet;
-
-    const poseRotateX = new Group();
-    poseRotateX.name = `remy-pose-rotate-x-${nameSuffix}`;
-    const poseRotateY = new Group();
-    poseRotateY.name = `remy-pose-rotate-y-${nameSuffix}`;
-    const poseRotateZ = new Group();
-    poseRotateZ.name = `remy-pose-rotate-z-${nameSuffix}`;
-
-    posePivot.add(poseRotateX);
-    poseRotateX.add(poseRotateY);
-    poseRotateY.add(poseRotateZ);
-    poseRotateZ.add(model);
-    characterRoot.add(posePivot);
-
-    return {
-      characterRoot,
-      poseRotateX,
-      poseRotateY,
-      poseRotateZ,
-      animationTarget: model,
     };
   }
 
@@ -3017,7 +2935,7 @@ export class Game {
   }
 
   private placeRemyOnTopLedge(): void {
-    if (!this.remyCharacter) {
+    if (!this.remyView) {
       return;
     }
 
@@ -3106,16 +3024,11 @@ export class Game {
       : this.getDefaultRemyDebugConfig("timmy");
 
     const placeCharacter = (
-      character: Group | null,
+      view: CharacterView | null,
       laneOffset: number,
-      baseHeight: number,
-      baseDepth: number,
-      poseRotateX: Group | null,
-      poseRotateY: Group | null,
-      poseRotateZ: Group | null,
       placementConfig: RemyDebugConfig,
     ): void => {
-      if (!character) {
+      if (!view) {
         return;
       }
 
@@ -3129,8 +3042,8 @@ export class Game {
         ledgeHeight,
         ledgeDepth,
         laneOffset,
-        baseHeight,
-        baseDepth,
+        baseHeight: view.baseHeight,
+        baseDepth: view.baseDepth,
         targetHeight,
         sidePose,
         debugConfig: placementConfig,
@@ -3140,49 +3053,16 @@ export class Game {
         rotationOffsetY: REMY_ROTATION_OFFSET_Y,
       });
 
-      this.applyRemyDebugRotation(
-        poseRotateX,
-        poseRotateY,
-        poseRotateZ,
-        placement.poseRotationDegrees.x,
-        placement.poseRotationDegrees.y,
-        placement.poseRotationDegrees.z,
-      );
-
-      character.scale.setScalar(placement.uniformScale);
-      character.position.set(
-        placement.worldPosition.x,
-        placement.worldPosition.y,
-        placement.worldPosition.z,
-      );
-      character.rotation.set(0, placement.facingRotationY, 0);
-      slabMesh.add(character);
+      view.applyPlacement(placement);
+      view.attachTo(slabMesh);
     };
 
-    placeCharacter(
-      this.remyCharacter,
-      laneOffsets[0] ?? 0,
-      this.remyBaseHeight,
-      this.remyBaseDepth,
-      this.remyPoseRotateX,
-      this.remyPoseRotateY,
-      this.remyPoseRotateZ,
-      primaryPlacementConfig,
-    );
+    placeCharacter(this.remyView, laneOffsets[0] ?? 0, primaryPlacementConfig);
 
-    if (useDualCharacters && this.remySecondaryCharacter && laneOffsets.length > 1) {
-      placeCharacter(
-        this.remySecondaryCharacter,
-        laneOffsets[1]!,
-        this.remySecondaryBaseHeight,
-        this.remySecondaryBaseDepth,
-        this.remySecondaryPoseRotateX,
-        this.remySecondaryPoseRotateY,
-        this.remySecondaryPoseRotateZ,
-        secondaryPlacementConfig,
-      );
-    } else if (this.remySecondaryCharacter?.parent) {
-      this.remySecondaryCharacter.parent.remove(this.remySecondaryCharacter);
+    if (useDualCharacters && this.remySecondaryView && laneOffsets.length > 1) {
+      placeCharacter(this.remySecondaryView, laneOffsets[1]!, secondaryPlacementConfig);
+    } else {
+      this.remySecondaryView?.detach();
     }
   }
 
@@ -3249,19 +3129,6 @@ export class Game {
     return [-spread, spread];
   }
 
-  private applyRemyDebugRotation(
-    poseRotateX: Group | null,
-    poseRotateY: Group | null,
-    poseRotateZ: Group | null,
-    pitchDegrees: number,
-    yawDegrees: number,
-    rollDegrees: number,
-  ): void {
-    poseRotateX?.rotation.set(this.toRadians(pitchDegrees), 0, 0);
-    poseRotateY?.rotation.set(0, this.toRadians(yawDegrees), 0);
-    poseRotateZ?.rotation.set(0, 0, this.toRadians(rollDegrees));
-  }
-
   private readRemyFaceId(ledgeMesh: Mesh): FaceId | null {
     const faceId = ledgeMesh.userData.faceId;
     if (faceId === "posX" || faceId === "negX" || faceId === "posZ" || faceId === "negZ") {
@@ -3281,7 +3148,7 @@ export class Game {
 
   private placeRemyAtTopFallback(): void {
     this.characterAnimationManager.release();
-    if (!this.remyCharacter) {
+    if (!this.remyView) {
       return;
     }
 
@@ -3297,27 +3164,29 @@ export class Game {
 
     const sidePose = this.resolveRemySidePose(null);
     const targetHeight = Math.min(REMY_MAX_HEIGHT, Math.max(REMY_MIN_HEIGHT, topSlab.dimensions.height * REMY_TARGET_HEIGHT_RATIO));
-    const uniformScale = targetHeight / Math.max(0.001, this.remyBaseHeight);
-    this.remyCharacter.scale.setScalar(uniformScale);
-    this.remyCharacter.position.set(
-      sidePose.translateX + this.remyDebugConfig.translateX,
-      topSlab.dimensions.height / 2 + REMY_LEDGE_CLEARANCE + sidePose.translateY + this.remyDebugConfig.translateY,
-      sidePose.translateZ + this.remyDebugConfig.translateZ,
-    );
-    this.remyCharacter.rotation.set(0, REMY_ROTATION_OFFSET_Y, 0);
-    this.applyRemyDebugRotation(
-      this.remyPoseRotateX,
-      this.remyPoseRotateY,
-      this.remyPoseRotateZ,
-      sidePose.pitchDegrees + this.remyDebugConfig.pitchDegrees,
-      sidePose.yawDegrees + this.remyDebugConfig.yawDegrees,
-      sidePose.rollDegrees + this.remyDebugConfig.rollDegrees,
-    );
-    topSlabMesh.add(this.remyCharacter);
-
-    if (this.remySecondaryCharacter?.parent) {
-      this.remySecondaryCharacter.parent.remove(this.remySecondaryCharacter);
-    }
+    const placement = computeRemyPlacementTransform({
+      ledgePosition: {
+        x: 0,
+        y: 0,
+        z: 0,
+      },
+      ledgeRotationY: 0,
+      ledgeHeight: topSlab.dimensions.height,
+      ledgeDepth: 0,
+      laneOffset: 0,
+      baseHeight: this.remyView.baseHeight,
+      baseDepth: this.remyView.baseDepth,
+      targetHeight,
+      sidePose,
+      debugConfig: this.remyDebugConfig,
+      ledgeInsetRatio: 0,
+      wallClearance: 0,
+      ledgeClearance: REMY_LEDGE_CLEARANCE,
+      rotationOffsetY: REMY_ROTATION_OFFSET_Y,
+    });
+    this.remyView.applyPlacement(placement);
+    this.remyView.attachTo(topSlabMesh);
+    this.remySecondaryView?.detach();
   }
 
   private isRemySpawnEligibleLedge(ledgeMesh: Mesh): boolean {
@@ -3374,13 +3243,8 @@ export class Game {
   }
 
   private detachRemyCharacter(): void {
-    if (this.remyCharacter?.parent) {
-      this.remyCharacter.parent.remove(this.remyCharacter);
-    }
-
-    if (this.remySecondaryCharacter?.parent) {
-      this.remySecondaryCharacter.parent.remove(this.remySecondaryCharacter);
-    }
+    this.remyView?.detach();
+    this.remySecondaryView?.detach();
   }
 
   private triggerImpactPulse(durationSeconds: number): void {
