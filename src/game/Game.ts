@@ -28,7 +28,6 @@ import {
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
-import { retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { clampDebugConfig, defaultDebugConfig } from "./debugConfig";
 import { FeedbackManager } from "./FeedbackManager";
 import { getFailureFeedbackPlan, getPlacementFeedbackPlan } from "./logic/feedback";
@@ -91,6 +90,7 @@ import { initializeFireworksState, stepFireworksState, type FireworksConfig, typ
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
 import { createCharacterView } from "./characters/characterView";
+import { resolveAnimationClipsForTargets, resolveFallbackAnimationClips } from "./characters/animationClipResolver";
 import { computeRemyPlacementTransform, resolveRemyTargetHeight } from "./characters/placementMath";
 import { REMY_CHARACTER_ASSETS, getRemyDebugDefaults } from "./characters/modelConfigs";
 import { normalizeRemyModel } from "./characters/modelNormalization";
@@ -2717,16 +2717,9 @@ export class Game {
           return;
         }
 
-        const preferredSourceClip = this.selectPreferredRemyClip(gltf.animations);
-        if (!preferredSourceClip || targets.length === 0) {
-          dracoLoader.dispose();
-          this.loadRemyAnimationClip(targets, animationCandidates, loadGeneration, candidateIndex + 1);
-          return;
-        }
-
         const animationSource = this.selectLargestRemyScene(gltf.scenes) ?? gltf.scene;
-        const resolvedClips = targets.map((target) => this.resolveRemyClipForTarget(target.model, animationSource, preferredSourceClip));
-        if (!resolvedClips[0]) {
+        const resolvedClips = resolveAnimationClipsForTargets(targets, animationSource, gltf.animations);
+        if (!resolvedClips) {
           dracoLoader.dispose();
           this.loadRemyAnimationClip(targets, animationCandidates, loadGeneration, candidateIndex + 1);
           return;
@@ -2749,77 +2742,9 @@ export class Game {
     );
   }
 
-  private resolveRemyClipForTarget(targetModel: Object3D, sourceRig: Object3D, clip: AnimationClip): AnimationClip | null {
-    if (this.isClipCompatibleWithModel(targetModel, clip)) {
-      return this.stripScaleTracksFromClip(clip);
-    }
-
-    const retargetedClip = this.tryRetargetRemyClip(targetModel, sourceRig, clip);
-    if (!retargetedClip) {
-      return null;
-    }
-
-    return this.isClipCompatibleWithModel(targetModel, retargetedClip)
-      ? this.stripScaleTracksFromClip(retargetedClip)
-      : null;
-  }
-
-  private isClipCompatibleWithModel(targetModel: Object3D, clip: AnimationClip): boolean {
-    const targetNodeNames = new Set<string>();
-    targetModel.traverse((node) => {
-      if (node.name) {
-        targetNodeNames.add(node.name);
-      }
-    });
-
-    if (targetNodeNames.size === 0) {
-      return false;
-    }
-
-    let matchedTracks = 0;
-    clip.tracks.forEach((track) => {
-      const targetName = this.readTrackTargetName(track.name);
-      if (targetName && targetNodeNames.has(targetName)) {
-        matchedTracks += 1;
-      }
-    });
-
-    return matchedTracks > 0;
-  }
-
-  private readTrackTargetName(trackName: string): string | null {
-    const knownPropertyMatch = trackName.match(/^(.*)\.(position|quaternion|scale|morphTargetInfluences)(?:\[\d+\])?$/);
-    if (knownPropertyMatch?.[1]) {
-      return knownPropertyMatch[1];
-    }
-
-    const lastDotIndex = trackName.lastIndexOf(".");
-    if (lastDotIndex <= 0) {
-      return null;
-    }
-
-    return trackName.slice(0, lastDotIndex);
-  }
-
   private playRemyFallbackClip(targets: readonly RemyAnimationTargetBinding[]): void {
-    const fallbackClips = targets.map((target) => {
-      const preferredClip = this.selectPreferredRemyClip(target.fallbackClips);
-      return preferredClip ? this.resolveRemyClipForTarget(target.model, target.model, preferredClip) : null;
-    });
-
+    const fallbackClips = resolveFallbackAnimationClips(targets);
     this.playRemyClip(targets, fallbackClips);
-  }
-
-  private stripScaleTracksFromClip(clip: AnimationClip): AnimationClip {
-    const nonScaleTracks = clip.tracks.filter((track) => !/\.scale(?:\[\d+\])?$/.test(track.name));
-    if (nonScaleTracks.length === clip.tracks.length || nonScaleTracks.length === 0) {
-      return clip;
-    }
-
-    const sanitizedClip = clip.clone();
-    sanitizedClip.tracks = nonScaleTracks.map((track) => track.clone());
-    sanitizedClip.resetDuration();
-    return sanitizedClip;
   }
 
   private playRemyClip(targets: readonly RemyAnimationTargetBinding[], clips: readonly (AnimationClip | null)[]): void {
@@ -2846,20 +2771,6 @@ export class Game {
     });
   }
 
-  private tryRetargetRemyClip(targetModel: Object3D, sourceRig: Object3D, clip: AnimationClip): AnimationClip | null {
-    try {
-      const retargetedClip = retargetClip(targetModel, sourceRig, clip, {
-        preserveBoneMatrix: true,
-        preserveHipPosition: true,
-        useTargetMatrix: true,
-      });
-
-      return retargetedClip.tracks.length > 0 ? retargetedClip : null;
-    } catch (error) {
-      console.warn("Failed to retarget Remy animation clip; using source clip directly.", error);
-      return null;
-    }
-  }
 
   private selectLargestRemyScene(scenes: readonly Object3D[]): Object3D | null {
     let selectedScene: Object3D | null = null;
@@ -2914,24 +2825,6 @@ export class Game {
         node.frustumCulled = false;
       }
     });
-  }
-
-  private selectPreferredRemyClip(clips: readonly AnimationClip[]): AnimationClip | null {
-    if (clips.length === 0) {
-      return null;
-    }
-
-    const explicitClip = clips.find((clip) => clip.name === "Armature.001|mixamo.com|Layer0.001");
-    if (explicitClip) {
-      return explicitClip;
-    }
-
-    const hipHopClip = clips.find((clip) => /hip\s*hop/i.test(clip.name));
-    if (hipHopClip) {
-      return hipHopClip;
-    }
-
-    return clips.reduce((longest, clip) => (clip.duration > longest.duration ? clip : longest), clips[0]!);
   }
 
   private placeRemyOnTopLedge(): void {
