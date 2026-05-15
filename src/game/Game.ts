@@ -87,8 +87,16 @@ import { initializeFireworksState, stepFireworksState, type FireworksConfig, typ
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
 import { resolveFallbackAnimationClips } from "./characters/animationClipResolver";
-import { loadCharacterViewFromAsset, loadResolvedAnimationClipsForTargets } from "./characters/characterAssetLoader";
-import { computeRemyPlacementTransform, resolveRemyTargetHeight } from "./characters/placementMath";
+import {
+  loadCharacterCoordinatorResult,
+  type CharacterAnimationTargetBinding,
+} from "./characters/characterLoadCoordinator";
+import {
+  attachCharacterViewToPlacement,
+  buildCharacterLedgePlacementContext,
+  buildCharacterTopFallbackPlacementContext,
+  createCharacterSpatialAnchorContext,
+} from "./characters/characterPlacementController";
 import {
   REMY_ANIMATION_ASSETS,
   REMY_CHARACTER_ASSETS,
@@ -96,11 +104,7 @@ import {
   getRemyDebugDefaults,
   getRemyModelConfig,
 } from "./characters/modelConfigs";
-import {
-  readCharacterFaceId,
-  resolveCharacterSidePose,
-  resolveDualCharacterLaneOffsets,
-} from "./characters/placementRuntime";
+import { readCharacterFaceId } from "./characters/placementRuntime";
 import { applyModelLabStatePatch, createModelLabState, type ModelLabStatePatch } from "./debug/modelLabState";
 import { createCharacterSpatialSnapshot, createSpatialDebugSurface } from "./debug/spatialDebug";
 import {
@@ -185,24 +189,6 @@ interface LedgeAnchor {
 interface RemyAnchor {
   level: number;
   faceNoiseSalt: number;
-}
-
-interface RemyAnimationTargetBinding {
-  model: Object3D;
-  role: "primary" | "secondary";
-  fallbackClips: readonly AnimationClip[];
-}
-
-interface RemySpatialAnchorContext {
-  level: number | null;
-  faceId: FaceId | null;
-  slabPosition: { x: number; y: number; z: number } | null;
-  ledgePosition: { x: number; y: number; z: number } | null;
-  ledgeRotationY: number | null;
-  ledgeHeight: number | null;
-  ledgeDepth: number | null;
-  laneOffset: number | null;
-  targetHeight: number | null;
 }
 
 interface PerformanceSnapshot {
@@ -2629,45 +2615,26 @@ export class Game {
 
     void (async () => {
       try {
-        const primaryPreparationConfig = this.getRemyPreparationConfigForCharacter(selectedCharacter.id);
-        const primarySetup = await loadCharacterViewFromAsset(selectedCharacter.modelUrl, {
-          characterId: selectedCharacter.id,
-          nameSuffix: "primary",
-          autoDetectUpAxis: primaryPreparationConfig.autoDetectUpAxis,
-          rotationOffsetZ: primaryPreparationConfig.rotationOffsetZ,
+        const loadResult = await loadCharacterCoordinatorResult({
+          selectedCharacter,
+          secondaryCharacter,
+          animationCandidates,
+          getPreparationConfig: (characterId) => this.getRemyPreparationConfigForCharacter(characterId),
         });
         if (loadGeneration !== this.remyLoadGeneration) {
           return;
         }
 
-        if (!primarySetup) {
+        if (!loadResult) {
           this.remyIsLoading = false;
           return;
         }
 
-        let secondarySetup: Awaited<ReturnType<typeof loadCharacterViewFromAsset>> = null;
-        if (secondaryCharacter) {
-          try {
-            const secondaryPreparationConfig = this.getRemyPreparationConfigForCharacter(secondaryCharacter.id);
-            secondarySetup = await loadCharacterViewFromAsset(secondaryCharacter.modelUrl, {
-              characterId: secondaryCharacter.id,
-              nameSuffix: "secondary",
-              autoDetectUpAxis: secondaryPreparationConfig.autoDetectUpAxis,
-              rotationOffsetZ: secondaryPreparationConfig.rotationOffsetZ,
-            });
-            if (loadGeneration !== this.remyLoadGeneration) {
-              return;
-            }
-          } catch (error) {
-            console.warn(`Failed to load secondary character model ${secondaryCharacter.id}.`, error);
-          }
-        }
-
-        this.remyView = primarySetup.view;
-        this.remySecondaryView = secondarySetup?.view ?? null;
+        this.remyView = loadResult.primarySetup.view;
+        this.remySecondaryView = loadResult.secondarySetup?.view ?? null;
 
         this.activeRemyCharacterId = selectedCharacter.id;
-        this.activeRemySecondaryCharacterId = secondarySetup ? secondaryCharacter?.id ?? null : null;
+        this.activeRemySecondaryCharacterId = loadResult.secondarySetup ? secondaryCharacter?.id ?? null : null;
         this.remyDebugConfig = this.getDefaultRemyDebugConfig(selectedCharacter.id);
         this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]").forEach((input) => {
           const key = input.dataset.remyDebugKey as RemyDebugKey | undefined;
@@ -2679,31 +2646,10 @@ export class Game {
         });
         this.updateRemyDebugValueLabels();
 
-        const animationTargets: RemyAnimationTargetBinding[] = [
-          {
-            model: primarySetup.view.animationTarget,
-            role: "primary",
-            fallbackClips: primarySetup.animations,
-          },
-          ...(secondarySetup
-            ? [
-                {
-                  model: secondarySetup.view.animationTarget,
-                  role: "secondary" as const,
-                  fallbackClips: secondarySetup.animations,
-                },
-              ]
-            : []),
-        ];
-        const resolvedClips = await loadResolvedAnimationClipsForTargets(animationTargets, animationCandidates);
-        if (loadGeneration !== this.remyLoadGeneration) {
-          return;
-        }
-
-        if (resolvedClips) {
-          this.playRemyClip(animationTargets, resolvedClips);
+        if (loadResult.resolvedClips) {
+          this.playRemyClip(loadResult.animationTargets, loadResult.resolvedClips);
         } else {
-          this.playRemyFallbackClip(animationTargets);
+          this.playRemyFallbackClip(loadResult.animationTargets);
         }
         this.remyIsLoading = false;
 
@@ -2719,12 +2665,12 @@ export class Game {
     })();
   }
 
-  private playRemyFallbackClip(targets: readonly RemyAnimationTargetBinding[]): void {
+  private playRemyFallbackClip(targets: readonly CharacterAnimationTargetBinding[]): void {
     const fallbackClips = resolveFallbackAnimationClips(targets);
     this.playRemyClip(targets, fallbackClips);
   }
 
-  private playRemyClip(targets: readonly RemyAnimationTargetBinding[], clips: readonly (AnimationClip | null)[]): void {
+  private playRemyClip(targets: readonly CharacterAnimationTargetBinding[], clips: readonly (AnimationClip | null)[]): void {
     this.remyMixer = null;
     this.remySecondaryMixer = null;
 
@@ -2818,8 +2764,6 @@ export class Game {
     }
 
     const { slab, slabMesh, ledgeMesh } = anchor;
-    const faceId = readCharacterFaceId(ledgeMesh.userData.faceId);
-    const sidePose = resolveCharacterSidePose(faceId);
     const ledgeHeight =
       typeof ledgeMesh.userData.ledgeHeight === "number"
         ? ledgeMesh.userData.ledgeHeight
@@ -2833,70 +2777,51 @@ export class Game {
         ? ledgeMesh.userData.widthRatio
         : 0;
     const useDualCharacters = shouldSpawnDualRemyCharacters(ledgeWidthRatio);
-    const laneOffsets = resolveDualCharacterLaneOffsets({
+
+    const primaryPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
+    const placementContext = buildCharacterLedgePlacementContext({
+      slabLevel: slab.level,
+      slabPosition: { ...slab.position },
+      slabHeight: slab.dimensions.height,
+      ledgePosition: {
+        x: ledgeMesh.position.x,
+        y: ledgeMesh.position.y,
+        z: ledgeMesh.position.z,
+      },
+      ledgeRotationY: ledgeMesh.rotation.y,
+      ledgeHeight,
+      ledgeDepth,
+      faceId: readCharacterFaceId(ledgeMesh.userData.faceId),
       usableWidth: typeof ledgeMesh.userData.usableWidth === "number" ? ledgeMesh.userData.usableWidth : 0,
       useDualCharacters,
       edgePadding: REMY_DUAL_SPAWN_EDGE_PADDING,
       spreadRatio: REMY_DUAL_SPAWN_SPREAD_RATIO,
       minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
+      placementTuning: primaryPlacementTuning,
     });
-
-    const primaryPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
-    const targetHeight = resolveRemyTargetHeight(
-      slab.dimensions.height,
-      primaryPlacementTuning.targetHeightRatio,
-      primaryPlacementTuning.minHeight,
-      primaryPlacementTuning.maxHeight,
-    );
     const primaryPlacementConfig = this.remyDebugConfig;
     const secondaryPlacementConfig = this.activeRemySecondaryCharacterId
       ? this.getDefaultRemyDebugConfig(this.activeRemySecondaryCharacterId)
       : this.getDefaultRemyDebugConfig("timmy");
 
-    const placeCharacter = (
-      view: CharacterView | null,
-      laneOffset: number,
-      placementConfig: RemyDebugConfig,
-      placementTuning: ReturnType<Game["getRemyPlacementConfigForCharacter"]>,
-    ): void => {
-      if (!view) {
-        return;
-      }
+    attachCharacterViewToPlacement({
+      view: this.remyView,
+      parent: slabMesh,
+      context: placementContext,
+      laneOffset: placementContext.laneOffsets[0] ?? 0,
+      debugConfig: primaryPlacementConfig,
+      placementTuning: primaryPlacementTuning,
+    });
 
-      const placement = computeRemyPlacementTransform({
-        ledgePosition: {
-          x: ledgeMesh.position.x,
-          y: ledgeMesh.position.y,
-          z: ledgeMesh.position.z,
-        },
-        ledgeRotationY: ledgeMesh.rotation.y,
-        ledgeHeight,
-        ledgeDepth,
-        laneOffset,
-        baseHeight: view.baseHeight,
-        baseDepth: view.baseDepth,
-        targetHeight,
-        sidePose,
-        debugConfig: placementConfig,
-        ledgeInsetRatio: placementTuning.ledgeInsetRatio,
-        wallClearance: placementTuning.wallClearance,
-        ledgeClearance: placementTuning.ledgeClearance,
-        rotationOffsetY: placementTuning.rotationOffsetY,
+    if (useDualCharacters && this.remySecondaryView && placementContext.laneOffsets.length > 1) {
+      attachCharacterViewToPlacement({
+        view: this.remySecondaryView,
+        parent: slabMesh,
+        context: placementContext,
+        laneOffset: placementContext.laneOffsets[1]!,
+        debugConfig: secondaryPlacementConfig,
+        placementTuning: this.getRemyPlacementConfigForCharacter(this.activeRemySecondaryCharacterId),
       });
-
-      view.applyPlacement(placement);
-      view.attachTo(slabMesh);
-    };
-
-    placeCharacter(this.remyView, laneOffsets[0] ?? 0, primaryPlacementConfig, primaryPlacementTuning);
-
-    if (useDualCharacters && this.remySecondaryView && laneOffsets.length > 1) {
-      placeCharacter(
-        this.remySecondaryView,
-        laneOffsets[1]!,
-        secondaryPlacementConfig,
-        this.getRemyPlacementConfigForCharacter(this.activeRemySecondaryCharacterId),
-      );
     } else {
       this.remySecondaryView?.detach();
     }
@@ -2948,27 +2873,25 @@ export class Game {
     });
   }
 
-  private getRemySpatialAnchorContext(role: "primary" | "secondary"): RemySpatialAnchorContext | null {
+  private getRemySpatialAnchorContext(role: "primary" | "secondary") {
+    const placementTuning = this.getRemyPlacementConfigForCharacter(
+      role === "primary" ? this.activeRemyCharacterId : this.activeRemySecondaryCharacterId,
+    );
+
     if (this.modelLabState.forceTopFallback) {
       const topSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? null;
-      return {
-        level: topSlab?.level ?? null,
-        faceId: null,
-        slabPosition: topSlab ? { ...topSlab.position } : null,
-        ledgePosition: topSlab ? { x: 0, y: 0, z: 0 } : null,
-        ledgeRotationY: 0,
-        ledgeHeight: topSlab?.dimensions.height ?? null,
-        ledgeDepth: 0,
-        laneOffset: 0,
-        targetHeight: topSlab
-          ? resolveRemyTargetHeight(
-              topSlab.dimensions.height,
-              this.getRemyPlacementConfigForCharacter().targetHeightRatio,
-              this.getRemyPlacementConfigForCharacter().minHeight,
-              this.getRemyPlacementConfigForCharacter().maxHeight,
-            )
-          : null,
-      };
+      if (!topSlab) {
+        return null;
+      }
+
+      return createCharacterSpatialAnchorContext(
+        buildCharacterTopFallbackPlacementContext({
+          slabLevel: topSlab.level,
+          slabPosition: { ...topSlab.position },
+          slabHeight: topSlab.dimensions.height,
+          placementTuning,
+        }),
+      );
     }
 
     if (!this.remyAnchor) {
@@ -2980,28 +2903,10 @@ export class Game {
       return null;
     }
 
-    const faceId = readCharacterFaceId(anchor.ledgeMesh.userData.faceId);
-    const laneOffsets = resolveDualCharacterLaneOffsets({
-      usableWidth: typeof anchor.ledgeMesh.userData.usableWidth === "number" ? anchor.ledgeMesh.userData.usableWidth : 0,
-      useDualCharacters: shouldSpawnDualRemyCharacters(anchor.ledgeMesh.userData.widthRatio ?? 0),
-      edgePadding: REMY_DUAL_SPAWN_EDGE_PADDING,
-      spreadRatio: REMY_DUAL_SPAWN_SPREAD_RATIO,
-      minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
-    });
-    const targetHeight = resolveRemyTargetHeight(
-      anchor.slab.dimensions.height,
-      this.getRemyPlacementConfigForCharacter(role === "primary" ? this.activeRemyCharacterId : this.activeRemySecondaryCharacterId)
-        .targetHeightRatio,
-      this.getRemyPlacementConfigForCharacter(role === "primary" ? this.activeRemyCharacterId : this.activeRemySecondaryCharacterId)
-        .minHeight,
-      this.getRemyPlacementConfigForCharacter(role === "primary" ? this.activeRemyCharacterId : this.activeRemySecondaryCharacterId)
-        .maxHeight,
-    );
-
-    return {
-      level: anchor.slab.level,
-      faceId,
+    const placementContext = buildCharacterLedgePlacementContext({
+      slabLevel: anchor.slab.level,
       slabPosition: { ...anchor.slab.position },
+      slabHeight: anchor.slab.dimensions.height,
       ledgePosition: {
         x: anchor.ledgeMesh.position.x,
         y: anchor.ledgeMesh.position.y,
@@ -3016,9 +2921,16 @@ export class Game {
         typeof anchor.ledgeMesh.userData.ledgeDepth === "number"
           ? anchor.ledgeMesh.userData.ledgeDepth
           : Math.max(0.24, anchor.slab.dimensions.height * 0.18),
-      laneOffset: laneOffsets[role === "primary" ? 0 : 1] ?? 0,
-      targetHeight,
-    };
+      faceId: readCharacterFaceId(anchor.ledgeMesh.userData.faceId),
+      usableWidth: typeof anchor.ledgeMesh.userData.usableWidth === "number" ? anchor.ledgeMesh.userData.usableWidth : 0,
+      useDualCharacters: shouldSpawnDualRemyCharacters(anchor.ledgeMesh.userData.widthRatio ?? 0),
+      edgePadding: REMY_DUAL_SPAWN_EDGE_PADDING,
+      spreadRatio: REMY_DUAL_SPAWN_SPREAD_RATIO,
+      minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
+      placementTuning,
+    });
+
+    return createCharacterSpatialAnchorContext(placementContext, role === "primary" ? 0 : 1);
   }
 
 
@@ -3041,36 +2953,22 @@ export class Game {
       return;
     }
 
-    const sidePose = resolveCharacterSidePose(null);
     const fallbackPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
-    const targetHeight = resolveRemyTargetHeight(
-      topSlab.dimensions.height,
-      fallbackPlacementTuning.targetHeightRatio,
-      fallbackPlacementTuning.minHeight,
-      fallbackPlacementTuning.maxHeight,
-    );
-    const placement = computeRemyPlacementTransform({
-      ledgePosition: {
-        x: 0,
-        y: 0,
-        z: 0,
-      },
-      ledgeRotationY: 0,
-      ledgeHeight: topSlab.dimensions.height,
-      ledgeDepth: 0,
-      laneOffset: 0,
-      baseHeight: this.remyView.baseHeight,
-      baseDepth: this.remyView.baseDepth,
-      targetHeight,
-      sidePose,
-      debugConfig: this.remyDebugConfig,
-      ledgeInsetRatio: 0,
-      wallClearance: 0,
-      ledgeClearance: fallbackPlacementTuning.ledgeClearance,
-      rotationOffsetY: fallbackPlacementTuning.rotationOffsetY,
+    const fallbackContext = buildCharacterTopFallbackPlacementContext({
+      slabLevel: topSlab.level,
+      slabPosition: { ...topSlab.position },
+      slabHeight: topSlab.dimensions.height,
+      placementTuning: fallbackPlacementTuning,
     });
-    this.remyView.applyPlacement(placement);
-    this.remyView.attachTo(topSlabMesh);
+
+    attachCharacterViewToPlacement({
+      view: this.remyView,
+      parent: topSlabMesh,
+      context: fallbackContext,
+      laneOffset: 0,
+      debugConfig: this.remyDebugConfig,
+      placementTuning: fallbackPlacementTuning,
+    });
     this.remySecondaryView?.detach();
     this.refreshSpatialDebugSurface();
   }

@@ -9,7 +9,7 @@ Feature tracking notes live in [docs/features.md](/Users/jamiely/code/stack/docs
 The repo now includes a playable early milestone:
 
 - Vite + TypeScript + Three.js application shell
-- Character placement/model prep refactor: `Game.ts` now orchestrates while character-specific loading, normalization, scene-node wiring, and spatial helper math live under `src/game/characters/*` and `src/game/debug/*`
+- Character placement/model prep refactor: `Game.ts` now orchestrates while character-specific loading, async load coordination, normalization, scene-node wiring, and spatial helper math live under `src/game/characters/*` and `src/game/debug/*`
 - Alternating X/Z stack placement with trim-or-miss gameplay
 - Combo streak tracking (default target: 8 perfect hits) with live HUD progress
 - Recovery rewards at combo milestones: capped slab-growth recovery plus temporary movement slowdown windows
