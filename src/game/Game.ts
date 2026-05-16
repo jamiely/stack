@@ -91,6 +91,7 @@ import {
   loadCharacterCoordinatorResult,
   type CharacterAnimationTargetBinding,
 } from "./characters/characterLoadCoordinator";
+import { buildNextRemyCharacterSelection } from "./characters/characterSelection";
 import {
   attachCharacterViewToPlacement,
   buildCharacterLedgePlacementContext,
@@ -110,7 +111,6 @@ import { createCharacterSpatialSnapshot, createSpatialDebugSurface } from "./deb
 import {
   REMY_LEDGE_SPAWN_CHANCE,
   hasRecentTentacleBurstOnFace,
-  pickNonRepeatingIndex,
   shouldKeepCurrentRemyAnchor,
   shouldSpawnDualRemyCharacters,
   shouldSpawnRemyOnLedge,
@@ -122,7 +122,7 @@ import { createComboState, updateComboState } from "./logic/streak";
 import { createInitialStack, getTravelSpeed, resolvePlacement, spawnActiveSlab } from "./logic/stack";
 import type { RecoveryState } from "./logic/recovery";
 import type { ComboState } from "./logic/streak";
-import type { CharacterView, RemyAnimationAsset, RemyCharacterId, RemyDebugConfig, RemyDebugKey } from "./characters/contracts";
+import type { CharacterView, RemyCharacterId, RemyDebugConfig, RemyDebugKey } from "./characters/contracts";
 import type { DistractionChannel, DistractionSnapshot, DistractionState } from "./logic/distractions";
 import type { CollapseSequenceState, CollapseTrigger } from "./logic/collapse";
 import type { IntegrityTelemetry } from "./logic/integrity";
@@ -2516,25 +2516,6 @@ export class Game {
     this.remySecondaryMixer?.update(deltaSeconds);
   }
 
-  private createRemySelectionRandom(): () => number {
-    if (this.testMode.seed === null) {
-      return Math.random;
-    }
-
-    const derivedSeed = (this.testMode.seed ^ Math.imul(this.remySelectionSerial, 0x9e3779b1)) >>> 0;
-    return createSeededRandom(derivedSeed);
-  }
-
-  private drawNextRemyCharacterIndex(): number {
-    if (REMY_CHARACTER_ASSETS.length <= 0) {
-      return 0;
-    }
-
-    const index = this.remyCharacterRotationIndex % REMY_CHARACTER_ASSETS.length;
-    this.remyCharacterRotationIndex = (this.remyCharacterRotationIndex + 1) % REMY_CHARACTER_ASSETS.length;
-    return index;
-  }
-
   private shouldLoadSecondaryRemyCharacter(): boolean {
     const anchor = this.remyAnchor
       ? this.findLedgeAnchorByLevelAndFace(this.remyAnchor.level, this.remyAnchor.faceNoiseSalt)
@@ -2550,30 +2531,6 @@ export class Game {
         : 0;
 
     return shouldSpawnDualRemyCharacters(widthRatio);
-  }
-
-  private drawNextRemyAnimationIndex(random: () => number): number {
-    const index = pickNonRepeatingIndex(REMY_ANIMATION_ASSETS.length, random(), this.remyLastAnimationIndex);
-    this.remyLastAnimationIndex = index;
-    return index;
-  }
-
-  private buildRemyAnimationCandidateOrder(selectedIndex: number, random: () => number): RemyAnimationAsset[] {
-    const fallbackIndices = REMY_ANIMATION_ASSETS
-      .map((_, index) => index)
-      .filter((index) => index !== selectedIndex);
-
-    for (let index = fallbackIndices.length - 1; index > 0; index -= 1) {
-      const swapIndex = Math.floor(random() * (index + 1));
-      const current = fallbackIndices[index];
-      fallbackIndices[index] = fallbackIndices[swapIndex]!;
-      fallbackIndices[swapIndex] = current!;
-    }
-
-    const orderedIndices = [selectedIndex, ...fallbackIndices];
-    return orderedIndices
-      .map((index) => REMY_ANIMATION_ASSETS[index])
-      .filter((asset): asset is RemyAnimationAsset => Boolean(asset));
   }
 
   private refreshRemyCharacterSelection(): void {
@@ -2600,17 +2557,26 @@ export class Game {
 
     this.remyIsLoading = true;
     this.remySelectionSerial += 1;
-    const random = this.createRemySelectionRandom();
-    const primaryCharacterIndex = this.drawNextRemyCharacterIndex();
-    const selectedCharacter = REMY_CHARACTER_ASSETS[primaryCharacterIndex] ?? REMY_CHARACTER_ASSETS[0]!;
-    const shouldLoadSecondaryCharacter = this.shouldLoadSecondaryRemyCharacter();
-    const secondaryCharacterIndex = shouldLoadSecondaryCharacter ? this.drawNextRemyCharacterIndex() : null;
-    const secondaryCharacter =
-      secondaryCharacterIndex === null
-        ? null
-        : (REMY_CHARACTER_ASSETS[secondaryCharacterIndex] ?? null);
-    const selectedAnimationIndex = this.drawNextRemyAnimationIndex(random);
-    const animationCandidates = this.buildRemyAnimationCandidateOrder(selectedAnimationIndex, random);
+    const selection = buildNextRemyCharacterSelection({
+      selectionSeed: this.testMode.seed,
+      selectionSerial: this.remySelectionSerial,
+      characterRotationIndex: this.remyCharacterRotationIndex,
+      lastAnimationIndex: this.remyLastAnimationIndex,
+      shouldLoadSecondaryCharacter: this.shouldLoadSecondaryRemyCharacter(),
+      characterAssets: REMY_CHARACTER_ASSETS,
+      animationAssets: REMY_ANIMATION_ASSETS,
+    });
+    this.remyCharacterRotationIndex = selection.nextCharacterRotationIndex;
+    this.remyLastAnimationIndex = selection.nextLastAnimationIndex;
+
+    const selectedCharacter = selection.selectedCharacter;
+    if (!selectedCharacter) {
+      this.remyIsLoading = false;
+      return;
+    }
+
+    const secondaryCharacter = selection.secondaryCharacter;
+    const animationCandidates = selection.animationCandidates;
     const loadGeneration = this.remyLoadGeneration;
 
     void (async () => {
