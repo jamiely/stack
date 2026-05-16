@@ -93,6 +93,13 @@ import {
 } from "./characters/characterLoadCoordinator";
 import { buildNextRemyCharacterSelection } from "./characters/characterSelection";
 import {
+  applyRemyDebugConfigPatch,
+  resolveBaseRemyDebugConfig,
+  resolveStoredRemyDebugConfig,
+  syncRemyDebugInputValues,
+  syncRemyDebugValueLabels,
+} from "./characters/characterDebugControls";
+import {
   attachCharacterViewToPlacement,
   buildCharacterLedgePlacementContext,
   buildCharacterTopFallbackPlacementContext,
@@ -541,7 +548,11 @@ export class Game {
     this.debugEnabled = new URLSearchParams(query).has("debug");
     this.testMode = readTestModeOptions(query);
     this.simulationPaused = this.testMode.enabled && this.testMode.startPaused;
-    this.remyDebugConfig = this.getDefaultRemyDebugConfig();
+    this.remyDebugConfig = resolveStoredRemyDebugConfig({
+      characterId: this.activeRemyCharacterId,
+      storedConfigs: this.remyCharacterDebugConfigs,
+      testMode: this.testMode.enabled,
+    });
     const modelLabEnabled = this.debugEnabled || this.testMode.enabled;
     this.modelLabState.enabled = modelLabEnabled;
 
@@ -987,7 +998,7 @@ export class Game {
     resetButton.dataset.testid = "debug-reset-remy-placement";
     resetButton.textContent = "Reset Remy Placement";
     resetButton.addEventListener("click", () => {
-      this.applyRemyDebugConfig(this.resolveBaseRemyDebugConfig());
+      this.applyRemyDebugConfig(resolveBaseRemyDebugConfig(this.activeRemyCharacterId, { testMode: this.testMode.enabled }));
     });
 
     section.append(resetButton);
@@ -999,7 +1010,7 @@ export class Game {
       );
     }
 
-    this.updateRemyDebugValueLabels();
+    this.syncRemyDebugControlSurface();
     return section;
   }
 
@@ -1028,21 +1039,6 @@ export class Game {
     return label;
   }
 
-  private resolveBaseRemyDebugConfig(characterId: RemyCharacterId | null = this.activeRemyCharacterId): RemyDebugConfig {
-    return getRemyDebugDefaults(characterId, { testMode: this.testMode.enabled });
-  }
-
-  private getDefaultRemyDebugConfig(characterId: RemyCharacterId | null = this.activeRemyCharacterId): RemyDebugConfig {
-    if (characterId) {
-      const storedConfig = this.remyCharacterDebugConfigs.get(characterId);
-      if (storedConfig) {
-        return { ...storedConfig };
-      }
-    }
-
-    return this.resolveBaseRemyDebugConfig(characterId);
-  }
-
   private getRemyModelConfigForCharacter(characterId: RemyCharacterId | null = this.activeRemyCharacterId) {
     return getRemyModelConfig(characterId ?? "remy");
   }
@@ -1055,26 +1051,32 @@ export class Game {
     return this.getRemyModelConfigForCharacter(characterId).preparation;
   }
 
+  private syncRemyDebugControlSurface(): void {
+    syncRemyDebugInputValues(
+      this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]"),
+      this.remyDebugConfig,
+    );
+    syncRemyDebugValueLabels(
+      this.debugPanel.querySelectorAll<HTMLElement>("[data-remy-debug-value]"),
+      this.remyDebugConfig,
+    );
+  }
+
   private applyRemyDebugConfig(config: Partial<RemyDebugConfig>): void {
-    this.remyDebugConfig = {
-      ...this.remyDebugConfig,
-      ...config,
-    };
-
-    if (this.activeRemyCharacterId) {
-      this.remyCharacterDebugConfigs.set(this.activeRemyCharacterId, { ...this.remyDebugConfig });
-    }
-
-    this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]").forEach((input) => {
-      const key = input.dataset.remyDebugKey as RemyDebugKey | undefined;
-      if (!key) {
-        return;
-      }
-
-      input.value = String(this.remyDebugConfig[key]);
+    const nextState = applyRemyDebugConfigPatch({
+      currentConfig: this.remyDebugConfig,
+      patch: config,
+      activeCharacterId: this.activeRemyCharacterId,
+      storedConfigs: this.remyCharacterDebugConfigs,
     });
 
-    this.updateRemyDebugValueLabels();
+    this.remyDebugConfig = nextState.nextConfig;
+    this.remyCharacterDebugConfigs.clear();
+    nextState.nextStoredConfigs.forEach((value, key) => {
+      this.remyCharacterDebugConfigs.set(key, value);
+    });
+
+    this.syncRemyDebugControlSurface();
     this.placeRemyOnTopLedge();
   }
 
@@ -1105,19 +1107,6 @@ export class Game {
     }
 
     this.loadRemyCharacter();
-  }
-
-  private updateRemyDebugValueLabels(): void {
-    this.debugPanel.querySelectorAll<HTMLElement>("[data-remy-debug-value]").forEach((node) => {
-      const key = node.dataset.remyDebugValue as RemyDebugKey | undefined;
-      if (!key) {
-        return;
-      }
-
-      const value = this.remyDebugConfig[key];
-      const suffix = REMY_DEBUG_RANGES[key].suffix ?? "";
-      node.textContent = `${value.toFixed(2)}${suffix}`;
-    });
   }
 
   private readonly handlePrimaryAction = (): void => {
@@ -2601,16 +2590,12 @@ export class Game {
 
         this.activeRemyCharacterId = selectedCharacter.id;
         this.activeRemySecondaryCharacterId = loadResult.secondarySetup ? secondaryCharacter?.id ?? null : null;
-        this.remyDebugConfig = this.getDefaultRemyDebugConfig(selectedCharacter.id);
-        this.debugPanel.querySelectorAll<HTMLInputElement>("[data-remy-debug-key]").forEach((input) => {
-          const key = input.dataset.remyDebugKey as RemyDebugKey | undefined;
-          if (!key) {
-            return;
-          }
-
-          input.value = String(this.remyDebugConfig[key]);
+        this.remyDebugConfig = resolveStoredRemyDebugConfig({
+          characterId: selectedCharacter.id,
+          storedConfigs: this.remyCharacterDebugConfigs,
+          testMode: this.testMode.enabled,
         });
-        this.updateRemyDebugValueLabels();
+        this.syncRemyDebugControlSurface();
 
         if (loadResult.resolvedClips) {
           this.playRemyClip(loadResult.animationTargets, loadResult.resolvedClips);
@@ -2767,8 +2752,16 @@ export class Game {
     });
     const primaryPlacementConfig = this.remyDebugConfig;
     const secondaryPlacementConfig = this.activeRemySecondaryCharacterId
-      ? this.getDefaultRemyDebugConfig(this.activeRemySecondaryCharacterId)
-      : this.getDefaultRemyDebugConfig("timmy");
+      ? resolveStoredRemyDebugConfig({
+          characterId: this.activeRemySecondaryCharacterId,
+          storedConfigs: this.remyCharacterDebugConfigs,
+          testMode: this.testMode.enabled,
+        })
+      : resolveStoredRemyDebugConfig({
+          characterId: "timmy",
+          storedConfigs: this.remyCharacterDebugConfigs,
+          testMode: this.testMode.enabled,
+        });
 
     attachCharacterViewToPlacement({
       view: this.remyView,
@@ -3564,7 +3557,13 @@ export class Game {
     }
 
     const anchorContext = this.getRemySpatialAnchorContext(role);
-    const debugConfig = role === "primary" ? this.remyDebugConfig : this.getDefaultRemyDebugConfig(characterId);
+    const debugConfig = role === "primary"
+      ? this.remyDebugConfig
+      : resolveStoredRemyDebugConfig({
+          characterId,
+          storedConfigs: this.remyCharacterDebugConfigs,
+          testMode: this.testMode.enabled,
+        });
 
     return createCharacterSpatialSnapshot({
       role,
