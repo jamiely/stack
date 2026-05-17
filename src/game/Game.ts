@@ -1,6 +1,5 @@
 import {
   AmbientLight,
-  AnimationClip,
   AnimationMixer,
   BoxGeometry,
   BufferGeometry,
@@ -20,7 +19,6 @@ import {
   Points,
   PointsMaterial,
   RepeatWrapping,
-  LoopPingPong,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -86,11 +84,10 @@ import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
-import { resolveFallbackAnimationClips } from "./characters/animationClipResolver";
 import {
   loadCharacterCoordinatorResult,
-  type CharacterAnimationTargetBinding,
 } from "./characters/characterLoadCoordinator";
+import { createCharacterPlaybackMixers } from "./characters/characterPlayback";
 import { buildNextRemyCharacterSelection } from "./characters/characterSelection";
 import {
   applyRemyDebugConfigPatch,
@@ -2597,11 +2594,12 @@ export class Game {
         });
         this.syncRemyDebugControlSurface();
 
-        if (loadResult.resolvedClips) {
-          this.playRemyClip(loadResult.animationTargets, loadResult.resolvedClips);
-        } else {
-          this.playRemyFallbackClip(loadResult.animationTargets);
-        }
+        const playbackMixers = createCharacterPlaybackMixers({
+          targets: loadResult.animationTargets,
+          resolvedClips: loadResult.resolvedClips,
+        });
+        this.remyMixer = playbackMixers.primaryMixer;
+        this.remySecondaryMixer = playbackMixers.secondaryMixer;
         this.remyIsLoading = false;
 
         this.placeRemyOnTopLedge();
@@ -2615,36 +2613,6 @@ export class Game {
       }
     })();
   }
-
-  private playRemyFallbackClip(targets: readonly CharacterAnimationTargetBinding[]): void {
-    const fallbackClips = resolveFallbackAnimationClips(targets);
-    this.playRemyClip(targets, fallbackClips);
-  }
-
-  private playRemyClip(targets: readonly CharacterAnimationTargetBinding[], clips: readonly (AnimationClip | null)[]): void {
-    this.remyMixer = null;
-    this.remySecondaryMixer = null;
-
-    targets.forEach((target, index) => {
-      const clip = clips[index];
-      if (!clip) {
-        return;
-      }
-
-      const mixer = new AnimationMixer(target.model);
-      const action = mixer.clipAction(clip);
-      action.reset();
-      action.setLoop(LoopPingPong, Number.POSITIVE_INFINITY);
-      action.play();
-
-      if (target.role === "primary") {
-        this.remyMixer = mixer;
-      } else if (target.role === "secondary") {
-        this.remySecondaryMixer = mixer;
-      }
-    });
-  }
-
 
   private placeRemyOnTopLedge(): void {
     if (!this.remyView) {
