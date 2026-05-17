@@ -87,7 +87,7 @@ import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } fro
 import {
   loadCharacterCoordinatorResult,
 } from "./characters/characterLoadCoordinator";
-import { createCharacterPlaybackMixers } from "./characters/characterPlayback";
+import { prepareLoadedCharacterRuntimeState } from "./characters/characterLoadRuntimeState";
 import { buildNextRemyCharacterSelection } from "./characters/characterSelection";
 import {
   applyRemyDebugConfigPatch,
@@ -2582,24 +2582,22 @@ export class Game {
           return;
         }
 
-        this.remyView = loadResult.primarySetup.view;
-        this.remySecondaryView = loadResult.secondarySetup?.view ?? null;
-
-        this.activeRemyCharacterId = selectedCharacter.id;
-        this.activeRemySecondaryCharacterId = loadResult.secondarySetup ? secondaryCharacter?.id ?? null : null;
-        this.remyDebugConfig = resolveStoredRemyDebugConfig({
-          characterId: selectedCharacter.id,
-          storedConfigs: this.remyCharacterDebugConfigs,
+        const runtimeState = prepareLoadedCharacterRuntimeState({
+          loadResult,
+          selectedCharacterId: selectedCharacter.id,
+          secondaryCharacterId: secondaryCharacter?.id ?? null,
+          storedDebugConfigs: this.remyCharacterDebugConfigs,
           testMode: this.testMode.enabled,
         });
-        this.syncRemyDebugControlSurface();
 
-        const playbackMixers = createCharacterPlaybackMixers({
-          targets: loadResult.animationTargets,
-          resolvedClips: loadResult.resolvedClips,
-        });
-        this.remyMixer = playbackMixers.primaryMixer;
-        this.remySecondaryMixer = playbackMixers.secondaryMixer;
+        this.remyView = runtimeState.primaryView;
+        this.remySecondaryView = runtimeState.secondaryView;
+        this.activeRemyCharacterId = runtimeState.activeCharacterId;
+        this.activeRemySecondaryCharacterId = runtimeState.activeSecondaryCharacterId;
+        this.remyDebugConfig = runtimeState.debugConfig;
+        this.remyMixer = runtimeState.primaryMixer;
+        this.remySecondaryMixer = runtimeState.secondaryMixer;
+        this.syncRemyDebugControlSurface();
         this.remyIsLoading = false;
 
         this.placeRemyOnTopLedge();
