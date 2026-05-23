@@ -1,11 +1,13 @@
 import { Group } from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCharacterView } from "../../src/game/characters/characterView";
 import {
   attachCharacterViewToPlacement,
   buildCharacterLedgePlacementContext,
   buildCharacterTopFallbackPlacementContext,
   createCharacterSpatialAnchorContext,
+  resolveCharacterLedgePlacement,
+  resolveCharacterTopFallbackPlacement,
   type CharacterPlacementTuning,
 } from "../../src/game/characters/characterPlacementController";
 import { createCharacterSceneNodes } from "../../src/game/characters/sceneNodes";
@@ -87,6 +89,104 @@ describe("characterPlacementController", () => {
         translateZ: 0,
       },
     });
+  });
+
+  it("resolves ledge placement defaults and dual-lane decision from raw anchor metadata", () => {
+    const shouldUseDualCharacters = vi.fn().mockReturnValue(true);
+
+    const result = resolveCharacterLedgePlacement({
+      slabLevel: 9,
+      slabPosition: { x: -3, y: 14, z: 2 },
+      slabHeight: 2,
+      ledgePosition: { x: 0.5, y: 1.25, z: -0.75 },
+      ledgeRotationY: 0.6,
+      ledgeHeight: null,
+      ledgeDepth: null,
+      faceId: "negZ",
+      usableWidth: 1.2,
+      widthRatio: null,
+      edgePadding: 0.04,
+      spreadRatio: 0.22,
+      minSpread: 0.08,
+      placementTuning: PLACEMENT_TUNING,
+      shouldUseDualCharacters,
+    });
+
+    expect(shouldUseDualCharacters).toHaveBeenCalledWith(0);
+    expect(result.useDualCharacters).toBe(true);
+    expect(result.context).toMatchObject({
+      level: 9,
+      faceId: "negZ",
+      slabPosition: { x: -3, y: 14, z: 2 },
+      ledgePosition: { x: 0.5, y: 1.25, z: -0.75 },
+      ledgeRotationY: 0.6,
+      ledgeHeight: 0.2,
+      ledgeDepth: 0.36,
+      targetHeight: 0.84,
+      sidePose: {
+        pitchDegrees: 0,
+        yawDegrees: 0,
+        rollDegrees: 0,
+        translateX: 0,
+        translateY: 0,
+        translateZ: 0.4,
+      },
+    });
+    expect(result.context.laneOffsets).toEqual([-0.264, 0.264]);
+  });
+
+  it("resolves top-fallback placement context from raw slab metadata", () => {
+    const result = resolveCharacterTopFallbackPlacement({
+      slabLevel: 5,
+      slabPosition: { x: -2, y: 7, z: 1 },
+      slabHeight: 1.75,
+      placementTuning: PLACEMENT_TUNING,
+    });
+
+    expect(result.context).toEqual({
+      level: 5,
+      faceId: null,
+      slabPosition: { x: -2, y: 7, z: 1 },
+      ledgePosition: { x: 0, y: 0, z: 0 },
+      ledgeRotationY: 0,
+      ledgeHeight: 1.75,
+      ledgeDepth: 0,
+      laneOffsets: [0],
+      targetHeight: 0.735,
+      sidePose: {
+        pitchDegrees: 0,
+        yawDegrees: 0,
+        rollDegrees: 0,
+        translateX: 0,
+        translateY: 0,
+        translateZ: 0,
+      },
+    });
+  });
+
+  it("reuses explicit ledge metrics when resolving anchor placement context", () => {
+    const result = resolveCharacterLedgePlacement({
+      slabLevel: 6,
+      slabPosition: { x: 1, y: 10, z: -4 },
+      slabHeight: 3,
+      ledgePosition: { x: 2, y: 3, z: 4 },
+      ledgeRotationY: Math.PI / 4,
+      ledgeHeight: 0.45,
+      ledgeDepth: 0.9,
+      faceId: "posX",
+      usableWidth: 2,
+      widthRatio: 0.7,
+      edgePadding: 0.04,
+      spreadRatio: 0.22,
+      minSpread: 0.08,
+      placementTuning: PLACEMENT_TUNING,
+      shouldUseDualCharacters: () => false,
+    });
+
+    expect(result.useDualCharacters).toBe(false);
+    expect(result.context.ledgeHeight).toBe(0.45);
+    expect(result.context.ledgeDepth).toBe(0.9);
+    expect(result.context.laneOffsets).toEqual([0]);
   });
 
   it("attaches a character view using the shared placement context", () => {

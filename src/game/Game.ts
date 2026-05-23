@@ -98,9 +98,9 @@ import {
 } from "./characters/characterDebugControls";
 import {
   attachCharacterViewToPlacement,
-  buildCharacterLedgePlacementContext,
-  buildCharacterTopFallbackPlacementContext,
   createCharacterSpatialAnchorContext,
+  resolveCharacterLedgePlacement,
+  resolveCharacterTopFallbackPlacement,
 } from "./characters/characterPlacementController";
 import {
   REMY_ANIMATION_ASSETS,
@@ -109,7 +109,6 @@ import {
   getRemyDebugDefaults,
   getRemyModelConfig,
 } from "./characters/modelConfigs";
-import { readCharacterFaceId } from "./characters/placementRuntime";
 import { applyModelLabStatePatch, createModelLabState, type ModelLabStatePatch } from "./debug/modelLabState";
 import { createCharacterSpatialSnapshot, createSpatialDebugSurface } from "./debug/spatialDebug";
 import {
@@ -2681,22 +2680,8 @@ export class Game {
     }
 
     const { slab, slabMesh, ledgeMesh } = anchor;
-    const ledgeHeight =
-      typeof ledgeMesh.userData.ledgeHeight === "number"
-        ? ledgeMesh.userData.ledgeHeight
-        : Math.max(0.1, slab.dimensions.height * 0.1);
-    const ledgeDepth =
-      typeof ledgeMesh.userData.ledgeDepth === "number"
-        ? ledgeMesh.userData.ledgeDepth
-        : Math.max(0.24, slab.dimensions.height * 0.18);
-    const ledgeWidthRatio =
-      typeof ledgeMesh.userData.widthRatio === "number"
-        ? ledgeMesh.userData.widthRatio
-        : 0;
-    const useDualCharacters = shouldSpawnDualRemyCharacters(ledgeWidthRatio);
-
     const primaryPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
-    const placementContext = buildCharacterLedgePlacementContext({
+    const { context: placementContext, useDualCharacters } = resolveCharacterLedgePlacement({
       slabLevel: slab.level,
       slabPosition: { ...slab.position },
       slabHeight: slab.dimensions.height,
@@ -2706,15 +2691,16 @@ export class Game {
         z: ledgeMesh.position.z,
       },
       ledgeRotationY: ledgeMesh.rotation.y,
-      ledgeHeight,
-      ledgeDepth,
-      faceId: readCharacterFaceId(ledgeMesh.userData.faceId),
-      usableWidth: typeof ledgeMesh.userData.usableWidth === "number" ? ledgeMesh.userData.usableWidth : 0,
-      useDualCharacters,
+      ledgeHeight: typeof ledgeMesh.userData.ledgeHeight === "number" ? ledgeMesh.userData.ledgeHeight : null,
+      ledgeDepth: typeof ledgeMesh.userData.ledgeDepth === "number" ? ledgeMesh.userData.ledgeDepth : null,
+      faceId: ledgeMesh.userData.faceId ?? null,
+      usableWidth: typeof ledgeMesh.userData.usableWidth === "number" ? ledgeMesh.userData.usableWidth : null,
+      widthRatio: typeof ledgeMesh.userData.widthRatio === "number" ? ledgeMesh.userData.widthRatio : null,
       edgePadding: REMY_DUAL_SPAWN_EDGE_PADDING,
       spreadRatio: REMY_DUAL_SPAWN_SPREAD_RATIO,
       minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
       placementTuning: primaryPlacementTuning,
+      shouldUseDualCharacters: shouldSpawnDualRemyCharacters,
     });
     const primaryPlacementConfig = this.remyDebugConfig;
     const secondaryPlacementConfig = this.activeRemySecondaryCharacterId
@@ -2810,12 +2796,12 @@ export class Game {
       }
 
       return createCharacterSpatialAnchorContext(
-        buildCharacterTopFallbackPlacementContext({
+        resolveCharacterTopFallbackPlacement({
           slabLevel: topSlab.level,
           slabPosition: { ...topSlab.position },
           slabHeight: topSlab.dimensions.height,
           placementTuning,
-        }),
+        }).context,
       );
     }
 
@@ -2828,7 +2814,7 @@ export class Game {
       return null;
     }
 
-    const placementContext = buildCharacterLedgePlacementContext({
+    const { context: placementContext } = resolveCharacterLedgePlacement({
       slabLevel: anchor.slab.level,
       slabPosition: { ...anchor.slab.position },
       slabHeight: anchor.slab.dimensions.height,
@@ -2839,20 +2825,17 @@ export class Game {
       },
       ledgeRotationY: anchor.ledgeMesh.rotation.y,
       ledgeHeight:
-        typeof anchor.ledgeMesh.userData.ledgeHeight === "number"
-          ? anchor.ledgeMesh.userData.ledgeHeight
-          : Math.max(0.1, anchor.slab.dimensions.height * 0.1),
+        typeof anchor.ledgeMesh.userData.ledgeHeight === "number" ? anchor.ledgeMesh.userData.ledgeHeight : null,
       ledgeDepth:
-        typeof anchor.ledgeMesh.userData.ledgeDepth === "number"
-          ? anchor.ledgeMesh.userData.ledgeDepth
-          : Math.max(0.24, anchor.slab.dimensions.height * 0.18),
-      faceId: readCharacterFaceId(anchor.ledgeMesh.userData.faceId),
-      usableWidth: typeof anchor.ledgeMesh.userData.usableWidth === "number" ? anchor.ledgeMesh.userData.usableWidth : 0,
-      useDualCharacters: shouldSpawnDualRemyCharacters(anchor.ledgeMesh.userData.widthRatio ?? 0),
+        typeof anchor.ledgeMesh.userData.ledgeDepth === "number" ? anchor.ledgeMesh.userData.ledgeDepth : null,
+      faceId: anchor.ledgeMesh.userData.faceId ?? null,
+      usableWidth: typeof anchor.ledgeMesh.userData.usableWidth === "number" ? anchor.ledgeMesh.userData.usableWidth : null,
+      widthRatio: typeof anchor.ledgeMesh.userData.widthRatio === "number" ? anchor.ledgeMesh.userData.widthRatio : null,
       edgePadding: REMY_DUAL_SPAWN_EDGE_PADDING,
       spreadRatio: REMY_DUAL_SPAWN_SPREAD_RATIO,
       minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
       placementTuning,
+      shouldUseDualCharacters: shouldSpawnDualRemyCharacters,
     });
 
     return createCharacterSpatialAnchorContext(placementContext, role === "primary" ? 0 : 1);
@@ -2879,7 +2862,7 @@ export class Game {
     }
 
     const fallbackPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
-    const fallbackContext = buildCharacterTopFallbackPlacementContext({
+    const { context: fallbackContext } = resolveCharacterTopFallbackPlacement({
       slabLevel: topSlab.level,
       slabPosition: { ...topSlab.position },
       slabHeight: topSlab.dimensions.height,

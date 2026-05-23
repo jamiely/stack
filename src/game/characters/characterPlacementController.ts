@@ -61,6 +61,40 @@ export interface BuildCharacterTopFallbackPlacementContextOptions {
   placementTuning: CharacterPlacementTuning;
 }
 
+export interface ResolveCharacterLedgePlacementOptions {
+  slabLevel: number;
+  slabPosition: RemyVector3Like;
+  slabHeight: number;
+  ledgePosition: RemyVector3Like;
+  ledgeRotationY: number;
+  ledgeHeight: number | null;
+  ledgeDepth: number | null;
+  faceId: CharacterFaceId | null;
+  usableWidth: number | null;
+  widthRatio: number | null;
+  edgePadding: number;
+  spreadRatio: number;
+  minSpread: number;
+  placementTuning: CharacterPlacementTuning;
+  shouldUseDualCharacters?: (widthRatio: number) => boolean;
+}
+
+export interface ResolvedCharacterLedgePlacement {
+  context: CharacterPlacementContext;
+  useDualCharacters: boolean;
+}
+
+export interface ResolveCharacterTopFallbackPlacementOptions {
+  slabLevel: number;
+  slabPosition: RemyVector3Like;
+  slabHeight: number;
+  placementTuning: CharacterPlacementTuning;
+}
+
+export interface ResolvedCharacterTopFallbackPlacement {
+  context: CharacterPlacementContext;
+}
+
 export interface AttachCharacterViewToPlacementOptions {
   view: CharacterView | null;
   parent: Object3D;
@@ -117,6 +151,46 @@ export function buildCharacterTopFallbackPlacementContext(
       options.placementTuning.maxHeight,
     ),
     sidePose: resolveCharacterSidePose(null),
+  };
+}
+
+export function resolveCharacterLedgePlacement(
+  options: ResolveCharacterLedgePlacementOptions,
+): ResolvedCharacterLedgePlacement {
+  const widthRatio = options.widthRatio ?? 0;
+  const useDualCharacters = (options.shouldUseDualCharacters ?? ((candidateWidthRatio) => candidateWidthRatio > 0))(widthRatio);
+
+  return {
+    context: buildCharacterLedgePlacementContext({
+      slabLevel: options.slabLevel,
+      slabPosition: options.slabPosition,
+      slabHeight: options.slabHeight,
+      ledgePosition: options.ledgePosition,
+      ledgeRotationY: options.ledgeRotationY,
+      ledgeHeight: options.ledgeHeight ?? Math.max(0.1, options.slabHeight * 0.1),
+      ledgeDepth: options.ledgeDepth ?? Math.max(0.24, options.slabHeight * 0.18),
+      faceId: options.faceId,
+      usableWidth: options.usableWidth ?? 0,
+      useDualCharacters,
+      edgePadding: options.edgePadding,
+      spreadRatio: options.spreadRatio,
+      minSpread: options.minSpread,
+      placementTuning: options.placementTuning,
+    }),
+    useDualCharacters,
+  };
+}
+
+export function resolveCharacterTopFallbackPlacement(
+  options: ResolveCharacterTopFallbackPlacementOptions,
+): ResolvedCharacterTopFallbackPlacement {
+  return {
+    context: buildCharacterTopFallbackPlacementContext({
+      slabLevel: options.slabLevel,
+      slabPosition: options.slabPosition,
+      slabHeight: options.slabHeight,
+      placementTuning: options.placementTuning,
+    }),
   };
 }
 
