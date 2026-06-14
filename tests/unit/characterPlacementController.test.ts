@@ -8,6 +8,7 @@ import {
   buildCharacterTopFallbackPlacementContext,
   createCharacterSpatialAnchorContext,
   resolveCharacterLedgePlacement,
+  resolveCharacterLedgePlacementFromMetadata,
   resolveCharacterTopFallbackPlacement,
   type CharacterPlacementTuning,
 } from "../../src/game/characters/characterPlacementController";
@@ -134,6 +135,70 @@ describe("characterPlacementController", () => {
       },
     });
     expect(result.context.laneOffsets).toEqual([-0.264, 0.264]);
+  });
+
+  it("normalizes raw ledge metadata before resolving placement", () => {
+    const shouldUseDualCharacters = vi.fn().mockReturnValue(true);
+
+    const result = resolveCharacterLedgePlacementFromMetadata({
+      slabLevel: 8,
+      slabPosition: { x: 2, y: 12, z: -1 },
+      slabHeight: 2,
+      ledgePosition: { x: 0.25, y: 0.5, z: 0.75 },
+      ledgeRotationY: 0.3,
+      ledgeMetadata: {
+        ledgeHeight: 0.33,
+        ledgeDepth: 0.66,
+        faceId: "negX",
+        usableWidth: 1.8,
+        widthRatio: 0.72,
+      },
+      edgePadding: 0.04,
+      spreadRatio: 0.22,
+      minSpread: 0.08,
+      placementTuning: PLACEMENT_TUNING,
+      shouldUseDualCharacters,
+    });
+
+    expect(shouldUseDualCharacters).toHaveBeenCalledWith(0.72);
+    expect(result.useDualCharacters).toBe(true);
+    expect(result.context).toMatchObject({
+      level: 8,
+      faceId: "negX",
+      slabPosition: { x: 2, y: 12, z: -1 },
+      ledgePosition: { x: 0.25, y: 0.5, z: 0.75 },
+      ledgeRotationY: 0.3,
+      ledgeHeight: 0.33,
+      ledgeDepth: 0.66,
+      targetHeight: 0.84,
+    });
+    expect(result.context.laneOffsets).toEqual([-0.396, 0.396]);
+  });
+
+  it("falls back when raw ledge metadata is missing numeric metrics", () => {
+    const result = resolveCharacterLedgePlacementFromMetadata({
+      slabLevel: 8,
+      slabPosition: { x: 2, y: 12, z: -1 },
+      slabHeight: 2,
+      ledgePosition: { x: 0.25, y: 0.5, z: 0.75 },
+      ledgeRotationY: 0.3,
+      ledgeMetadata: {
+        ledgeHeight: "bad",
+        ledgeDepth: undefined,
+        usableWidth: "wide",
+        widthRatio: null,
+      },
+      edgePadding: 0.04,
+      spreadRatio: 0.22,
+      minSpread: 0.08,
+      placementTuning: PLACEMENT_TUNING,
+      shouldUseDualCharacters: () => true,
+    });
+
+    expect(result.context.faceId).toBeNull();
+    expect(result.context.ledgeHeight).toBe(0.2);
+    expect(result.context.ledgeDepth).toBe(0.36);
+    expect(result.context.laneOffsets).toEqual([0]);
   });
 
   it("resolves top-fallback placement context from raw slab metadata", () => {

@@ -79,6 +79,28 @@ export interface ResolveCharacterLedgePlacementOptions {
   shouldUseDualCharacters?: (widthRatio: number) => boolean;
 }
 
+export interface CharacterLedgePlacementMetadata {
+  ledgeHeight?: unknown;
+  ledgeDepth?: unknown;
+  faceId?: CharacterFaceId | null;
+  usableWidth?: unknown;
+  widthRatio?: unknown;
+}
+
+export interface ResolveCharacterLedgePlacementFromMetadataOptions {
+  slabLevel: number;
+  slabPosition: RemyVector3Like;
+  slabHeight: number;
+  ledgePosition: RemyVector3Like;
+  ledgeRotationY: number;
+  ledgeMetadata: CharacterLedgePlacementMetadata;
+  edgePadding: number;
+  spreadRatio: number;
+  minSpread: number;
+  placementTuning: CharacterPlacementTuning;
+  shouldUseDualCharacters?: (widthRatio: number) => boolean;
+}
+
 export interface ResolvedCharacterLedgePlacement {
   context: CharacterPlacementContext;
   useDualCharacters: boolean;
@@ -191,6 +213,28 @@ export function resolveCharacterLedgePlacement(
     }),
     useDualCharacters,
   };
+}
+
+export function resolveCharacterLedgePlacementFromMetadata(
+  options: ResolveCharacterLedgePlacementFromMetadataOptions,
+): ResolvedCharacterLedgePlacement {
+  return resolveCharacterLedgePlacement({
+    slabLevel: options.slabLevel,
+    slabPosition: options.slabPosition,
+    slabHeight: options.slabHeight,
+    ledgePosition: options.ledgePosition,
+    ledgeRotationY: options.ledgeRotationY,
+    ledgeHeight: typeof options.ledgeMetadata.ledgeHeight === "number" ? options.ledgeMetadata.ledgeHeight : null,
+    ledgeDepth: typeof options.ledgeMetadata.ledgeDepth === "number" ? options.ledgeMetadata.ledgeDepth : null,
+    faceId: options.ledgeMetadata.faceId ?? null,
+    usableWidth: typeof options.ledgeMetadata.usableWidth === "number" ? options.ledgeMetadata.usableWidth : null,
+    widthRatio: typeof options.ledgeMetadata.widthRatio === "number" ? options.ledgeMetadata.widthRatio : null,
+    edgePadding: options.edgePadding,
+    spreadRatio: options.spreadRatio,
+    minSpread: options.minSpread,
+    placementTuning: options.placementTuning,
+    shouldUseDualCharacters: options.shouldUseDualCharacters,
+  });
 }
 
 export function resolveCharacterTopFallbackPlacement(

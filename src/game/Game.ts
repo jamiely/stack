@@ -99,7 +99,7 @@ import {
 import {
   attachCharacterViewsToResolvedPlacement,
   createCharacterSpatialAnchorContext,
-  resolveCharacterLedgePlacement,
+  resolveCharacterLedgePlacementFromMetadata,
   resolveCharacterTopFallbackPlacement,
 } from "./characters/characterPlacementController";
 import {
@@ -2681,7 +2681,7 @@ export class Game {
 
     const { slab, slabMesh, ledgeMesh } = anchor;
     const primaryPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
-    const { context: placementContext, useDualCharacters } = resolveCharacterLedgePlacement({
+    const { context: placementContext, useDualCharacters } = resolveCharacterLedgePlacementFromMetadata({
       slabLevel: slab.level,
       slabPosition: { ...slab.position },
       slabHeight: slab.dimensions.height,
@@ -2691,11 +2691,7 @@ export class Game {
         z: ledgeMesh.position.z,
       },
       ledgeRotationY: ledgeMesh.rotation.y,
-      ledgeHeight: typeof ledgeMesh.userData.ledgeHeight === "number" ? ledgeMesh.userData.ledgeHeight : null,
-      ledgeDepth: typeof ledgeMesh.userData.ledgeDepth === "number" ? ledgeMesh.userData.ledgeDepth : null,
-      faceId: ledgeMesh.userData.faceId ?? null,
-      usableWidth: typeof ledgeMesh.userData.usableWidth === "number" ? ledgeMesh.userData.usableWidth : null,
-      widthRatio: typeof ledgeMesh.userData.widthRatio === "number" ? ledgeMesh.userData.widthRatio : null,
+      ledgeMetadata: ledgeMesh.userData,
       edgePadding: REMY_DUAL_SPAWN_EDGE_PADDING,
       spreadRatio: REMY_DUAL_SPAWN_SPREAD_RATIO,
       minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
@@ -2804,7 +2800,7 @@ export class Game {
       return null;
     }
 
-    const { context: placementContext } = resolveCharacterLedgePlacement({
+    const { context: placementContext } = resolveCharacterLedgePlacementFromMetadata({
       slabLevel: anchor.slab.level,
       slabPosition: { ...anchor.slab.position },
       slabHeight: anchor.slab.dimensions.height,
@@ -2814,13 +2810,7 @@ export class Game {
         z: anchor.ledgeMesh.position.z,
       },
       ledgeRotationY: anchor.ledgeMesh.rotation.y,
-      ledgeHeight:
-        typeof anchor.ledgeMesh.userData.ledgeHeight === "number" ? anchor.ledgeMesh.userData.ledgeHeight : null,
-      ledgeDepth:
-        typeof anchor.ledgeMesh.userData.ledgeDepth === "number" ? anchor.ledgeMesh.userData.ledgeDepth : null,
-      faceId: anchor.ledgeMesh.userData.faceId ?? null,
-      usableWidth: typeof anchor.ledgeMesh.userData.usableWidth === "number" ? anchor.ledgeMesh.userData.usableWidth : null,
-      widthRatio: typeof anchor.ledgeMesh.userData.widthRatio === "number" ? anchor.ledgeMesh.userData.widthRatio : null,
+      ledgeMetadata: anchor.ledgeMesh.userData,
       edgePadding: REMY_DUAL_SPAWN_EDGE_PADDING,
       spreadRatio: REMY_DUAL_SPAWN_SPREAD_RATIO,
       minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
