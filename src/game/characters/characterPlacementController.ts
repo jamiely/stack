@@ -101,6 +101,11 @@ export interface ResolveCharacterLedgePlacementFromMetadataOptions {
   shouldUseDualCharacters?: (widthRatio: number) => boolean;
 }
 
+export interface ShouldUseDualCharacterLedgeMetadataOptions {
+  ledgeMetadata: CharacterLedgePlacementMetadata | null;
+  shouldUseDualCharacters: (widthRatio: number) => boolean;
+}
+
 export interface ResolvedCharacterLedgePlacement {
   context: CharacterPlacementContext;
   useDualCharacters: boolean;
@@ -235,6 +240,15 @@ export function resolveCharacterLedgePlacementFromMetadata(
     placementTuning: options.placementTuning,
     shouldUseDualCharacters: options.shouldUseDualCharacters,
   });
+}
+
+export function shouldUseDualCharacterLedgeMetadata(options: ShouldUseDualCharacterLedgeMetadataOptions): boolean {
+  if (!options.ledgeMetadata) {
+    return false;
+  }
+
+  const widthRatio = typeof options.ledgeMetadata.widthRatio === "number" ? options.ledgeMetadata.widthRatio : 0;
+  return options.shouldUseDualCharacters(widthRatio);
 }
 
 export function resolveCharacterTopFallbackPlacement(

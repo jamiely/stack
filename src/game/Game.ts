@@ -101,6 +101,7 @@ import {
   createCharacterSpatialAnchorContext,
   resolveCharacterLedgePlacementFromMetadata,
   resolveCharacterTopFallbackPlacement,
+  shouldUseDualCharacterLedgeMetadata,
 } from "./characters/characterPlacementController";
 import {
   REMY_ANIMATION_ASSETS,
@@ -2506,16 +2507,10 @@ export class Game {
       ? this.findLedgeAnchorByLevelAndFace(this.remyAnchor.level, this.remyAnchor.faceNoiseSalt)
       : this.findTopLedgeAnchor();
 
-    if (!anchor) {
-      return false;
-    }
-
-    const widthRatio =
-      typeof anchor.ledgeMesh.userData.widthRatio === "number"
-        ? anchor.ledgeMesh.userData.widthRatio
-        : 0;
-
-    return shouldSpawnDualRemyCharacters(widthRatio);
+    return shouldUseDualCharacterLedgeMetadata({
+      ledgeMetadata: anchor?.ledgeMesh.userData ?? null,
+      shouldUseDualCharacters: shouldSpawnDualRemyCharacters,
+    });
   }
 
   private refreshRemyCharacterSelection(): void {

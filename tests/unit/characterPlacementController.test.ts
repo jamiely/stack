@@ -10,6 +10,7 @@ import {
   resolveCharacterLedgePlacement,
   resolveCharacterLedgePlacementFromMetadata,
   resolveCharacterTopFallbackPlacement,
+  shouldUseDualCharacterLedgeMetadata,
   type CharacterPlacementTuning,
 } from "../../src/game/characters/characterPlacementController";
 import { createCharacterSceneNodes } from "../../src/game/characters/sceneNodes";
@@ -199,6 +200,42 @@ describe("characterPlacementController", () => {
     expect(result.context.ledgeHeight).toBe(0.2);
     expect(result.context.ledgeDepth).toBe(0.36);
     expect(result.context.laneOffsets).toEqual([0]);
+  });
+
+  it("uses raw ledge metadata width ratio for secondary character decisions", () => {
+    const shouldUseDualCharacters = vi.fn((widthRatio: number) => widthRatio > 0.5);
+
+    expect(
+      shouldUseDualCharacterLedgeMetadata({
+        ledgeMetadata: { widthRatio: 0.72 },
+        shouldUseDualCharacters,
+      }),
+    ).toBe(true);
+    expect(shouldUseDualCharacters).toHaveBeenCalledWith(0.72);
+  });
+
+  it("falls back to single character when secondary decision metadata is absent", () => {
+    const shouldUseDualCharacters = vi.fn(() => true);
+
+    expect(
+      shouldUseDualCharacterLedgeMetadata({
+        ledgeMetadata: null,
+        shouldUseDualCharacters,
+      }),
+    ).toBe(false);
+    expect(shouldUseDualCharacters).not.toHaveBeenCalled();
+  });
+
+  it("falls back to zero width ratio for non-numeric secondary decision metadata", () => {
+    const shouldUseDualCharacters = vi.fn((widthRatio: number) => widthRatio > 0);
+
+    expect(
+      shouldUseDualCharacterLedgeMetadata({
+        ledgeMetadata: { widthRatio: "wide" },
+        shouldUseDualCharacters,
+      }),
+    ).toBe(false);
+    expect(shouldUseDualCharacters).toHaveBeenCalledWith(0);
   });
 
   it("resolves top-fallback placement context from raw slab metadata", () => {
