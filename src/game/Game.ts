@@ -97,7 +97,7 @@ import {
   syncRemyDebugValueLabels,
 } from "./characters/characterDebugControls";
 import {
-  attachCharacterViewToPlacement,
+  attachCharacterViewsToResolvedPlacement,
   createCharacterSpatialAnchorContext,
   resolveCharacterLedgePlacement,
   resolveCharacterTopFallbackPlacement,
@@ -2715,27 +2715,17 @@ export class Game {
           testMode: this.testMode.enabled,
         });
 
-    attachCharacterViewToPlacement({
-      view: this.remyView,
+    attachCharacterViewsToResolvedPlacement({
+      primaryView: this.remyView,
+      secondaryView: this.remySecondaryView,
       parent: slabMesh,
       context: placementContext,
-      laneOffset: placementContext.laneOffsets[0] ?? 0,
-      debugConfig: primaryPlacementConfig,
-      placementTuning: primaryPlacementTuning,
+      useSecondary: useDualCharacters,
+      primaryDebugConfig: primaryPlacementConfig,
+      secondaryDebugConfig: secondaryPlacementConfig,
+      primaryPlacementTuning,
+      secondaryPlacementTuning: this.getRemyPlacementConfigForCharacter(this.activeRemySecondaryCharacterId),
     });
-
-    if (useDualCharacters && this.remySecondaryView && placementContext.laneOffsets.length > 1) {
-      attachCharacterViewToPlacement({
-        view: this.remySecondaryView,
-        parent: slabMesh,
-        context: placementContext,
-        laneOffset: placementContext.laneOffsets[1]!,
-        debugConfig: secondaryPlacementConfig,
-        placementTuning: this.getRemyPlacementConfigForCharacter(this.activeRemySecondaryCharacterId),
-      });
-    } else {
-      this.remySecondaryView?.detach();
-    }
 
     this.refreshSpatialDebugSurface();
   }
@@ -2869,15 +2859,17 @@ export class Game {
       placementTuning: fallbackPlacementTuning,
     });
 
-    attachCharacterViewToPlacement({
-      view: this.remyView,
+    attachCharacterViewsToResolvedPlacement({
+      primaryView: this.remyView,
+      secondaryView: this.remySecondaryView,
       parent: topSlabMesh,
       context: fallbackContext,
-      laneOffset: 0,
-      debugConfig: this.remyDebugConfig,
-      placementTuning: fallbackPlacementTuning,
+      useSecondary: false,
+      primaryDebugConfig: this.remyDebugConfig,
+      secondaryDebugConfig: this.remyDebugConfig,
+      primaryPlacementTuning: fallbackPlacementTuning,
+      secondaryPlacementTuning: fallbackPlacementTuning,
     });
-    this.remySecondaryView?.detach();
     this.refreshSpatialDebugSurface();
   }
 

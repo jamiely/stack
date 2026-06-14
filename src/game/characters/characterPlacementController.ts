@@ -104,6 +104,18 @@ export interface AttachCharacterViewToPlacementOptions {
   placementTuning: CharacterPlacementTuning;
 }
 
+export interface AttachCharacterViewsToResolvedPlacementOptions {
+  primaryView: CharacterView | null;
+  secondaryView: CharacterView | null;
+  parent: Object3D;
+  context: CharacterPlacementContext;
+  useSecondary: boolean;
+  primaryDebugConfig: RemyDebugConfig;
+  secondaryDebugConfig: RemyDebugConfig;
+  primaryPlacementTuning: CharacterPlacementTuning;
+  secondaryPlacementTuning: CharacterPlacementTuning;
+}
+
 export function buildCharacterLedgePlacementContext(
   options: BuildCharacterLedgePlacementContextOptions,
 ): CharacterPlacementContext {
@@ -221,6 +233,35 @@ export function attachCharacterViewToPlacement(
   options.view.applyPlacement(placement);
   options.view.attachTo(options.parent);
   return placement;
+}
+
+export function attachCharacterViewsToResolvedPlacement(
+  options: AttachCharacterViewsToResolvedPlacementOptions,
+): readonly (RemyPlacementTransformResult | null)[] {
+  const primaryPlacement = attachCharacterViewToPlacement({
+    view: options.primaryView,
+    parent: options.parent,
+    context: options.context,
+    laneOffset: options.context.laneOffsets[0] ?? 0,
+    debugConfig: options.primaryDebugConfig,
+    placementTuning: options.primaryPlacementTuning,
+  });
+
+  if (!options.useSecondary || !options.secondaryView || options.context.laneOffsets.length < 2) {
+    options.secondaryView?.detach();
+    return [primaryPlacement, null];
+  }
+
+  const secondaryPlacement = attachCharacterViewToPlacement({
+    view: options.secondaryView,
+    parent: options.parent,
+    context: options.context,
+    laneOffset: options.context.laneOffsets[1]!,
+    debugConfig: options.secondaryDebugConfig,
+    placementTuning: options.secondaryPlacementTuning,
+  });
+
+  return [primaryPlacement, secondaryPlacement];
 }
 
 export function createCharacterSpatialAnchorContext(

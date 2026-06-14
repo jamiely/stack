@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createCharacterView } from "../../src/game/characters/characterView";
 import {
   attachCharacterViewToPlacement,
+  attachCharacterViewsToResolvedPlacement,
   buildCharacterLedgePlacementContext,
   buildCharacterTopFallbackPlacementContext,
   createCharacterSpatialAnchorContext,
@@ -244,6 +245,126 @@ describe("characterPlacementController", () => {
     expect(sceneNodes.poseRotateX.rotation.x).toBeCloseTo((-2 * Math.PI) / 180, 6);
     expect(sceneNodes.poseRotateY.rotation.y).toBeCloseTo((5 * Math.PI) / 180, 6);
     expect(sceneNodes.poseRotateZ.rotation.z).toBeCloseTo(Math.PI / 180, 6);
+  });
+
+  it("attaches primary and secondary views through the resolved placement helper", () => {
+    const primaryNodes = createCharacterSceneNodes({
+      model: new Group(),
+      centerOffsetFromFeet: 0.5,
+      nameSuffix: "primary",
+    });
+    const secondaryNodes = createCharacterSceneNodes({
+      model: new Group(),
+      centerOffsetFromFeet: 0.5,
+      nameSuffix: "secondary",
+    });
+    const primaryView = createCharacterView({ sceneNodes: primaryNodes, baseHeight: 2, baseDepth: 1 });
+    const secondaryView = createCharacterView({ sceneNodes: secondaryNodes, baseHeight: 2, baseDepth: 1 });
+    const parent = new Group();
+    const context = buildCharacterLedgePlacementContext({
+      slabLevel: 2,
+      slabPosition: { x: 0, y: 2, z: 0 },
+      slabHeight: 2,
+      ledgePosition: { x: 10, y: 5, z: -3 },
+      ledgeRotationY: 0,
+      ledgeHeight: 0.2,
+      ledgeDepth: 0.5,
+      faceId: "posZ",
+      usableWidth: 2,
+      useDualCharacters: true,
+      edgePadding: 0.04,
+      spreadRatio: 0.22,
+      minSpread: 0.08,
+      placementTuning: PLACEMENT_TUNING,
+    });
+
+    const placements = attachCharacterViewsToResolvedPlacement({
+      primaryView,
+      secondaryView,
+      parent,
+      context,
+      useSecondary: true,
+      primaryDebugConfig: {
+        yawDegrees: 0,
+        pitchDegrees: 0,
+        rollDegrees: 0,
+        translateX: 0,
+        translateY: 0,
+        translateZ: 0,
+      },
+      secondaryDebugConfig: {
+        yawDegrees: 0,
+        pitchDegrees: 0,
+        rollDegrees: 0,
+        translateX: 0,
+        translateY: 0,
+        translateZ: 0,
+      },
+      primaryPlacementTuning: PLACEMENT_TUNING,
+      secondaryPlacementTuning: PLACEMENT_TUNING,
+    });
+
+    expect(placements[0]).not.toBeNull();
+    expect(placements[1]).not.toBeNull();
+    expect(primaryNodes.characterRoot.parent).toBe(parent);
+    expect(secondaryNodes.characterRoot.parent).toBe(parent);
+    expect(primaryNodes.placementNode.position.x).toBeCloseTo(9.56, 6);
+    expect(secondaryNodes.placementNode.position.x).toBeCloseTo(10.44, 6);
+  });
+
+  it("detaches secondary view when resolved placement has no secondary lane", () => {
+    const primaryNodes = createCharacterSceneNodes({
+      model: new Group(),
+      centerOffsetFromFeet: 0.5,
+      nameSuffix: "primary",
+    });
+    const secondaryNodes = createCharacterSceneNodes({
+      model: new Group(),
+      centerOffsetFromFeet: 0.5,
+      nameSuffix: "secondary",
+    });
+    const primaryView = createCharacterView({ sceneNodes: primaryNodes, baseHeight: 2, baseDepth: 1 });
+    const secondaryView = createCharacterView({ sceneNodes: secondaryNodes, baseHeight: 2, baseDepth: 1 });
+    const parent = new Group();
+    const previousParent = new Group();
+    previousParent.add(secondaryNodes.characterRoot);
+    const context = buildCharacterTopFallbackPlacementContext({
+      slabLevel: 4,
+      slabPosition: { x: 0, y: 6, z: 0 },
+      slabHeight: 1.5,
+      placementTuning: PLACEMENT_TUNING,
+    });
+
+    const placements = attachCharacterViewsToResolvedPlacement({
+      primaryView,
+      secondaryView,
+      parent,
+      context,
+      useSecondary: false,
+      primaryDebugConfig: {
+        yawDegrees: 0,
+        pitchDegrees: 0,
+        rollDegrees: 0,
+        translateX: 0,
+        translateY: 0,
+        translateZ: 0,
+      },
+      secondaryDebugConfig: {
+        yawDegrees: 0,
+        pitchDegrees: 0,
+        rollDegrees: 0,
+        translateX: 0,
+        translateY: 0,
+        translateZ: 0,
+      },
+      primaryPlacementTuning: PLACEMENT_TUNING,
+      secondaryPlacementTuning: PLACEMENT_TUNING,
+    });
+
+    expect(placements[0]).not.toBeNull();
+    expect(placements[1]).toBeNull();
+    expect(primaryNodes.characterRoot.parent).toBe(parent);
+    expect(secondaryNodes.characterRoot.parent).toBeNull();
   });
 
   it("creates debug anchor context for the requested lane index", () => {
