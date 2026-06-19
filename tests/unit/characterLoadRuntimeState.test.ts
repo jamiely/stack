@@ -1,6 +1,9 @@
 import { AnimationClip, Group } from "three";
 import { describe, expect, it, vi } from "vitest";
-import { prepareLoadedCharacterRuntimeState } from "../../src/game/characters/characterLoadRuntimeState";
+import {
+  createResetCharacterRuntimeState,
+  prepareLoadedCharacterRuntimeState,
+} from "../../src/game/characters/characterLoadRuntimeState";
 import type { CharacterLoadCoordinatorResult } from "../../src/game/characters/characterLoadCoordinator";
 import type { CharacterView, RemyDebugConfig } from "../../src/game/characters/contracts";
 import type { BuiltCharacterView } from "../../src/game/characters/modelPreparation";
@@ -120,5 +123,22 @@ describe("characterLoadRuntimeState", () => {
 
     expect(result.secondaryView).toBeNull();
     expect(result.activeSecondaryCharacterId).toBeNull();
+  });
+
+  it("creates a reset state for clearing stale loaded character runtime handles", () => {
+    expect(createResetCharacterRuntimeState({ currentLoadGeneration: 8 })).toEqual({
+      loadGeneration: 9,
+      isLoading: false,
+      refreshPending: false,
+      appearanceRefreshPending: false,
+      primaryView: null,
+      secondaryView: null,
+      activeCharacterId: null,
+      activeSecondaryCharacterId: null,
+      primaryMixer: null,
+      secondaryMixer: null,
+      anchor: null,
+      suppressedByTentacles: false,
+    });
   });
 });

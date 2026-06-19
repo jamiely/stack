@@ -87,7 +87,11 @@ import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } fro
 import {
   loadCharacterCoordinatorResult,
 } from "./characters/characterLoadCoordinator";
-import { prepareLoadedCharacterRuntimeState } from "./characters/characterLoadRuntimeState";
+import {
+  createResetCharacterRuntimeState,
+  prepareLoadedCharacterRuntimeState,
+  type LoadedCharacterRuntimeState,
+} from "./characters/characterLoadRuntimeState";
 import { buildNextRemyCharacterSelection } from "./characters/characterSelection";
 import {
   applyRemyDebugConfigPatch,
@@ -97,10 +101,11 @@ import {
   syncRemyDebugValueLabels,
 } from "./characters/characterDebugControls";
 import {
-  attachCharacterViewToPlacement,
-  buildCharacterLedgePlacementContext,
-  buildCharacterTopFallbackPlacementContext,
+  attachCharacterViewsToResolvedPlacement,
   createCharacterSpatialAnchorContext,
+  resolveCharacterLedgePlacementFromMetadata,
+  resolveCharacterTopFallbackPlacement,
+  shouldUseDualCharacterLedgeMetadata,
 } from "./characters/characterPlacementController";
 import {
   REMY_ANIMATION_ASSETS,
@@ -109,7 +114,6 @@ import {
   getRemyDebugDefaults,
   getRemyModelConfig,
 } from "./characters/modelConfigs";
-import { readCharacterFaceId } from "./characters/placementRuntime";
 import { applyModelLabStatePatch, createModelLabState, type ModelLabStatePatch } from "./debug/modelLabState";
 import { createCharacterSpatialSnapshot, createSpatialDebugSurface } from "./debug/spatialDebug";
 import {
@@ -1299,16 +1303,38 @@ export class Game {
     this.renderHud();
   }
 
+  private resetRemyRuntimeHandles(): void {
+    const resetState = createResetCharacterRuntimeState({
+      currentLoadGeneration: this.remyLoadGeneration,
+    });
+
+    this.remyLoadGeneration = resetState.loadGeneration;
+    this.remyIsLoading = resetState.isLoading;
+    this.remyRefreshPending = resetState.refreshPending;
+    this.remyAppearanceRefreshPending = resetState.appearanceRefreshPending;
+    this.remyView = resetState.primaryView;
+    this.remySecondaryView = resetState.secondaryView;
+    this.activeRemyCharacterId = resetState.activeCharacterId;
+    this.activeRemySecondaryCharacterId = resetState.activeSecondaryCharacterId;
+    this.remyMixer = resetState.primaryMixer;
+    this.remySecondaryMixer = resetState.secondaryMixer;
+    this.remyAnchor = resetState.anchor;
+    this.remySuppressedByTentacles = resetState.suppressedByTentacles;
+  }
+
+  private applyLoadedRemyRuntimeState(runtimeState: LoadedCharacterRuntimeState): void {
+    this.remyView = runtimeState.primaryView;
+    this.remySecondaryView = runtimeState.secondaryView;
+    this.activeRemyCharacterId = runtimeState.activeCharacterId;
+    this.activeRemySecondaryCharacterId = runtimeState.activeSecondaryCharacterId;
+    this.remyDebugConfig = runtimeState.debugConfig;
+    this.remyMixer = runtimeState.primaryMixer;
+    this.remySecondaryMixer = runtimeState.secondaryMixer;
+  }
+
   private resetWorld(): void {
-    this.remyLoadGeneration += 1;
-    this.remyIsLoading = false;
-    this.remyRefreshPending = false;
-    this.remyAppearanceRefreshPending = false;
+    this.resetRemyRuntimeHandles();
     this.characterAnimationManager.disposeAll();
-    this.remyView = null;
-    this.remyMixer = null;
-    this.remySecondaryView = null;
-    this.remySecondaryMixer = null;
     this.lastFrameTime = 0;
     this.simulationElapsedSeconds = 0;
     this.score = 0;
@@ -1366,11 +1392,6 @@ export class Game {
       config: this.buildFireworksSimulationConfig(),
     });
     this.tentacleBurstKeys = [];
-    this.activeRemyCharacterId = null;
-    this.activeRemySecondaryCharacterId = null;
-    this.remyAnchor = null;
-    this.remySuppressedByTentacles = false;
-    this.remyAppearanceRefreshPending = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
 
@@ -2507,32 +2528,15 @@ export class Game {
       ? this.findLedgeAnchorByLevelAndFace(this.remyAnchor.level, this.remyAnchor.faceNoiseSalt)
       : this.findTopLedgeAnchor();
 
-    if (!anchor) {
-      return false;
-    }
-
-    const widthRatio =
-      typeof anchor.ledgeMesh.userData.widthRatio === "number"
-        ? anchor.ledgeMesh.userData.widthRatio
-        : 0;
-
-    return shouldSpawnDualRemyCharacters(widthRatio);
+    return shouldUseDualCharacterLedgeMetadata({
+      ledgeMetadata: anchor?.ledgeMesh.userData ?? null,
+      shouldUseDualCharacters: shouldSpawnDualRemyCharacters,
+    });
   }
 
   private refreshRemyCharacterSelection(): void {
-    this.remyLoadGeneration += 1;
-    this.remyIsLoading = false;
-    this.remyRefreshPending = false;
-    this.remyAppearanceRefreshPending = false;
-    this.activeRemyCharacterId = null;
-    this.activeRemySecondaryCharacterId = null;
-    this.remyAnchor = null;
-    this.remySuppressedByTentacles = false;
+    this.resetRemyRuntimeHandles();
     this.characterAnimationManager.release();
-    this.remyView = null;
-    this.remyMixer = null;
-    this.remySecondaryView = null;
-    this.remySecondaryMixer = null;
     this.characterAnimationManager.spawnLedgeCharacter();
   }
 
@@ -2590,13 +2594,7 @@ export class Game {
           testMode: this.testMode.enabled,
         });
 
-        this.remyView = runtimeState.primaryView;
-        this.remySecondaryView = runtimeState.secondaryView;
-        this.activeRemyCharacterId = runtimeState.activeCharacterId;
-        this.activeRemySecondaryCharacterId = runtimeState.activeSecondaryCharacterId;
-        this.remyDebugConfig = runtimeState.debugConfig;
-        this.remyMixer = runtimeState.primaryMixer;
-        this.remySecondaryMixer = runtimeState.secondaryMixer;
+        this.applyLoadedRemyRuntimeState(runtimeState);
         this.syncRemyDebugControlSurface();
         this.remyIsLoading = false;
 
@@ -2681,22 +2679,8 @@ export class Game {
     }
 
     const { slab, slabMesh, ledgeMesh } = anchor;
-    const ledgeHeight =
-      typeof ledgeMesh.userData.ledgeHeight === "number"
-        ? ledgeMesh.userData.ledgeHeight
-        : Math.max(0.1, slab.dimensions.height * 0.1);
-    const ledgeDepth =
-      typeof ledgeMesh.userData.ledgeDepth === "number"
-        ? ledgeMesh.userData.ledgeDepth
-        : Math.max(0.24, slab.dimensions.height * 0.18);
-    const ledgeWidthRatio =
-      typeof ledgeMesh.userData.widthRatio === "number"
-        ? ledgeMesh.userData.widthRatio
-        : 0;
-    const useDualCharacters = shouldSpawnDualRemyCharacters(ledgeWidthRatio);
-
     const primaryPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
-    const placementContext = buildCharacterLedgePlacementContext({
+    const { context: placementContext, useDualCharacters } = resolveCharacterLedgePlacementFromMetadata({
       slabLevel: slab.level,
       slabPosition: { ...slab.position },
       slabHeight: slab.dimensions.height,
@@ -2706,15 +2690,12 @@ export class Game {
         z: ledgeMesh.position.z,
       },
       ledgeRotationY: ledgeMesh.rotation.y,
-      ledgeHeight,
-      ledgeDepth,
-      faceId: readCharacterFaceId(ledgeMesh.userData.faceId),
-      usableWidth: typeof ledgeMesh.userData.usableWidth === "number" ? ledgeMesh.userData.usableWidth : 0,
-      useDualCharacters,
+      ledgeMetadata: ledgeMesh.userData,
       edgePadding: REMY_DUAL_SPAWN_EDGE_PADDING,
       spreadRatio: REMY_DUAL_SPAWN_SPREAD_RATIO,
       minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
       placementTuning: primaryPlacementTuning,
+      shouldUseDualCharacters: shouldSpawnDualRemyCharacters,
     });
     const primaryPlacementConfig = this.remyDebugConfig;
     const secondaryPlacementConfig = this.activeRemySecondaryCharacterId
@@ -2729,27 +2710,17 @@ export class Game {
           testMode: this.testMode.enabled,
         });
 
-    attachCharacterViewToPlacement({
-      view: this.remyView,
+    attachCharacterViewsToResolvedPlacement({
+      primaryView: this.remyView,
+      secondaryView: this.remySecondaryView,
       parent: slabMesh,
       context: placementContext,
-      laneOffset: placementContext.laneOffsets[0] ?? 0,
-      debugConfig: primaryPlacementConfig,
-      placementTuning: primaryPlacementTuning,
+      useSecondary: useDualCharacters,
+      primaryDebugConfig: primaryPlacementConfig,
+      secondaryDebugConfig: secondaryPlacementConfig,
+      primaryPlacementTuning,
+      secondaryPlacementTuning: this.getRemyPlacementConfigForCharacter(this.activeRemySecondaryCharacterId),
     });
-
-    if (useDualCharacters && this.remySecondaryView && placementContext.laneOffsets.length > 1) {
-      attachCharacterViewToPlacement({
-        view: this.remySecondaryView,
-        parent: slabMesh,
-        context: placementContext,
-        laneOffset: placementContext.laneOffsets[1]!,
-        debugConfig: secondaryPlacementConfig,
-        placementTuning: this.getRemyPlacementConfigForCharacter(this.activeRemySecondaryCharacterId),
-      });
-    } else {
-      this.remySecondaryView?.detach();
-    }
 
     this.refreshSpatialDebugSurface();
   }
@@ -2810,12 +2781,12 @@ export class Game {
       }
 
       return createCharacterSpatialAnchorContext(
-        buildCharacterTopFallbackPlacementContext({
+        resolveCharacterTopFallbackPlacement({
           slabLevel: topSlab.level,
           slabPosition: { ...topSlab.position },
           slabHeight: topSlab.dimensions.height,
           placementTuning,
-        }),
+        }).context,
       );
     }
 
@@ -2828,7 +2799,7 @@ export class Game {
       return null;
     }
 
-    const placementContext = buildCharacterLedgePlacementContext({
+    const { context: placementContext } = resolveCharacterLedgePlacementFromMetadata({
       slabLevel: anchor.slab.level,
       slabPosition: { ...anchor.slab.position },
       slabHeight: anchor.slab.dimensions.height,
@@ -2838,21 +2809,12 @@ export class Game {
         z: anchor.ledgeMesh.position.z,
       },
       ledgeRotationY: anchor.ledgeMesh.rotation.y,
-      ledgeHeight:
-        typeof anchor.ledgeMesh.userData.ledgeHeight === "number"
-          ? anchor.ledgeMesh.userData.ledgeHeight
-          : Math.max(0.1, anchor.slab.dimensions.height * 0.1),
-      ledgeDepth:
-        typeof anchor.ledgeMesh.userData.ledgeDepth === "number"
-          ? anchor.ledgeMesh.userData.ledgeDepth
-          : Math.max(0.24, anchor.slab.dimensions.height * 0.18),
-      faceId: readCharacterFaceId(anchor.ledgeMesh.userData.faceId),
-      usableWidth: typeof anchor.ledgeMesh.userData.usableWidth === "number" ? anchor.ledgeMesh.userData.usableWidth : 0,
-      useDualCharacters: shouldSpawnDualRemyCharacters(anchor.ledgeMesh.userData.widthRatio ?? 0),
+      ledgeMetadata: anchor.ledgeMesh.userData,
       edgePadding: REMY_DUAL_SPAWN_EDGE_PADDING,
       spreadRatio: REMY_DUAL_SPAWN_SPREAD_RATIO,
       minSpread: REMY_DUAL_SPAWN_MIN_SPREAD,
       placementTuning,
+      shouldUseDualCharacters: shouldSpawnDualRemyCharacters,
     });
 
     return createCharacterSpatialAnchorContext(placementContext, role === "primary" ? 0 : 1);
@@ -2879,22 +2841,24 @@ export class Game {
     }
 
     const fallbackPlacementTuning = this.getRemyPlacementConfigForCharacter(this.activeRemyCharacterId);
-    const fallbackContext = buildCharacterTopFallbackPlacementContext({
+    const { context: fallbackContext } = resolveCharacterTopFallbackPlacement({
       slabLevel: topSlab.level,
       slabPosition: { ...topSlab.position },
       slabHeight: topSlab.dimensions.height,
       placementTuning: fallbackPlacementTuning,
     });
 
-    attachCharacterViewToPlacement({
-      view: this.remyView,
+    attachCharacterViewsToResolvedPlacement({
+      primaryView: this.remyView,
+      secondaryView: this.remySecondaryView,
       parent: topSlabMesh,
       context: fallbackContext,
-      laneOffset: 0,
-      debugConfig: this.remyDebugConfig,
-      placementTuning: fallbackPlacementTuning,
+      useSecondary: false,
+      primaryDebugConfig: this.remyDebugConfig,
+      secondaryDebugConfig: this.remyDebugConfig,
+      primaryPlacementTuning: fallbackPlacementTuning,
+      secondaryPlacementTuning: fallbackPlacementTuning,
     });
-    this.remySecondaryView?.detach();
     this.refreshSpatialDebugSurface();
   }
 
