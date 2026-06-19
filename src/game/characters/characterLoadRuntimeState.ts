@@ -26,6 +26,44 @@ export interface LoadedCharacterRuntimeState {
   secondaryMixer: CharacterPlaybackMixers["secondaryMixer"];
 }
 
+export interface ResetCharacterRuntimeStateOptions {
+  currentLoadGeneration: number;
+}
+
+export interface ResetCharacterRuntimeState {
+  loadGeneration: number;
+  isLoading: false;
+  refreshPending: false;
+  appearanceRefreshPending: false;
+  primaryView: null;
+  secondaryView: null;
+  activeCharacterId: null;
+  activeSecondaryCharacterId: null;
+  primaryMixer: null;
+  secondaryMixer: null;
+  anchor: null;
+  suppressedByTentacles: false;
+}
+
+export function createResetCharacterRuntimeState(
+  options: ResetCharacterRuntimeStateOptions,
+): ResetCharacterRuntimeState {
+  return {
+    loadGeneration: options.currentLoadGeneration + 1,
+    isLoading: false,
+    refreshPending: false,
+    appearanceRefreshPending: false,
+    primaryView: null,
+    secondaryView: null,
+    activeCharacterId: null,
+    activeSecondaryCharacterId: null,
+    primaryMixer: null,
+    secondaryMixer: null,
+    anchor: null,
+    suppressedByTentacles: false,
+  };
+}
+
 export function prepareLoadedCharacterRuntimeState(
   options: PrepareLoadedCharacterRuntimeStateOptions,
 ): LoadedCharacterRuntimeState {

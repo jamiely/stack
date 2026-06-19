@@ -87,7 +87,10 @@ import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } fro
 import {
   loadCharacterCoordinatorResult,
 } from "./characters/characterLoadCoordinator";
-import { prepareLoadedCharacterRuntimeState } from "./characters/characterLoadRuntimeState";
+import {
+  createResetCharacterRuntimeState,
+  prepareLoadedCharacterRuntimeState,
+} from "./characters/characterLoadRuntimeState";
 import { buildNextRemyCharacterSelection } from "./characters/characterSelection";
 import {
   applyRemyDebugConfigPatch,
@@ -1299,16 +1302,28 @@ export class Game {
     this.renderHud();
   }
 
+  private resetRemyRuntimeHandles(): void {
+    const resetState = createResetCharacterRuntimeState({
+      currentLoadGeneration: this.remyLoadGeneration,
+    });
+
+    this.remyLoadGeneration = resetState.loadGeneration;
+    this.remyIsLoading = resetState.isLoading;
+    this.remyRefreshPending = resetState.refreshPending;
+    this.remyAppearanceRefreshPending = resetState.appearanceRefreshPending;
+    this.remyView = resetState.primaryView;
+    this.remySecondaryView = resetState.secondaryView;
+    this.activeRemyCharacterId = resetState.activeCharacterId;
+    this.activeRemySecondaryCharacterId = resetState.activeSecondaryCharacterId;
+    this.remyMixer = resetState.primaryMixer;
+    this.remySecondaryMixer = resetState.secondaryMixer;
+    this.remyAnchor = resetState.anchor;
+    this.remySuppressedByTentacles = resetState.suppressedByTentacles;
+  }
+
   private resetWorld(): void {
-    this.remyLoadGeneration += 1;
-    this.remyIsLoading = false;
-    this.remyRefreshPending = false;
-    this.remyAppearanceRefreshPending = false;
+    this.resetRemyRuntimeHandles();
     this.characterAnimationManager.disposeAll();
-    this.remyView = null;
-    this.remyMixer = null;
-    this.remySecondaryView = null;
-    this.remySecondaryMixer = null;
     this.lastFrameTime = 0;
     this.simulationElapsedSeconds = 0;
     this.score = 0;
@@ -1366,11 +1381,6 @@ export class Game {
       config: this.buildFireworksSimulationConfig(),
     });
     this.tentacleBurstKeys = [];
-    this.activeRemyCharacterId = null;
-    this.activeRemySecondaryCharacterId = null;
-    this.remyAnchor = null;
-    this.remySuppressedByTentacles = false;
-    this.remyAppearanceRefreshPending = false;
     this.landedSlabs = createInitialStack(this.debugConfig);
     this.startingStackLevels = this.landedSlabs.length;
 
@@ -2514,19 +2524,8 @@ export class Game {
   }
 
   private refreshRemyCharacterSelection(): void {
-    this.remyLoadGeneration += 1;
-    this.remyIsLoading = false;
-    this.remyRefreshPending = false;
-    this.remyAppearanceRefreshPending = false;
-    this.activeRemyCharacterId = null;
-    this.activeRemySecondaryCharacterId = null;
-    this.remyAnchor = null;
-    this.remySuppressedByTentacles = false;
+    this.resetRemyRuntimeHandles();
     this.characterAnimationManager.release();
-    this.remyView = null;
-    this.remyMixer = null;
-    this.remySecondaryView = null;
-    this.remySecondaryMixer = null;
     this.characterAnimationManager.spawnLedgeCharacter();
   }
 
