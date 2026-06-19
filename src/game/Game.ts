@@ -90,6 +90,7 @@ import {
 import {
   createResetCharacterRuntimeState,
   prepareLoadedCharacterRuntimeState,
+  type LoadedCharacterRuntimeState,
 } from "./characters/characterLoadRuntimeState";
 import { buildNextRemyCharacterSelection } from "./characters/characterSelection";
 import {
@@ -1319,6 +1320,16 @@ export class Game {
     this.remySecondaryMixer = resetState.secondaryMixer;
     this.remyAnchor = resetState.anchor;
     this.remySuppressedByTentacles = resetState.suppressedByTentacles;
+  }
+
+  private applyLoadedRemyRuntimeState(runtimeState: LoadedCharacterRuntimeState): void {
+    this.remyView = runtimeState.primaryView;
+    this.remySecondaryView = runtimeState.secondaryView;
+    this.activeRemyCharacterId = runtimeState.activeCharacterId;
+    this.activeRemySecondaryCharacterId = runtimeState.activeSecondaryCharacterId;
+    this.remyDebugConfig = runtimeState.debugConfig;
+    this.remyMixer = runtimeState.primaryMixer;
+    this.remySecondaryMixer = runtimeState.secondaryMixer;
   }
 
   private resetWorld(): void {
@@ -2583,13 +2594,7 @@ export class Game {
           testMode: this.testMode.enabled,
         });
 
-        this.remyView = runtimeState.primaryView;
-        this.remySecondaryView = runtimeState.secondaryView;
-        this.activeRemyCharacterId = runtimeState.activeCharacterId;
-        this.activeRemySecondaryCharacterId = runtimeState.activeSecondaryCharacterId;
-        this.remyDebugConfig = runtimeState.debugConfig;
-        this.remyMixer = runtimeState.primaryMixer;
-        this.remySecondaryMixer = runtimeState.secondaryMixer;
+        this.applyLoadedRemyRuntimeState(runtimeState);
         this.syncRemyDebugControlSurface();
         this.remyIsLoading = false;
 
