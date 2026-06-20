@@ -23,7 +23,7 @@ export const REMY_TIMMY_DEBUG_DEFAULTS: RemyDebugConfig = {
   pitchDegrees: 180,
   rollDegrees: 180,
   translateX: 0,
-  translateY: 0.85,
+  translateY: 0,
   translateZ: 0,
 };
 
@@ -32,7 +32,7 @@ export const REMY_AMY_DEBUG_DEFAULTS: RemyDebugConfig = {
   pitchDegrees: 180,
   rollDegrees: 180,
   translateX: 0,
-  translateY: 0.85,
+  translateY: 0,
   translateZ: 0,
 };
 
@@ -41,7 +41,7 @@ export const REMY_AJ_DEBUG_DEFAULTS: RemyDebugConfig = {
   pitchDegrees: 180,
   rollDegrees: 180,
   translateX: 0,
-  translateY: 0.85,
+  translateY: 0,
   translateZ: 0,
 };
 

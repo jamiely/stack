@@ -39,6 +39,12 @@ describe("remy model configs", () => {
     expect(REMY_TEST_MODE_DEBUG_DEFAULTS).toEqual(REMY_LEGACY_DEBUG_DEFAULTS);
   });
 
+  it("keeps upright character feet anchored to the ledge instead of inheriting legacy vertical lift", () => {
+    expect(REMY_CHARACTER_MODEL_CONFIGS.timmy.debugDefaults.translateY).toBe(0);
+    expect(REMY_CHARACTER_MODEL_CONFIGS.amy.debugDefaults.translateY).toBe(0);
+    expect(REMY_CHARACTER_MODEL_CONFIGS.aj.debugDefaults.translateY).toBe(0);
+  });
+
   it("defines finite animation assets and debug slider metadata", () => {
     expect(REMY_ANIMATION_ASSETS.length).toBeGreaterThan(0);
     REMY_ANIMATION_ASSETS.forEach((asset) => {
