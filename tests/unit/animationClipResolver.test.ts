@@ -57,30 +57,45 @@ describe("animationClipResolver", () => {
     expect(isAnimationClipCompatibleWithModel(new Group(), compatibleClip)).toBe(false);
   });
 
-  it("strips scale tracks by cloning only the remaining animation tracks", () => {
+  it("strips scale tracks and non-root bone position tracks by cloning only playback-safe tracks", () => {
     const clip = buildClip("scaled", [
-      new VectorKeyframeTrack("Hip.position", [0, 1], [0, 0, 0, 1, 1, 1]),
-      new VectorKeyframeTrack("Hip.scale", [0, 1], [1, 1, 1, 2, 2, 2]),
+      new VectorKeyframeTrack("mixamorigHips.position", [0, 1], [0, 0, 0, 1, 1, 1]),
+      new VectorKeyframeTrack("mixamorigSpine.position", [0, 1], [0, 0, 0, 0, 0.5, 0]),
+      new QuaternionKeyframeTrack("mixamorigSpine.quaternion", [0, 1], [0, 0, 0, 1, 0, 0, 0, 1]),
+      new VectorKeyframeTrack("mixamorigSpine.scale", [0, 1], [1, 1, 1, 2, 2, 2]),
     ]);
 
     const sanitizedClip = stripScaleTracksFromClip(clip);
 
     expect(sanitizedClip).not.toBe(clip);
-    expect(sanitizedClip.tracks.map((track) => track.name)).toEqual(["Hip.position"]);
-    expect(clip.tracks.map((track) => track.name)).toEqual(["Hip.position", "Hip.scale"]);
+    expect(sanitizedClip.tracks.map((track) => track.name)).toEqual([
+      "mixamorigHips.position",
+      "mixamorigSpine.quaternion",
+    ]);
+    expect(clip.tracks.map((track) => track.name)).toEqual([
+      "mixamorigHips.position",
+      "mixamorigSpine.position",
+      "mixamorigSpine.quaternion",
+      "mixamorigSpine.scale",
+    ]);
   });
 
   it("uses a compatible source clip directly and keeps playback-safe tracks only", () => {
-    const model = buildModel("Hip");
+    const model = buildModel("mixamorigHips", "mixamorigSpine");
     const sourceClip = buildClip("source", [
-      new VectorKeyframeTrack("Hip.position", [0, 1], [0, 0, 0, 1, 1, 1]),
-      new VectorKeyframeTrack("Hip.scale", [0, 1], [1, 1, 1, 2, 2, 2]),
+      new VectorKeyframeTrack("mixamorigHips.position", [0, 1], [0, 0, 0, 1, 1, 1]),
+      new VectorKeyframeTrack("mixamorigSpine.position", [0, 1], [0, 0, 0, 0, 0.5, 0]),
+      new QuaternionKeyframeTrack("mixamorigSpine.quaternion", [0, 1], [0, 0, 0, 1, 0, 0, 0, 1]),
+      new VectorKeyframeTrack("mixamorigSpine.scale", [0, 1], [1, 1, 1, 2, 2, 2]),
     ]);
 
     const resolvedClip = resolveAnimationClipForTarget(model, model, sourceClip);
 
     expect(resolvedClip).not.toBeNull();
-    expect(resolvedClip?.tracks.map((track) => track.name)).toEqual(["Hip.position"]);
+    expect(resolvedClip?.tracks.map((track) => track.name)).toEqual([
+      "mixamorigHips.position",
+      "mixamorigSpine.quaternion",
+    ]);
     expect(vi.mocked(retargetClip)).not.toHaveBeenCalled();
   });
 
