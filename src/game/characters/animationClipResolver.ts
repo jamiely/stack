@@ -3,6 +3,7 @@ import { retargetClip } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 const TRACK_TARGET_PATTERN = /^(.*)\.(position|quaternion|scale|morphTargetInfluences)(?:\[\d+\])?$/;
 const SCALE_TRACK_PATTERN = /\.scale(?:\[\d+\])?$/;
+const POSITION_TRACK_PATTERN = /\.position(?:\[\d+\])?$/;
 const EXPLICIT_PREFERRED_CLIP_NAME = "Armature.001|mixamo.com|Layer0.001";
 
 export interface AnimationClipTargetBinding {
@@ -47,14 +48,38 @@ export function isAnimationClipCompatibleWithModel(targetModel: Object3D, clip: 
   return matchedTracks > 0;
 }
 
+function isRootMotionPositionTrack(trackName: string): boolean {
+  if (!POSITION_TRACK_PATTERN.test(trackName)) {
+    return false;
+  }
+
+  const targetName = readTrackTargetName(trackName);
+  if (!targetName) {
+    return false;
+  }
+
+  const normalizedTargetName = targetName.toLowerCase();
+  return normalizedTargetName.endsWith("hips") || normalizedTargetName.endsWith("hip");
+}
+
 export function stripScaleTracksFromClip(clip: AnimationClip): AnimationClip {
-  const nonScaleTracks = clip.tracks.filter((track) => !SCALE_TRACK_PATTERN.test(track.name));
-  if (nonScaleTracks.length === clip.tracks.length || nonScaleTracks.length === 0) {
+  const safeTracks = clip.tracks.filter((track) => {
+    if (SCALE_TRACK_PATTERN.test(track.name)) {
+      return false;
+    }
+
+    if (POSITION_TRACK_PATTERN.test(track.name)) {
+      return isRootMotionPositionTrack(track.name);
+    }
+
+    return true;
+  });
+  if (safeTracks.length === clip.tracks.length || safeTracks.length === 0) {
     return clip;
   }
 
   const sanitizedClip = clip.clone();
-  sanitizedClip.tracks = nonScaleTracks.map((track) => track.clone());
+  sanitizedClip.tracks = safeTracks.map((track) => track.clone());
   sanitizedClip.resetDuration();
   return sanitizedClip;
 }
