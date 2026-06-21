@@ -127,6 +127,14 @@ export function createCharacterSpatialSnapshot(
     z: center.z,
   }, precision);
 
+  const anchorLedgeWorldPosition = input.anchor?.ledgePosition
+    ? {
+        x: input.anchor.ledgePosition.x + (input.anchor.slabPosition?.x ?? 0),
+        y: input.anchor.ledgePosition.y + (input.anchor.slabPosition?.y ?? 0),
+        z: input.anchor.ledgePosition.z + (input.anchor.slabPosition?.z ?? 0),
+      }
+    : null;
+
   const anchor = input.anchor
     ? {
         level: input.anchor.level,
@@ -140,12 +148,12 @@ export function createCharacterSpatialSnapshot(
         laneOffset: input.anchor.laneOffset === null ? null : roundScalar(input.anchor.laneOffset, precision),
         targetHeight: input.anchor.targetHeight === null ? null : roundScalar(input.anchor.targetHeight, precision),
         relationToLedge:
-          input.anchor.ledgePosition === null
+          anchorLedgeWorldPosition === null
             ? null
             : {
-                x: roundScalar(bottomContactPoint.x - input.anchor.ledgePosition.x, precision),
-                y: roundScalar(bottomContactPoint.y - input.anchor.ledgePosition.y, precision),
-                z: roundScalar(bottomContactPoint.z - input.anchor.ledgePosition.z, precision),
+                x: roundScalar(bottomContactPoint.x - anchorLedgeWorldPosition.x, precision),
+                y: roundScalar(bottomContactPoint.y - anchorLedgeWorldPosition.y, precision),
+                z: roundScalar(bottomContactPoint.z - anchorLedgeWorldPosition.z, precision),
               },
       }
     : null;

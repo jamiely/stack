@@ -14,7 +14,7 @@ export const REMY_LEGACY_DEBUG_DEFAULTS: RemyDebugConfig = {
   pitchDegrees: -7,
   rollDegrees: 89,
   translateX: 0,
-  translateY: 0.85,
+  translateY: 0,
   translateZ: 0,
 };
 
@@ -111,8 +111,8 @@ export const REMY_DEBUG_RANGES: Record<RemyDebugKey, { min: number; max: number;
 export const REMY_SIDE_POSE_PRESETS: Record<CharacterFaceId, RemyDebugConfig> = {
   posX: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
   negX: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
-  posZ: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0.4 },
-  negZ: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0.4 },
+  posZ: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
+  negZ: { pitchDegrees: 0, yawDegrees: 0, rollDegrees: 0, translateX: 0, translateY: 0, translateZ: 0 },
 };
 
 export const REMY_FALLBACK_POSE_PRESET: RemyDebugConfig = {

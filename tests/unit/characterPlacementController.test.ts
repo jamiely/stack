@@ -59,7 +59,7 @@ describe("characterPlacementController", () => {
         rollDegrees: 0,
         translateX: 0,
         translateY: 0,
-        translateZ: 0.4,
+        translateZ: 0,
       },
     });
     expect(context.laneOffsets).toEqual([-0.44, 0.44]);
@@ -132,7 +132,7 @@ describe("characterPlacementController", () => {
         rollDegrees: 0,
         translateX: 0,
         translateY: 0,
-        translateZ: 0.4,
+        translateZ: 0,
       },
     });
     expect(result.context.laneOffsets).toEqual([-0.264, 0.264]);
@@ -341,7 +341,7 @@ describe("characterPlacementController", () => {
     expect(sceneNodes.characterRoot.parent).toBe(parent);
     expect(sceneNodes.placementNode.position.x).toBeCloseTo(10.3, 6);
     expect(sceneNodes.placementNode.position.y).toBeCloseTo(5.23, 6);
-    expect(sceneNodes.placementNode.position.z).toBeCloseTo(-2.72, 6);
+    expect(sceneNodes.placementNode.position.z).toBeCloseTo(-3.12, 6);
     expect(sceneNodes.facingNode.rotation.y).toBeCloseTo(0.2, 6);
     expect(sceneNodes.scaleNode.scale.x).toBeCloseTo(0.42, 6);
     expect(sceneNodes.poseRotateX.rotation.x).toBeCloseTo((-2 * Math.PI) / 180, 6);

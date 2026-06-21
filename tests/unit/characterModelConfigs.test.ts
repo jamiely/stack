@@ -39,7 +39,10 @@ describe("remy model configs", () => {
     expect(REMY_TEST_MODE_DEBUG_DEFAULTS).toEqual(REMY_LEGACY_DEBUG_DEFAULTS);
   });
 
-  it("keeps upright character feet anchored to the ledge instead of inheriting legacy vertical lift", () => {
+  it("keeps character feet anchored to the ledge instead of applying vertical lift", () => {
+    expect(REMY_LEGACY_DEBUG_DEFAULTS.translateY).toBe(0);
+    expect(REMY_TEST_MODE_DEBUG_DEFAULTS.translateY).toBe(0);
+    expect(REMY_CHARACTER_MODEL_CONFIGS.remy.debugDefaults.translateY).toBe(0);
     expect(REMY_CHARACTER_MODEL_CONFIGS.timmy.debugDefaults.translateY).toBe(0);
     expect(REMY_CHARACTER_MODEL_CONFIGS.amy.debugDefaults.translateY).toBe(0);
     expect(REMY_CHARACTER_MODEL_CONFIGS.aj.debugDefaults.translateY).toBe(0);

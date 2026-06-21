@@ -14,7 +14,7 @@ describe("character placement runtime helpers", () => {
   });
 
   it("resolves side-pose presets with a fallback", () => {
-    expect(resolveCharacterSidePose("posZ")).toMatchObject({ translateZ: 0.4 });
+    expect(resolveCharacterSidePose("posZ")).toMatchObject({ translateZ: 0 });
     expect(resolveCharacterSidePose(null)).toMatchObject({
       yawDegrees: 0,
       pitchDegrees: 0,
