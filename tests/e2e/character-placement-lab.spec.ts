@@ -206,43 +206,54 @@ test("single loaded character stays centered when a wide ledge requests dual lan
     });
   });
 
-  const snapshot = await page.waitForFunction(() => {
-    const api = (window as Window & {
-      __towerStackerTestApi?: {
-        placeAtOffset: (offset: number) => unknown;
-        stepSimulation: (steps?: number) => void;
-        getState: () => {
-          spatialDebug: {
-            primaryCharacter: {
-              anchor: {
-                ledgeDepth: number | null;
-                laneOffset: number | null;
-                ledgeRotationYDegrees: number | null;
-                relationToLedge: { x: number; y: number; z: number } | null;
+  let spatialDebug: {
+    primaryCharacter: {
+      anchor: {
+        ledgeDepth: number | null;
+        laneOffset: number | null;
+        ledgeRotationYDegrees: number | null;
+        relationToLedge: { x: number; y: number; z: number } | null;
+      } | null;
+    } | null;
+    secondaryCharacter: unknown;
+  } | null = null;
+
+  for (let index = 0; index < 16; index += 1) {
+    spatialDebug = await page.evaluate(() => {
+      const api = (window as Window & {
+        __towerStackerTestApi?: {
+          placeAtOffset: (offset: number) => unknown;
+          stepSimulation: (steps?: number) => void;
+          getState: () => {
+            spatialDebug: {
+              primaryCharacter: {
+                anchor: {
+                  ledgeDepth: number | null;
+                  laneOffset: number | null;
+                  ledgeRotationYDegrees: number | null;
+                  relationToLedge: { x: number; y: number; z: number } | null;
+                } | null;
               } | null;
-            } | null;
-            secondaryCharacter: unknown;
+              secondaryCharacter: unknown;
+            };
           };
         };
-      };
-    }).__towerStackerTestApi;
-    if (!api) {
-      return null;
-    }
+      }).__towerStackerTestApi;
+      if (!api) {
+        return null;
+      }
 
-    for (let index = 0; index < 16; index += 1) {
       api.placeAtOffset(0);
       api.stepSimulation(8);
-      const state = api.getState();
-      if (state.spatialDebug.primaryCharacter?.anchor?.relationToLedge) {
-        return state.spatialDebug;
-      }
+      return api.getState().spatialDebug;
+    });
+
+    if (spatialDebug?.primaryCharacter?.anchor?.relationToLedge) {
+      break;
     }
 
-    return null;
-  });
-
-  const spatialDebug = await snapshot.jsonValue();
+    await page.waitForTimeout(50);
+  }
   const primary = spatialDebug?.primaryCharacter;
   expect(primary).toBeTruthy();
   expect(spatialDebug?.secondaryCharacter).toBeNull();
