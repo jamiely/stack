@@ -296,16 +296,17 @@ export function attachCharacterViewToPlacement(
 export function attachCharacterViewsToResolvedPlacement(
   options: AttachCharacterViewsToResolvedPlacementOptions,
 ): readonly (RemyPlacementTransformResult | null)[] {
+  const shouldUseSecondaryLane = options.useSecondary && Boolean(options.secondaryView) && options.context.laneOffsets.length >= 2;
   const primaryPlacement = attachCharacterViewToPlacement({
     view: options.primaryView,
     parent: options.parent,
     context: options.context,
-    laneOffset: options.context.laneOffsets[0] ?? 0,
+    laneOffset: shouldUseSecondaryLane ? (options.context.laneOffsets[0] ?? 0) : 0,
     debugConfig: options.primaryDebugConfig,
     placementTuning: options.primaryPlacementTuning,
   });
 
-  if (!options.useSecondary || !options.secondaryView || options.context.laneOffsets.length < 2) {
+  if (!shouldUseSecondaryLane || !options.secondaryView) {
     options.secondaryView?.detach();
     return [primaryPlacement, null];
   }
@@ -325,6 +326,7 @@ export function attachCharacterViewsToResolvedPlacement(
 export function createCharacterSpatialAnchorContext(
   context: CharacterPlacementContext | null,
   laneIndex = 0,
+  options: { useLaneOffset?: boolean } = {},
 ): CharacterSpatialAnchorContext | null {
   if (!context) {
     return null;
@@ -338,7 +340,7 @@ export function createCharacterSpatialAnchorContext(
     ledgeRotationY: context.ledgeRotationY,
     ledgeHeight: context.ledgeHeight,
     ledgeDepth: context.ledgeDepth,
-    laneOffset: context.laneOffsets[laneIndex] ?? 0,
+    laneOffset: options.useLaneOffset === false ? 0 : (context.laneOffsets[laneIndex] ?? 0),
     targetHeight: context.targetHeight,
   };
 }

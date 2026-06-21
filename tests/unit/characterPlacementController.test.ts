@@ -414,6 +414,64 @@ describe("characterPlacementController", () => {
     expect(secondaryNodes.placementNode.position.x).toBeCloseTo(10.44, 6);
   });
 
+  it("keeps the primary centered while a requested secondary lane has no loaded secondary view", () => {
+    const primaryNodes = createCharacterSceneNodes({
+      model: new Group(),
+      centerOffsetFromFeet: 0.5,
+      nameSuffix: "primary",
+    });
+    const primaryView = createCharacterView({ sceneNodes: primaryNodes, baseHeight: 2, baseDepth: 1 });
+    const parent = new Group();
+    const context = buildCharacterLedgePlacementContext({
+      slabLevel: 2,
+      slabPosition: { x: 0, y: 2, z: 0 },
+      slabHeight: 2,
+      ledgePosition: { x: 10, y: 5, z: -3 },
+      ledgeRotationY: 0,
+      ledgeHeight: 0.2,
+      ledgeDepth: 0.5,
+      faceId: "posZ",
+      usableWidth: 2,
+      useDualCharacters: true,
+      edgePadding: 0.04,
+      spreadRatio: 0.22,
+      minSpread: 0.08,
+      placementTuning: PLACEMENT_TUNING,
+    });
+
+    const placements = attachCharacterViewsToResolvedPlacement({
+      primaryView,
+      secondaryView: null,
+      parent,
+      context,
+      useSecondary: true,
+      primaryDebugConfig: {
+        yawDegrees: 0,
+        pitchDegrees: 0,
+        rollDegrees: 0,
+        translateX: 0,
+        translateY: 0,
+        translateZ: 0,
+      },
+      secondaryDebugConfig: {
+        yawDegrees: 0,
+        pitchDegrees: 0,
+        rollDegrees: 0,
+        translateX: 0,
+        translateY: 0,
+        translateZ: 0,
+      },
+      primaryPlacementTuning: PLACEMENT_TUNING,
+      secondaryPlacementTuning: PLACEMENT_TUNING,
+    });
+
+    expect(placements[0]).not.toBeNull();
+    expect(placements[1]).toBeNull();
+    expect(primaryNodes.characterRoot.parent).toBe(parent);
+    expect(primaryNodes.placementNode.position.x).toBeCloseTo(10, 6);
+    expect(primaryNodes.placementNode.position.z).toBeCloseTo(-2.92, 6);
+  });
+
   it("detaches secondary view when resolved placement has no secondary lane", () => {
     const primaryNodes = createCharacterSceneNodes({
       model: new Group(),
@@ -498,5 +556,26 @@ describe("characterPlacementController", () => {
       laneOffset: 0.44,
       targetHeight: 0.84,
     });
+  });
+
+  it("reports a centered debug anchor when no secondary lane is active", () => {
+    const context = buildCharacterLedgePlacementContext({
+      slabLevel: 7,
+      slabPosition: { x: 2, y: 9, z: 4 },
+      slabHeight: 2,
+      ledgePosition: { x: 1, y: 2, z: 3 },
+      ledgeRotationY: 0.4,
+      ledgeHeight: 0.25,
+      ledgeDepth: 0.6,
+      faceId: "negX",
+      usableWidth: 2,
+      useDualCharacters: true,
+      edgePadding: 0.04,
+      spreadRatio: 0.22,
+      minSpread: 0.08,
+      placementTuning: PLACEMENT_TUNING,
+    });
+
+    expect(createCharacterSpatialAnchorContext(context, 0, { useLaneOffset: false })?.laneOffset).toBe(0);
   });
 });

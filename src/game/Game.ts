@@ -2817,7 +2817,10 @@ export class Game {
       shouldUseDualCharacters: shouldSpawnDualRemyCharacters,
     });
 
-    return createCharacterSpatialAnchorContext(placementContext, role === "primary" ? 0 : 1);
+    const secondaryLaneActive = Boolean(this.activeRemySecondaryCharacterId && this.remySecondaryView);
+    return createCharacterSpatialAnchorContext(placementContext, role === "primary" ? 0 : 1, {
+      useLaneOffset: role === "secondary" || secondaryLaneActive,
+    });
   }
 
 

@@ -179,3 +179,79 @@ test("character placement lab exposes deterministic transform snapshots and mode
   expect(afterStep!.uniformScale).toBe(after!.uniformScale);
   expect(afterStep!.debugConfig).toEqual(after!.debugConfig);
 });
+
+test("single loaded character stays centered when a wide ledge requests dual lanes", async ({ page }) => {
+  await page.goto("/?debug&test&paused=1&seed=42");
+
+  await page.evaluate(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        startGame: () => void;
+        setPaused: (paused: boolean) => void;
+        applyDebugConfig: (config: { distractionEnabled?: boolean }) => void;
+        applyModelLabState: (state: { showSpatialHelpers?: boolean; forceTopFallback?: boolean }) => void;
+      };
+    }).__towerStackerTestApi;
+
+    if (!api) {
+      throw new Error("Test API unavailable");
+    }
+
+    api.startGame();
+    api.setPaused(true);
+    api.applyDebugConfig({ distractionEnabled: false });
+    api.applyModelLabState({
+      showSpatialHelpers: true,
+      forceTopFallback: false,
+    });
+  });
+
+  const snapshot = await page.waitForFunction(() => {
+    const api = (window as Window & {
+      __towerStackerTestApi?: {
+        placeAtOffset: (offset: number) => unknown;
+        stepSimulation: (steps?: number) => void;
+        getState: () => {
+          spatialDebug: {
+            primaryCharacter: {
+              anchor: {
+                ledgeDepth: number | null;
+                laneOffset: number | null;
+                ledgeRotationYDegrees: number | null;
+                relationToLedge: { x: number; y: number; z: number } | null;
+              } | null;
+            } | null;
+            secondaryCharacter: unknown;
+          };
+        };
+      };
+    }).__towerStackerTestApi;
+    if (!api) {
+      return null;
+    }
+
+    for (let index = 0; index < 16; index += 1) {
+      api.placeAtOffset(0);
+      api.stepSimulation(8);
+      const state = api.getState();
+      if (state.spatialDebug.primaryCharacter?.anchor?.relationToLedge) {
+        return state.spatialDebug;
+      }
+    }
+
+    return null;
+  });
+
+  const spatialDebug = await snapshot.jsonValue();
+  const primary = spatialDebug?.primaryCharacter;
+  expect(primary).toBeTruthy();
+  expect(spatialDebug?.secondaryCharacter).toBeNull();
+  expect(primary?.anchor?.laneOffset).toBe(0);
+
+  const relation = primary?.anchor?.relationToLedge;
+  const rotationRadians = ((primary?.anchor?.ledgeRotationYDegrees ?? 0) * Math.PI) / 180;
+  const lateralOffset = relation ? relation.x * Math.cos(rotationRadians) - relation.z * Math.sin(rotationRadians) : NaN;
+  const outwardOffset = relation ? relation.x * Math.sin(rotationRadians) + relation.z * Math.cos(rotationRadians) : NaN;
+  expect(lateralOffset).toBeCloseTo(0, 4);
+  expect(Math.abs(outwardOffset)).toBeLessThan((primary?.anchor?.ledgeDepth ?? 0) / 2);
+});
