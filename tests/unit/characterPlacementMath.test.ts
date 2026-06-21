@@ -63,7 +63,7 @@ describe("computeRemyPlacementTransform", () => {
     expect(result.facingRotationY).toBeCloseTo(0.25, 6);
   });
 
-  it("rotates lane and outward offsets around the ledge yaw", () => {
+  it("rotates lane and keeps oversized character centers on the ledge instead of beyond the outer edge", () => {
     const result = computeRemyPlacementTransform({
       ledgePosition: { x: 3, y: 1, z: 7 },
       ledgeRotationY: Math.PI / 2,
@@ -84,8 +84,8 @@ describe("computeRemyPlacementTransform", () => {
     expect(result.uniformScale).toBeCloseTo(1, 6);
     expect(result.scaledDepth).toBeCloseTo(1.2, 6);
     expect(result.overlapIntoWall).toBeCloseTo(0.45, 6);
-    expect(result.outwardOffset).toBeCloseTo(0.502, 6);
-    expect(result.worldPosition.x).toBeCloseTo(3.502, 6);
+    expect(result.outwardOffset).toBeCloseTo(0.052, 6);
+    expect(result.worldPosition.x).toBeCloseTo(3.052, 6);
     expect(result.worldPosition.y).toBeCloseTo(1.28, 6);
     expect(result.worldPosition.z).toBeCloseTo(6.6, 6);
     expect(result.facingRotationY).toBeCloseTo(Math.PI / 2, 6);

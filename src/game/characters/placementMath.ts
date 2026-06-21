@@ -23,7 +23,7 @@ export function computeRemyPlacementTransform(input: RemyPlacementTransformInput
   const uniformScale = input.targetHeight / Math.max(0.001, input.baseHeight);
   const scaledDepth = input.baseDepth * uniformScale;
   const overlapIntoWall = Math.max(0, (scaledDepth - input.ledgeDepth) / 2);
-  const outwardOffset = input.ledgeDepth * input.ledgeInsetRatio + overlapIntoWall + input.wallClearance;
+  const outwardOffset = input.ledgeDepth * input.ledgeInsetRatio + input.wallClearance;
 
   const localX = input.laneOffset + input.sidePose.translateX + input.debugConfig.translateX;
   const localY = input.sidePose.translateY + input.debugConfig.translateY;
