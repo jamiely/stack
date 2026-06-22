@@ -25,9 +25,9 @@ describe("resolveLedgeDimensions", () => {
     expect(dimensions.widthRatio).toBeCloseTo(0.625, 6);
     expect(dimensions.ledgeWidth).toBeCloseTo(0.75, 6);
     expect(dimensions.ledgeHeight).toBeCloseTo(0.3, 6);
-    expect(dimensions.ledgeDepth).toBeCloseTo(0.52, 6);
+    expect(dimensions.ledgeDepth).toBeCloseTo(0.78, 6);
     expect(dimensions.lipHeight).toBeCloseTo(0.102, 6);
-    expect(dimensions.lipDepth).toBeCloseTo(0.1144, 6);
+    expect(dimensions.lipDepth).toBeCloseTo(0.1716, 6);
   });
 
   it("enforces min/max bounds for tiny slabs and out-of-range noise", () => {
@@ -40,7 +40,7 @@ describe("resolveLedgeDimensions", () => {
 
     const highNoise = resolveLedgeDimensions(0.4, 12, 9);
     expect(highNoise.widthRatio).toBeCloseTo(1, 6);
-    expect(highNoise.ledgeDepth).toBeCloseTo(0.52, 6);
+    expect(highNoise.ledgeDepth).toBeCloseTo(0.78, 6);
   });
 });
 

@@ -250,11 +250,12 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   const lateralOffset = relation ? relation.x * Math.cos(rotationRadians) - relation.z * Math.sin(rotationRadians) : NaN;
   const outwardOffset = relation ? relation.x * Math.sin(rotationRadians) + relation.z * Math.cos(rotationRadians) : NaN;
   const ledgeDepth = primary?.anchor?.ledgeDepth ?? 0;
-  const expectedTopClearance = (primary?.anchor?.ledgeHeight ?? 0) / 2 + 0.03;
+  const expectedTopClearance = 0;
 
   expect(lateralOffset).toBeCloseTo(0, 4);
   expect(outwardOffset).toBeGreaterThan(-ledgeDepth / 2);
   expect(outwardOffset).toBeLessThan(ledgeDepth / 2);
+  expect(outwardOffset).toBeGreaterThan(ledgeDepth * 0.25);
   expect(relation?.y).toBeCloseTo(expectedTopClearance, 4);
   expect(primary?.helpers.bottomContactPoint.y).toBeCloseTo(primary?.bounds.min.y ?? NaN, 4);
 });
