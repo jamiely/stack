@@ -284,5 +284,10 @@ export interface TestApi {
   setPaused(paused: boolean): void;
   setActiveOffset(offset: number): boolean;
   placeAtOffset(offset: number): TrimResult["outcome"] | null;
+  autoPlayUntilCharacter(options?: {
+    maxPlacements?: number;
+    stepsPerPlacement?: number;
+    placementOffset?: number;
+  }): Promise<PublicGameState>;
   getState(): PublicGameState;
 }

@@ -132,7 +132,7 @@ export function getRemyDebugDefaults(
   characterId: RemyCharacterId | null | undefined,
   options: { testMode?: boolean } = {},
 ): RemyDebugConfig {
-  if (options.testMode) {
+  if (options.testMode && !characterId) {
     return { ...REMY_TEST_MODE_DEBUG_DEFAULTS };
   }
 

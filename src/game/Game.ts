@@ -3368,6 +3368,39 @@ export class Game {
         this.stopActiveSlab();
         return this.lastPlacementOutcome;
       },
+      autoPlayUntilCharacter: async (options = {}) => {
+        const maxPlacements = Math.max(1, Math.floor(options.maxPlacements ?? 32));
+        const stepsPerPlacement = Math.max(1, Math.floor(options.stepsPerPlacement ?? 12));
+        const placementOffset = options.placementOffset ?? 0;
+
+        this.applyDebugConfig({ distractionsEnabled: false });
+        this.applyModelLabState({ showSpatialHelpers: true, forceTopFallback: false });
+        this.simulationPaused = false;
+
+        for (let placementIndex = 0; placementIndex < maxPlacements; placementIndex += 1) {
+          const currentSnapshot = this.getCharacterSpatialSnapshot("primary");
+          if (currentSnapshot?.anchor?.relationToLedge) {
+            this.simulationPaused = true;
+            this.renderHud();
+            this.renderer?.render(this.scene, this.camera);
+            return this.getPublicState();
+          }
+
+          this.setActiveOffset(placementOffset);
+          this.stopActiveSlab();
+          for (let stepIndex = 0; stepIndex < stepsPerPlacement; stepIndex += 1) {
+            this.runSimulationStep(this.testMode.fixedStepSeconds);
+          }
+          this.renderer?.render(this.scene, this.camera);
+
+          await new Promise((resolve) => window.setTimeout(resolve, 25));
+        }
+
+        this.simulationPaused = true;
+        this.renderHud();
+        this.renderer?.render(this.scene, this.camera);
+        return this.getPublicState();
+      },
       getState: () => this.getPublicState(),
     };
   }
@@ -4248,11 +4281,14 @@ export class Game {
     );
 
     const slabBaseColor = new Color(this.getSlabColor(slab.level));
-    const ledgeColor = slabBaseColor.clone().offsetHSL(0, -0.12, 0.14);
+    const debugLedgeColor = new Color("#ff3df2");
+    const ledgeColor = this.modelLabState.enabled ? debugLedgeColor : slabBaseColor.clone().offsetHSL(0, -0.12, 0.14);
     const ledgeMaterial = new MeshStandardMaterial({
       color: ledgeColor,
-      emissive: new Color(this.getSlabEmissive(slab.level)).multiplyScalar(0.45),
-      emissiveIntensity: 0.14,
+      emissive: this.modelLabState.enabled
+        ? debugLedgeColor.clone().multiplyScalar(0.45)
+        : new Color(this.getSlabEmissive(slab.level)).multiplyScalar(0.45),
+      emissiveIntensity: this.modelLabState.enabled ? 0.42 : 0.14,
       metalness: 0.04,
       roughness: 0.66,
     });

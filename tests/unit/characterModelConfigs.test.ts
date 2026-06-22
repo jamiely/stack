@@ -34,8 +34,11 @@ describe("remy model configs", () => {
     });
   });
 
-  it("uses the legacy remy defaults when test mode is enabled", () => {
-    expect(getRemyDebugDefaults("timmy", { testMode: true })).toEqual(REMY_TEST_MODE_DEBUG_DEFAULTS);
+  it("uses legacy test defaults only before a character id is known", () => {
+    expect(getRemyDebugDefaults(null, { testMode: true })).toEqual(REMY_TEST_MODE_DEBUG_DEFAULTS);
+    expect(getRemyDebugDefaults("timmy", { testMode: true })).toEqual(REMY_CHARACTER_MODEL_CONFIGS.timmy.debugDefaults);
+    expect(getRemyDebugDefaults("amy", { testMode: true })).toEqual(REMY_CHARACTER_MODEL_CONFIGS.amy.debugDefaults);
+    expect(getRemyDebugDefaults("aj", { testMode: true })).toEqual(REMY_CHARACTER_MODEL_CONFIGS.aj.debugDefaults);
     expect(REMY_TEST_MODE_DEBUG_DEFAULTS).toEqual(REMY_LEGACY_DEBUG_DEFAULTS);
   });
 

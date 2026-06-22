@@ -183,13 +183,41 @@ test("character placement lab exposes deterministic transform snapshots and mode
 test("single loaded character stays centered when a wide ledge requests dual lanes", async ({ page }) => {
   await page.goto("/?debug&test&paused=1&seed=42");
 
-  await page.evaluate(() => {
+  const spatialDebug = await page.evaluate(async () => {
     const api = (window as Window & {
       __towerStackerTestApi?: {
         startGame: () => void;
         setPaused: (paused: boolean) => void;
-        applyDebugConfig: (config: { distractionEnabled?: boolean }) => void;
+        applyDebugConfig: (config: { distractionsEnabled?: boolean }) => void;
         applyModelLabState: (state: { showSpatialHelpers?: boolean; forceTopFallback?: boolean }) => void;
+        autoPlayUntilCharacter: (options?: {
+          maxPlacements?: number;
+          stepsPerPlacement?: number;
+          placementOffset?: number;
+        }) => Promise<{
+          spatialDebug: {
+            primaryCharacter: {
+              characterId: string | null;
+              anchor: {
+                ledgeHeight: number | null;
+                ledgeDepth: number | null;
+                laneOffset: number | null;
+                ledgeRotationYDegrees: number | null;
+                relationToLedge: { x: number; y: number; z: number } | null;
+              } | null;
+              bounds: {
+                min: { x: number; y: number; z: number };
+                max: { x: number; y: number; z: number };
+                center: { x: number; y: number; z: number };
+              };
+              helpers: {
+                bottomContactPoint: { x: number; y: number; z: number };
+              };
+            } | null;
+            secondaryCharacter: unknown;
+          };
+          testMode: { paused: boolean };
+        }>;
       };
     }).__towerStackerTestApi;
 
@@ -199,63 +227,21 @@ test("single loaded character stays centered when a wide ledge requests dual lan
 
     api.startGame();
     api.setPaused(true);
-    api.applyDebugConfig({ distractionEnabled: false });
+    api.applyDebugConfig({ distractionsEnabled: false });
     api.applyModelLabState({
       showSpatialHelpers: true,
       forceTopFallback: false,
     });
+    const state = await api.autoPlayUntilCharacter({ maxPlacements: 24, stepsPerPlacement: 12, placementOffset: 0 });
+    if (!state.testMode.paused) {
+      throw new Error("autoPlayUntilCharacter did not pause after finishing");
+    }
+    return state.spatialDebug;
   });
 
-  let spatialDebug: {
-    primaryCharacter: {
-      anchor: {
-        ledgeDepth: number | null;
-        laneOffset: number | null;
-        ledgeRotationYDegrees: number | null;
-        relationToLedge: { x: number; y: number; z: number } | null;
-      } | null;
-    } | null;
-    secondaryCharacter: unknown;
-  } | null = null;
-
-  for (let index = 0; index < 16; index += 1) {
-    spatialDebug = await page.evaluate(() => {
-      const api = (window as Window & {
-        __towerStackerTestApi?: {
-          placeAtOffset: (offset: number) => unknown;
-          stepSimulation: (steps?: number) => void;
-          getState: () => {
-            spatialDebug: {
-              primaryCharacter: {
-                anchor: {
-                  ledgeDepth: number | null;
-                  laneOffset: number | null;
-                  ledgeRotationYDegrees: number | null;
-                  relationToLedge: { x: number; y: number; z: number } | null;
-                } | null;
-              } | null;
-              secondaryCharacter: unknown;
-            };
-          };
-        };
-      }).__towerStackerTestApi;
-      if (!api) {
-        return null;
-      }
-
-      api.placeAtOffset(0);
-      api.stepSimulation(8);
-      return api.getState().spatialDebug;
-    });
-
-    if (spatialDebug?.primaryCharacter?.anchor?.relationToLedge) {
-      break;
-    }
-
-    await page.waitForTimeout(50);
-  }
   const primary = spatialDebug?.primaryCharacter;
   expect(primary).toBeTruthy();
+  expect(primary?.characterId).not.toBeNull();
   expect(spatialDebug?.secondaryCharacter).toBeNull();
   expect(primary?.anchor?.laneOffset).toBe(0);
 
@@ -263,6 +249,12 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   const rotationRadians = ((primary?.anchor?.ledgeRotationYDegrees ?? 0) * Math.PI) / 180;
   const lateralOffset = relation ? relation.x * Math.cos(rotationRadians) - relation.z * Math.sin(rotationRadians) : NaN;
   const outwardOffset = relation ? relation.x * Math.sin(rotationRadians) + relation.z * Math.cos(rotationRadians) : NaN;
+  const ledgeDepth = primary?.anchor?.ledgeDepth ?? 0;
+  const expectedTopClearance = (primary?.anchor?.ledgeHeight ?? 0) / 2 + 0.03;
+
   expect(lateralOffset).toBeCloseTo(0, 4);
-  expect(Math.abs(outwardOffset)).toBeLessThan((primary?.anchor?.ledgeDepth ?? 0) / 2);
+  expect(outwardOffset).toBeGreaterThan(-ledgeDepth / 2);
+  expect(outwardOffset).toBeLessThan(ledgeDepth / 2);
+  expect(relation?.y).toBeCloseTo(expectedTopClearance, 4);
+  expect(primary?.helpers.bottomContactPoint.y).toBeCloseTo(primary?.bounds.min.y ?? NaN, 4);
 });
