@@ -255,7 +255,7 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(lateralOffset).toBeCloseTo(0, 4);
   expect(outwardOffset).toBeGreaterThan(-ledgeDepth / 2);
   expect(outwardOffset).toBeLessThan(ledgeDepth / 2);
-  expect(outwardOffset).toBeGreaterThan(ledgeDepth * 0.25);
+  expect(outwardOffset).toBeGreaterThan(ledgeDepth * 0.4);
   expect(relation?.y).toBeCloseTo(expectedTopClearance, 4);
   expect(primary?.helpers.bottomContactPoint.y).toBeCloseTo(primary?.bounds.min.y ?? NaN, 4);
 });
