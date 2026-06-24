@@ -36,6 +36,8 @@ export interface SpatialAnchorSnapshot {
   ledgeRotationYDegrees: number | null;
   ledgeHeight: number | null;
   ledgeDepth: number | null;
+  usableWidth: number | null;
+  widthRatio: number | null;
   laneOffset: number | null;
   targetHeight: number | null;
   relationToLedge: {
@@ -43,6 +45,32 @@ export interface SpatialAnchorSnapshot {
     y: number;
     z: number;
   } | null;
+  support: LedgeSupportSnapshot | null;
+}
+
+export interface LedgeSupportSnapshot {
+  ledgeLocalBounds: {
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+  };
+  footprintLocalBounds: {
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+  };
+  margins: {
+    left: number;
+    right: number;
+    back: number;
+    front: number;
+  };
+  footprintCoverageRatio: number;
+  centerOnLedge: boolean;
+  footprintIntersectsLedge: boolean;
+  verticalGap: number;
 }
 
 export interface CharacterSpatialSnapshot {
@@ -90,6 +118,8 @@ export interface CharacterSpatialDebugInput {
     ledgeRotationY: number | null;
     ledgeHeight: number | null;
     ledgeDepth: number | null;
+    usableWidth: number | null;
+    widthRatio: number | null;
     laneOffset: number | null;
     targetHeight: number | null;
   } | null;
@@ -100,6 +130,111 @@ const SIZE = new Vector3();
 const CENTER = new Vector3();
 const PLACEMENT_ORIGIN = new Vector3();
 const MODEL_ORIGIN = new Vector3();
+
+function worldToLedgeLocal(
+  worldPoint: SpatialVector3Snapshot,
+  ledgeWorldPosition: SpatialVector3Snapshot,
+  ledgeRotationY: number,
+): { x: number; z: number } {
+  const dx = worldPoint.x - ledgeWorldPosition.x;
+  const dz = worldPoint.z - ledgeWorldPosition.z;
+  const cosine = Math.cos(ledgeRotationY);
+  const sine = Math.sin(ledgeRotationY);
+
+  return {
+    x: dx * cosine - dz * sine,
+    z: dx * sine + dz * cosine,
+  };
+}
+
+function createLedgeSupportSnapshot(
+  bounds: Box3,
+  bottomContactPoint: SpatialVector3Snapshot,
+  ledgeWorldPosition: SpatialVector3Snapshot | null,
+  ledgeRotationY: number | null,
+  ledgeDepth: number | null,
+  usableWidth: number | null,
+  precision: number,
+): LedgeSupportSnapshot | null {
+  if (
+    ledgeWorldPosition === null ||
+    ledgeRotationY === null ||
+    ledgeDepth === null ||
+    usableWidth === null ||
+    ledgeDepth <= 0 ||
+    usableWidth <= 0
+  ) {
+    return null;
+  }
+
+  const corners = [
+    { x: bounds.min.x, y: bounds.min.y, z: bounds.min.z },
+    { x: bounds.min.x, y: bounds.min.y, z: bounds.max.z },
+    { x: bounds.max.x, y: bounds.min.y, z: bounds.min.z },
+    { x: bounds.max.x, y: bounds.min.y, z: bounds.max.z },
+  ].map((corner) => worldToLedgeLocal(corner, ledgeWorldPosition, ledgeRotationY));
+  const center = worldToLedgeLocal(bottomContactPoint, ledgeWorldPosition, ledgeRotationY);
+
+  const footprintLocalBounds = {
+    minX: Math.min(...corners.map((corner) => corner.x)),
+    maxX: Math.max(...corners.map((corner) => corner.x)),
+    minZ: Math.min(...corners.map((corner) => corner.z)),
+    maxZ: Math.max(...corners.map((corner) => corner.z)),
+  };
+  const ledgeLocalBounds = {
+    minX: -usableWidth / 2,
+    maxX: usableWidth / 2,
+    minZ: -ledgeDepth / 2,
+    maxZ: ledgeDepth / 2,
+  };
+
+  const overlapX = Math.max(
+    0,
+    Math.min(footprintLocalBounds.maxX, ledgeLocalBounds.maxX) -
+      Math.max(footprintLocalBounds.minX, ledgeLocalBounds.minX),
+  );
+  const overlapZ = Math.max(
+    0,
+    Math.min(footprintLocalBounds.maxZ, ledgeLocalBounds.maxZ) -
+      Math.max(footprintLocalBounds.minZ, ledgeLocalBounds.minZ),
+  );
+  const footprintArea = Math.max(
+    0.0001,
+    (footprintLocalBounds.maxX - footprintLocalBounds.minX) *
+      (footprintLocalBounds.maxZ - footprintLocalBounds.minZ),
+  );
+  const footprintCoverageRatio = (overlapX * overlapZ) / footprintArea;
+  const centerOnLedge =
+    center.x >= ledgeLocalBounds.minX &&
+    center.x <= ledgeLocalBounds.maxX &&
+    center.z >= ledgeLocalBounds.minZ &&
+    center.z <= ledgeLocalBounds.maxZ;
+
+  return {
+    ledgeLocalBounds: {
+      minX: roundScalar(ledgeLocalBounds.minX, precision),
+      maxX: roundScalar(ledgeLocalBounds.maxX, precision),
+      minZ: roundScalar(ledgeLocalBounds.minZ, precision),
+      maxZ: roundScalar(ledgeLocalBounds.maxZ, precision),
+    },
+    footprintLocalBounds: {
+      minX: roundScalar(footprintLocalBounds.minX, precision),
+      maxX: roundScalar(footprintLocalBounds.maxX, precision),
+      minZ: roundScalar(footprintLocalBounds.minZ, precision),
+      maxZ: roundScalar(footprintLocalBounds.maxZ, precision),
+    },
+    margins: {
+      left: roundScalar(footprintLocalBounds.minX - ledgeLocalBounds.minX, precision),
+      right: roundScalar(ledgeLocalBounds.maxX - footprintLocalBounds.maxX, precision),
+      back: roundScalar(footprintLocalBounds.minZ - ledgeLocalBounds.minZ, precision),
+      front: roundScalar(ledgeLocalBounds.maxZ - footprintLocalBounds.maxZ, precision),
+    },
+    footprintCoverageRatio: roundScalar(footprintCoverageRatio, precision),
+    centerOnLedge,
+    footprintIntersectsLedge: overlapX > 0 && overlapZ > 0,
+    verticalGap: roundScalar(bottomContactPoint.y - ledgeWorldPosition.y, precision),
+  };
+}
 
 export function createCharacterSpatialSnapshot(
   input: CharacterSpatialDebugInput,
@@ -145,6 +280,8 @@ export function createCharacterSpatialSnapshot(
           input.anchor.ledgeRotationY === null ? null : roundScalar((input.anchor.ledgeRotationY * 180) / Math.PI, precision),
         ledgeHeight: input.anchor.ledgeHeight === null ? null : roundScalar(input.anchor.ledgeHeight, precision),
         ledgeDepth: input.anchor.ledgeDepth === null ? null : roundScalar(input.anchor.ledgeDepth, precision),
+        usableWidth: input.anchor.usableWidth === null ? null : roundScalar(input.anchor.usableWidth, precision),
+        widthRatio: input.anchor.widthRatio === null ? null : roundScalar(input.anchor.widthRatio, precision),
         laneOffset: input.anchor.laneOffset === null ? null : roundScalar(input.anchor.laneOffset, precision),
         targetHeight: input.anchor.targetHeight === null ? null : roundScalar(input.anchor.targetHeight, precision),
         relationToLedge:
@@ -155,6 +292,15 @@ export function createCharacterSpatialSnapshot(
                 y: roundScalar(bottomContactPoint.y - anchorLedgeWorldPosition.y, precision),
                 z: roundScalar(bottomContactPoint.z - anchorLedgeWorldPosition.z, precision),
               },
+        support: createLedgeSupportSnapshot(
+          bounds,
+          bottomContactPoint,
+          anchorLedgeWorldPosition,
+          input.anchor.ledgeRotationY,
+          input.anchor.ledgeDepth,
+          input.anchor.usableWidth,
+          precision,
+        ),
       }
     : null;
 

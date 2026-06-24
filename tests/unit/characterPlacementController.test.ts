@@ -553,6 +553,8 @@ describe("characterPlacementController", () => {
       ledgeRotationY: 0.4,
       ledgeHeight: 0.25,
       ledgeDepth: 0.6,
+      usableWidth: null,
+      widthRatio: null,
       laneOffset: 0.44,
       targetHeight: 0.84,
     });

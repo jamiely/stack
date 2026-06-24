@@ -2820,6 +2820,8 @@ export class Game {
     const secondaryLaneActive = Boolean(this.activeRemySecondaryCharacterId && this.remySecondaryView);
     return createCharacterSpatialAnchorContext(placementContext, role === "primary" ? 0 : 1, {
       useLaneOffset: role === "secondary" || secondaryLaneActive,
+      usableWidth: typeof anchor.ledgeMesh.userData.usableWidth === "number" ? anchor.ledgeMesh.userData.usableWidth : null,
+      widthRatio: typeof anchor.ledgeMesh.userData.widthRatio === "number" ? anchor.ledgeMesh.userData.widthRatio : null,
     });
   }
 

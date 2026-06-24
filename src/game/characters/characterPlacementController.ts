@@ -33,6 +33,8 @@ export interface CharacterSpatialAnchorContext {
   ledgeRotationY: number | null;
   ledgeHeight: number | null;
   ledgeDepth: number | null;
+  usableWidth: number | null;
+  widthRatio: number | null;
   laneOffset: number | null;
   targetHeight: number | null;
 }
@@ -326,7 +328,7 @@ export function attachCharacterViewsToResolvedPlacement(
 export function createCharacterSpatialAnchorContext(
   context: CharacterPlacementContext | null,
   laneIndex = 0,
-  options: { useLaneOffset?: boolean } = {},
+  options: { useLaneOffset?: boolean; usableWidth?: number | null; widthRatio?: number | null } = {},
 ): CharacterSpatialAnchorContext | null {
   if (!context) {
     return null;
@@ -340,6 +342,8 @@ export function createCharacterSpatialAnchorContext(
     ledgeRotationY: context.ledgeRotationY,
     ledgeHeight: context.ledgeHeight,
     ledgeDepth: context.ledgeDepth,
+    usableWidth: options.usableWidth ?? null,
+    widthRatio: options.widthRatio ?? null,
     laneOffset: options.useLaneOffset === false ? 0 : (context.laneOffsets[laneIndex] ?? 0),
     targetHeight: context.targetHeight,
   };
