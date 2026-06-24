@@ -70,7 +70,11 @@ export interface LedgeSupportSnapshot {
   footprintCoverageRatio: number;
   centerOnLedge: boolean;
   footprintIntersectsLedge: boolean;
+  /** Legacy alias kept for tests/debug UI: distance from character bottom to the walkable ledge top. */
   verticalGap: number;
+  ledgeTopY: number;
+  topSurfaceVerticalGap: number;
+  penetratesLedgeTop: boolean;
 }
 
 export interface CharacterSpatialSnapshot {
@@ -210,6 +214,8 @@ function createLedgeSupportSnapshot(
     center.z >= ledgeLocalBounds.minZ &&
     center.z <= ledgeLocalBounds.maxZ;
 
+  const topSurfaceVerticalGap = bottomContactPoint.y - ledgeWorldPosition.y;
+
   return {
     ledgeLocalBounds: {
       minX: roundScalar(ledgeLocalBounds.minX, precision),
@@ -232,7 +238,10 @@ function createLedgeSupportSnapshot(
     footprintCoverageRatio: roundScalar(footprintCoverageRatio, precision),
     centerOnLedge,
     footprintIntersectsLedge: overlapX > 0 && overlapZ > 0,
-    verticalGap: roundScalar(bottomContactPoint.y - ledgeWorldPosition.y, precision),
+    verticalGap: roundScalar(topSurfaceVerticalGap, precision),
+    ledgeTopY: roundScalar(ledgeWorldPosition.y, precision),
+    topSurfaceVerticalGap: roundScalar(topSurfaceVerticalGap, precision),
+    penetratesLedgeTop: topSurfaceVerticalGap < -0.005,
   };
 }
 

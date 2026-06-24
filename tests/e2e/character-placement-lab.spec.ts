@@ -214,6 +214,9 @@ test("single loaded character stays centered when a wide ledge requests dual lan
                   centerOnLedge: boolean;
                   footprintIntersectsLedge: boolean;
                   verticalGap: number;
+                  ledgeTopY: number;
+                  topSurfaceVerticalGap: number;
+                  penetratesLedgeTop: boolean;
                 } | null;
               } | null;
               bounds: {
@@ -270,7 +273,7 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(lateralOffset).toBeCloseTo(0, 4);
   expect(outwardOffset).toBeGreaterThan(-ledgeDepth / 2);
   expect(outwardOffset).toBeLessThan(ledgeDepth / 2);
-  expect(outwardOffset).toBeGreaterThan(ledgeDepth * 0.4);
+  expect(outwardOffset).toBeGreaterThan(0);
   expect(relation?.y).toBeCloseTo(expectedTopClearance, 4);
   expect(primary?.helpers.bottomContactPoint.y).toBeCloseTo(primary?.bounds.min.y ?? NaN, 4);
 
@@ -278,15 +281,18 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(support?.centerOnLedge).toBe(true);
   expect(support?.footprintIntersectsLedge).toBe(true);
   expect(support?.verticalGap).toBeCloseTo(expectedTopClearance, 4);
-  expect(support?.footprintCoverageRatio).toBeGreaterThanOrEqual(0.45);
-  expect(support?.margins.left).toBeGreaterThanOrEqual(-0.08);
-  expect(support?.margins.right).toBeGreaterThanOrEqual(-0.08);
-  expect(support?.margins.back).toBeGreaterThanOrEqual(-0.28);
-  expect(support?.margins.front).toBeGreaterThanOrEqual(-0.28);
+  expect(support?.ledgeTopY).toBeCloseTo(
+    (primary?.helpers.bottomContactPoint.y ?? NaN) - (support?.topSurfaceVerticalGap ?? NaN),
+    4,
+  );
+  expect(support?.topSurfaceVerticalGap).toBeCloseTo(expectedTopClearance, 4);
+  expect(support?.penetratesLedgeTop).toBe(false);
+  expect(support?.footprintCoverageRatio).toBeGreaterThanOrEqual(0.99);
+  expect(support?.margins.left).toBeGreaterThanOrEqual(0);
+  expect(support?.margins.right).toBeGreaterThanOrEqual(0);
+  expect(support?.margins.back).toBeGreaterThanOrEqual(0);
+  expect(support?.margins.front).toBeGreaterThanOrEqual(0);
 });
-
-
-
 for (const seed of [7, 42, 77, 123]) {
   test(`character ledge support validation covers the visible footprint for seed ${seed}`, async ({ page }) => {
     await page.goto(`/?debug&test&paused=1&seed=${seed}`);
@@ -314,6 +320,9 @@ for (const seed of [7, 42, 77, 123]) {
                     centerOnLedge: boolean;
                     footprintIntersectsLedge: boolean;
                     verticalGap: number;
+                    ledgeTopY: number;
+                    topSurfaceVerticalGap: number;
+                    penetratesLedgeTop: boolean;
                   } | null;
                   ledgeDepth: number | null;
                   usableWidth: number | null;
@@ -329,6 +338,9 @@ for (const seed of [7, 42, 77, 123]) {
                     centerOnLedge: boolean;
                     footprintIntersectsLedge: boolean;
                     verticalGap: number;
+                    ledgeTopY: number;
+                    topSurfaceVerticalGap: number;
+                    penetratesLedgeTop: boolean;
                   } | null;
                   ledgeDepth: number | null;
                   usableWidth: number | null;
@@ -367,11 +379,13 @@ for (const seed of [7, 42, 77, 123]) {
       expect(support?.centerOnLedge, `${character.role} center on ledge`).toBe(true);
       expect(support?.footprintIntersectsLedge, `${character.role} footprint intersects ledge`).toBe(true);
       expect(support?.verticalGap, `${character.role} vertical gap`).toBeCloseTo(0, 4);
-      expect(support?.footprintCoverageRatio, `${character.role} footprint coverage`).toBeGreaterThanOrEqual(0.45);
-      expect(support?.margins.left, `${character.role} left margin`).toBeGreaterThanOrEqual(-0.08);
-      expect(support?.margins.right, `${character.role} right margin`).toBeGreaterThanOrEqual(-0.08);
-      expect(support?.margins.back, `${character.role} back margin`).toBeGreaterThanOrEqual(-0.28);
-      expect(support?.margins.front, `${character.role} front margin`).toBeGreaterThanOrEqual(-0.28);
+      expect(support?.topSurfaceVerticalGap, `${character.role} top-surface vertical gap`).toBeCloseTo(0, 4);
+      expect(support?.penetratesLedgeTop, `${character.role} ledge top penetration`).toBe(false);
+      expect(support?.footprintCoverageRatio, `${character.role} footprint coverage`).toBeGreaterThanOrEqual(0.99);
+      expect(support?.margins.left, `${character.role} left margin`).toBeGreaterThanOrEqual(0);
+      expect(support?.margins.right, `${character.role} right margin`).toBeGreaterThanOrEqual(0);
+      expect(support?.margins.back, `${character.role} back margin`).toBeGreaterThanOrEqual(0);
+      expect(support?.margins.front, `${character.role} front margin`).toBeGreaterThanOrEqual(0);
     }
   });
 }

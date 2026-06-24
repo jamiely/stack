@@ -2686,7 +2686,7 @@ export class Game {
       slabHeight: slab.dimensions.height,
       ledgePosition: {
         x: ledgeMesh.position.x,
-        y: ledgeMesh.position.y,
+        y: ledgeMesh.position.y + (typeof ledgeMesh.userData.ledgeHeight === "number" ? ledgeMesh.userData.ledgeHeight / 2 : 0),
         z: ledgeMesh.position.z,
       },
       ledgeRotationY: ledgeMesh.rotation.y,
@@ -2805,7 +2805,7 @@ export class Game {
       slabHeight: anchor.slab.dimensions.height,
       ledgePosition: {
         x: anchor.ledgeMesh.position.x,
-        y: anchor.ledgeMesh.position.y,
+        y: anchor.ledgeMesh.position.y + (typeof anchor.ledgeMesh.userData.ledgeHeight === "number" ? anchor.ledgeMesh.userData.ledgeHeight / 2 : 0),
         z: anchor.ledgeMesh.position.z,
       },
       ledgeRotationY: anchor.ledgeMesh.rotation.y,
@@ -3334,6 +3334,53 @@ export class Game {
     return true;
   }
 
+  private applyPlacementDebugMaterials(): void {
+    const ledgeMaterial = new MeshStandardMaterial({
+      color: new Color("#00ff66"),
+      emissive: new Color("#005522"),
+      emissiveIntensity: 0.45,
+      roughness: 0.65,
+      metalness: 0.02,
+    });
+    const slabMaterial = new MeshStandardMaterial({
+      color: new Color("#f2f2f2"),
+      emissive: new Color("#222222"),
+      emissiveIntensity: 0.12,
+      roughness: 0.88,
+      metalness: 0.02,
+      map: null,
+    });
+    const characterMaterial = new MeshStandardMaterial({
+      color: new Color("#ff2d2d"),
+      emissive: new Color("#550000"),
+      emissiveIntensity: 0.3,
+      roughness: 0.7,
+      metalness: 0.02,
+    });
+
+    this.stackGroup.traverse((node) => {
+      if (!(node instanceof Mesh)) {
+        return;
+      }
+
+      if (node.userData.isLedge === true) {
+        node.material = ledgeMaterial;
+      } else {
+        node.material = slabMaterial;
+      }
+    });
+
+    [this.remyView, this.remySecondaryView].forEach((view) => {
+      view?.sceneNodes.characterRoot.traverse((node) => {
+        if (node instanceof Mesh) {
+          node.material = characterMaterial;
+        }
+      });
+    });
+
+    this.renderer?.render(this.scene, this.camera);
+  }
+
   private createTestApi(): TestApi {
     return {
       startGame: () => this.startGame(),
@@ -3370,6 +3417,7 @@ export class Game {
         this.stopActiveSlab();
         return this.lastPlacementOutcome;
       },
+      applyPlacementDebugMaterials: () => this.applyPlacementDebugMaterials(),
       autoPlayUntilCharacter: async (options = {}) => {
         const maxPlacements = Math.max(1, Math.floor(options.maxPlacements ?? 32));
         const stepsPerPlacement = Math.max(1, Math.floor(options.stepsPerPlacement ?? 12));
