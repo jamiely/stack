@@ -285,6 +285,7 @@ export interface TestApi {
   setActiveOffset(offset: number): boolean;
   placeAtOffset(offset: number): TrimResult["outcome"] | null;
   applyPlacementDebugMaterials(): void;
+  loadCharacterPair(primaryCharacterId: string, secondaryCharacterId?: string | null): Promise<void>;
   autoPlayUntilCharacter(options?: {
     maxPlacements?: number;
     stepsPerPlacement?: number;

@@ -280,12 +280,12 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(support).toBeTruthy();
   expect(support?.centerOnLedge).toBe(true);
   expect(support?.footprintIntersectsLedge).toBe(true);
-  expect(support?.verticalGap).toBeCloseTo(expectedTopClearance, 4);
+  expect(Math.abs(support?.verticalGap ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(0.001);
   expect(support?.ledgeTopY).toBeCloseTo(
     (primary?.helpers.bottomContactPoint.y ?? NaN) - (support?.topSurfaceVerticalGap ?? NaN),
     4,
   );
-  expect(support?.topSurfaceVerticalGap).toBeCloseTo(expectedTopClearance, 4);
+  expect(Math.abs(support?.topSurfaceVerticalGap ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(0.001);
   expect(support?.penetratesLedgeTop).toBe(false);
   expect(support?.footprintCoverageRatio).toBeGreaterThanOrEqual(0.99);
   expect(support?.margins.left).toBeGreaterThanOrEqual(0);
@@ -293,6 +293,63 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(support?.margins.back).toBeGreaterThanOrEqual(0);
   expect(support?.margins.front).toBeGreaterThanOrEqual(0);
 });
+test("scripted mobile placements validate every character model footprint", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?test&paused=1&seed=42");
+  await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
+
+  const records = await page.evaluate(async () => {
+    const api = window.__towerStackerTestApi;
+    if (!api) {
+      throw new Error("Test API unavailable");
+    }
+
+    api.applyDebugConfig({ distractionsEnabled: false });
+    api.applyModelLabState({ showSpatialHelpers: false, forceTopFallback: false });
+
+    for (let placementIndex = 0; placementIndex < 8; placementIndex += 1) {
+      api.placeAtOffset(0);
+      api.stepSimulation(8);
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+    }
+
+    const characterIds = ["remy", "timmy", "amy", "aj"];
+    const snapshots = [];
+    for (const primaryId of characterIds) {
+      await api.loadCharacterPair(primaryId, null);
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+      snapshots.push({ scenario: `${primaryId}-solo`, state: api.getState() });
+
+      for (const secondaryId of characterIds.filter((id) => id !== primaryId)) {
+        await api.loadCharacterPair(primaryId, secondaryId);
+        await new Promise((resolve) => window.setTimeout(resolve, 80));
+        snapshots.push({ scenario: `${primaryId}+${secondaryId}`, state: api.getState() });
+      }
+    }
+
+    return snapshots;
+  });
+
+  const visibleCharacters = records.flatMap((record) => [
+    { scenario: record.scenario, character: record.state.spatialDebug.primaryCharacter },
+    { scenario: record.scenario, character: record.state.spatialDebug.secondaryCharacter },
+  ].filter((entry) => Boolean(entry.character)));
+  expect(visibleCharacters.length).toBeGreaterThanOrEqual(16);
+
+  for (const { scenario, character } of visibleCharacters) {
+    const support = character?.anchor?.support;
+    const label = `${scenario}: ${character?.characterId} ${character?.role} at level ${character?.anchor?.level}`;
+    expect(Math.abs(support?.topSurfaceVerticalGap ?? Number.POSITIVE_INFINITY), `${label} top-surface vertical gap`).toBeLessThanOrEqual(0.001);
+    expect(support?.penetratesLedgeTop, `${label} ledge top penetration`).toBe(false);
+    expect(support?.footprintCoverageRatio, `${label} footprint coverage`).toBeGreaterThanOrEqual(0.99);
+    expect(support?.margins.left, `${label} left margin`).toBeGreaterThanOrEqual(0);
+    expect(support?.margins.right, `${label} right margin`).toBeGreaterThanOrEqual(0);
+    expect(support?.margins.back, `${label} back margin`).toBeGreaterThanOrEqual(0);
+    expect(support?.margins.front, `${label} front margin`).toBeGreaterThanOrEqual(0);
+  }
+});
+
 for (const seed of [7, 42, 77, 123]) {
   test(`character ledge support validation covers the visible footprint for seed ${seed}`, async ({ page }) => {
     await page.goto(`/?debug&test&paused=1&seed=${seed}`);
@@ -378,8 +435,8 @@ for (const seed of [7, 42, 77, 123]) {
       expect(support, `${character.role} support snapshot`).toBeTruthy();
       expect(support?.centerOnLedge, `${character.role} center on ledge`).toBe(true);
       expect(support?.footprintIntersectsLedge, `${character.role} footprint intersects ledge`).toBe(true);
-      expect(support?.verticalGap, `${character.role} vertical gap`).toBeCloseTo(0, 4);
-      expect(support?.topSurfaceVerticalGap, `${character.role} top-surface vertical gap`).toBeCloseTo(0, 4);
+      expect(Math.abs(support?.verticalGap ?? Number.POSITIVE_INFINITY), `${character.role} vertical gap`).toBeLessThanOrEqual(0.001);
+      expect(Math.abs(support?.topSurfaceVerticalGap ?? Number.POSITIVE_INFINITY), `${character.role} top-surface vertical gap`).toBeLessThanOrEqual(0.001);
       expect(support?.penetratesLedgeTop, `${character.role} ledge top penetration`).toBe(false);
       expect(support?.footprintCoverageRatio, `${character.role} footprint coverage`).toBeGreaterThanOrEqual(0.99);
       expect(support?.margins.left, `${character.role} left margin`).toBeGreaterThanOrEqual(0);

@@ -2540,6 +2540,52 @@ export class Game {
     this.characterAnimationManager.spawnLedgeCharacter();
   }
 
+  private async loadRemyCharactersForTest(primaryCharacterId: string, secondaryCharacterId: string | null): Promise<void> {
+    const selectedCharacter = REMY_CHARACTER_ASSETS.find((asset) => asset.id === primaryCharacterId);
+    if (!selectedCharacter) {
+      throw new Error(`Unknown character id: ${primaryCharacterId}`);
+    }
+
+    const secondaryCharacter = secondaryCharacterId
+      ? REMY_CHARACTER_ASSETS.find((asset) => asset.id === secondaryCharacterId) ?? null
+      : null;
+    if (secondaryCharacterId && !secondaryCharacter) {
+      throw new Error(`Unknown secondary character id: ${secondaryCharacterId}`);
+    }
+
+    this.resetRemyRuntimeHandles();
+    this.characterAnimationManager.release();
+    this.remyIsLoading = true;
+    const loadGeneration = this.remyLoadGeneration;
+    const loadResult = await loadCharacterCoordinatorResult({
+      selectedCharacter,
+      secondaryCharacter,
+      animationCandidates: REMY_ANIMATION_ASSETS,
+      getPreparationConfig: (characterId) => this.getRemyPreparationConfigForCharacter(characterId),
+    });
+
+    if (loadGeneration !== this.remyLoadGeneration) {
+      return;
+    }
+
+    this.remyIsLoading = false;
+    if (!loadResult) {
+      throw new Error(`Failed to load character model ${primaryCharacterId}`);
+    }
+
+    const runtimeState = prepareLoadedCharacterRuntimeState({
+      loadResult,
+      selectedCharacterId: selectedCharacter.id,
+      secondaryCharacterId: secondaryCharacter?.id ?? null,
+      storedDebugConfigs: this.remyCharacterDebugConfigs,
+      testMode: this.testMode.enabled,
+    });
+
+    this.applyLoadedRemyRuntimeState(runtimeState);
+    this.syncRemyDebugControlSurface();
+    this.placeRemyOnTopLedge();
+  }
+
   private loadRemyCharacter(): void {
     if (this.remyIsLoading) {
       return;
@@ -3418,6 +3464,9 @@ export class Game {
         return this.lastPlacementOutcome;
       },
       applyPlacementDebugMaterials: () => this.applyPlacementDebugMaterials(),
+      loadCharacterPair: async (primaryCharacterId, secondaryCharacterId = null) => {
+        await this.loadRemyCharactersForTest(primaryCharacterId, secondaryCharacterId);
+      },
       autoPlayUntilCharacter: async (options = {}) => {
         const maxPlacements = Math.max(1, Math.floor(options.maxPlacements ?? 32));
         const stepsPerPlacement = Math.max(1, Math.floor(options.stepsPerPlacement ?? 12));

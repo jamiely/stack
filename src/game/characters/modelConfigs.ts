@@ -64,12 +64,19 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
   remy: {
     debugDefaults: REMY_LEGACY_DEBUG_DEFAULTS,
     preparation: DEFAULT_REMY_PREPARATION_CONFIG,
-    placement: DEFAULT_REMY_PLACEMENT_CONFIG,
+    placement: {
+      ...DEFAULT_REMY_PLACEMENT_CONFIG,
+      ledgeClearance: -0.1628,
+      ledgeInsetRatio: 0.19,
+    },
   },
   timmy: {
     debugDefaults: REMY_TIMMY_DEBUG_DEFAULTS,
     preparation: DEFAULT_REMY_PREPARATION_CONFIG,
-    placement: DEFAULT_REMY_PLACEMENT_CONFIG,
+    placement: {
+      ...DEFAULT_REMY_PLACEMENT_CONFIG,
+      ledgeInsetRatio: 0.17,
+    },
   },
   amy: {
     debugDefaults: REMY_AMY_DEBUG_DEFAULTS,
@@ -79,7 +86,10 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
   aj: {
     debugDefaults: REMY_AJ_DEBUG_DEFAULTS,
     preparation: DEFAULT_REMY_PREPARATION_CONFIG,
-    placement: DEFAULT_REMY_PLACEMENT_CONFIG,
+    placement: {
+      ...DEFAULT_REMY_PLACEMENT_CONFIG,
+      ledgeInsetRatio: 0.25,
+    },
   },
 } satisfies Record<RemyCharacterId, RemyModelConfig>;
 
