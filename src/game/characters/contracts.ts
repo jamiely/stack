@@ -63,6 +63,7 @@ export interface RemyModelConfig {
   preparation: {
     autoDetectUpAxis: boolean;
     rotationOffsetZ: number;
+    modelOffsetX?: number;
   };
   placement: {
     targetHeightRatio: number;

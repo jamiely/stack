@@ -15,6 +15,7 @@ export interface BuildCharacterViewOptions {
   nameSuffix: string;
   autoDetectUpAxis?: boolean;
   rotationOffsetZ?: number;
+  modelOffsetX?: number;
 }
 
 export interface BuiltCharacterView {
@@ -101,6 +102,7 @@ export function buildCharacterViewFromGltf(
       sceneNodes: createCharacterSceneNodes({
         model,
         centerOffsetFromFeet: normalizedMetrics.centerOffsetFromFeet,
+        modelOffsetX: options.modelOffsetX ?? 0,
         nameSuffix: options.nameSuffix,
       }),
       baseHeight: normalizedMetrics.baseHeight,

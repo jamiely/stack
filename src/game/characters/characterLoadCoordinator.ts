@@ -44,6 +44,7 @@ export async function loadCharacterCoordinatorResult(
     nameSuffix: "primary",
     autoDetectUpAxis: primaryPreparationConfig.autoDetectUpAxis,
     rotationOffsetZ: primaryPreparationConfig.rotationOffsetZ,
+    modelOffsetX: primaryPreparationConfig.modelOffsetX ?? 0,
   });
 
   if (!primarySetup) {
@@ -59,6 +60,7 @@ export async function loadCharacterCoordinatorResult(
         nameSuffix: "secondary",
         autoDetectUpAxis: secondaryPreparationConfig.autoDetectUpAxis,
         rotationOffsetZ: secondaryPreparationConfig.rotationOffsetZ,
+        modelOffsetX: secondaryPreparationConfig.modelOffsetX ?? 0,
       });
     } catch (error) {
       console.warn(`Failed to load secondary character model ${options.secondaryCharacter.id}.`, error);

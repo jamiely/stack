@@ -48,6 +48,7 @@ export const REMY_AJ_DEBUG_DEFAULTS: RemyDebugConfig = {
 const DEFAULT_REMY_PREPARATION_CONFIG = {
   autoDetectUpAxis: true,
   rotationOffsetZ: 0,
+  modelOffsetX: 0,
 } as const;
 
 const DEFAULT_REMY_PLACEMENT_CONFIG = {
@@ -80,12 +81,18 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
   },
   amy: {
     debugDefaults: REMY_AMY_DEBUG_DEFAULTS,
-    preparation: DEFAULT_REMY_PREPARATION_CONFIG,
+    preparation: {
+      ...DEFAULT_REMY_PREPARATION_CONFIG,
+      modelOffsetX: -0.6,
+    },
     placement: DEFAULT_REMY_PLACEMENT_CONFIG,
   },
   aj: {
     debugDefaults: REMY_AJ_DEBUG_DEFAULTS,
-    preparation: DEFAULT_REMY_PREPARATION_CONFIG,
+    preparation: {
+      ...DEFAULT_REMY_PREPARATION_CONFIG,
+      modelOffsetX: -0.6,
+    },
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
       ledgeInsetRatio: 0.25,

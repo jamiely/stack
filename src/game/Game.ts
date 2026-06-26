@@ -1333,8 +1333,8 @@ export class Game {
   }
 
   private resetWorld(): void {
-    this.resetRemyRuntimeHandles();
     this.characterAnimationManager.disposeAll();
+    this.resetRemyRuntimeHandles();
     this.lastFrameTime = 0;
     this.simulationElapsedSeconds = 0;
     this.score = 0;
@@ -2535,8 +2535,8 @@ export class Game {
   }
 
   private refreshRemyCharacterSelection(): void {
-    this.resetRemyRuntimeHandles();
     this.characterAnimationManager.release();
+    this.resetRemyRuntimeHandles();
     this.characterAnimationManager.spawnLedgeCharacter();
   }
 
@@ -2553,8 +2553,8 @@ export class Game {
       throw new Error(`Unknown secondary character id: ${secondaryCharacterId}`);
     }
 
-    this.resetRemyRuntimeHandles();
     this.characterAnimationManager.release();
+    this.resetRemyRuntimeHandles();
     this.remyIsLoading = true;
     const loadGeneration = this.remyLoadGeneration;
     const loadResult = await loadCharacterCoordinatorResult({
@@ -2966,9 +2966,23 @@ export class Game {
     };
   }
 
+  private removeAllCharacterRoots(): void {
+    const roots: Object3D[] = [];
+    [this.stackGroup, this.archivedGroup].forEach((group) => {
+      group.traverse((node) => {
+        if (node.name.startsWith("remy-character-")) {
+          roots.push(node);
+        }
+      });
+    });
+
+    roots.forEach((root) => root.parent?.remove(root));
+  }
+
   private detachRemyCharacter(): void {
     this.remyView?.detach();
     this.remySecondaryView?.detach();
+    this.removeAllCharacterRoots();
   }
 
   private triggerImpactPulse(durationSeconds: number): void {

@@ -7,6 +7,7 @@ import {
   REMY_LEGACY_DEBUG_DEFAULTS,
   REMY_TEST_MODE_DEBUG_DEFAULTS,
   getRemyDebugDefaults,
+  getRemyModelConfig,
 } from "../../src/game/characters/modelConfigs";
 
 describe("remy model configs", () => {
@@ -25,6 +26,7 @@ describe("remy model configs", () => {
 
       expect(typeof config.preparation.autoDetectUpAxis).toBe("boolean");
       expect(Number.isFinite(config.preparation.rotationOffsetZ)).toBe(true);
+      expect(Number.isFinite(config.preparation.modelOffsetX ?? 0)).toBe(true);
 
       Object.values(config.placement).forEach((value) => {
         expect(Number.isFinite(value)).toBe(true);
@@ -49,6 +51,16 @@ describe("remy model configs", () => {
     expect(REMY_CHARACTER_MODEL_CONFIGS.timmy.debugDefaults.translateY).toBe(0);
     expect(REMY_CHARACTER_MODEL_CONFIGS.amy.debugDefaults.translateY).toBe(0);
     expect(REMY_CHARACTER_MODEL_CONFIGS.aj.debugDefaults.translateY).toBe(0);
+  });
+
+  it("keeps Amy and AJ visually biased onto the ledge surface without moving placement origin", () => {
+    // Amy/AJ's animated meshes read wall-side when centered at the placement
+    // origin; the model-space X bias aligns the visible feet/body with the
+    // ledge contact patch while debug translateX keeps the logical lane centered.
+    expect(getRemyModelConfig("amy").preparation.modelOffsetX).toBeLessThanOrEqual(-0.5);
+    expect(getRemyModelConfig("aj").preparation.modelOffsetX).toBeLessThanOrEqual(-0.5);
+    expect(getRemyDebugDefaults("amy").translateX).toBe(0);
+    expect(getRemyDebugDefaults("aj").translateX).toBe(0);
   });
 
   it("defines finite animation assets and debug slider metadata", () => {

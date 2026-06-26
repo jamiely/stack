@@ -4,12 +4,14 @@ import type { CharacterSceneNodes } from "./contracts";
 export interface CreateCharacterSceneNodesOptions {
   model: import("three").Object3D;
   centerOffsetFromFeet: number;
+  modelOffsetX?: number;
   nameSuffix: string;
 }
 
 export function createCharacterSceneNodes({
   model,
   centerOffsetFromFeet,
+  modelOffsetX = 0,
   nameSuffix,
 }: CreateCharacterSceneNodesOptions): CharacterSceneNodes {
   const characterRoot = new Group();
@@ -26,6 +28,7 @@ export function createCharacterSceneNodes({
 
   const correctionNode = new Group();
   correctionNode.name = `remy-correction-${nameSuffix}`;
+  correctionNode.position.x = modelOffsetX;
   correctionNode.position.y = centerOffsetFromFeet;
 
   const poseRotateX = new Group();
