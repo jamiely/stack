@@ -83,9 +83,13 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
     debugDefaults: REMY_AMY_DEBUG_DEFAULTS,
     preparation: {
       ...DEFAULT_REMY_PREPARATION_CONFIG,
-      modelOffsetX: -0.6,
+      modelOffsetX: -0.8,
     },
-    placement: DEFAULT_REMY_PLACEMENT_CONFIG,
+    placement: {
+      ...DEFAULT_REMY_PLACEMENT_CONFIG,
+      ledgeClearance: -0.75,
+      ledgeInsetRatio: 0.2,
+    },
   },
   aj: {
     debugDefaults: REMY_AJ_DEBUG_DEFAULTS,
@@ -95,7 +99,8 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
     },
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
-      ledgeInsetRatio: 0.25,
+      ledgeClearance: -0.42,
+      ledgeInsetRatio: 0.2,
     },
   },
 } satisfies Record<RemyCharacterId, RemyModelConfig>;
