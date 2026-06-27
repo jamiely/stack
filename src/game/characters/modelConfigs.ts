@@ -83,7 +83,7 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
     debugDefaults: REMY_AMY_DEBUG_DEFAULTS,
     preparation: {
       ...DEFAULT_REMY_PREPARATION_CONFIG,
-      modelOffsetX: -0.8,
+      modelOffsetX: -0.75,
     },
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
