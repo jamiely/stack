@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const MAX_INTENTIONAL_LEDGE_SINK = 0.75;
+const MAX_INTENTIONAL_LEDGE_SINK = 0.6;
 
 function expectSupportedVertically(
   support: { verticalGap: number; topSurfaceVerticalGap: number; penetratesLedgeTop: boolean } | null | undefined,
