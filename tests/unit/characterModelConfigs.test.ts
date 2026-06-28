@@ -53,12 +53,11 @@ describe("remy model configs", () => {
     expect(REMY_CHARACTER_MODEL_CONFIGS.aj.debugDefaults.translateY).toBe(0);
   });
 
-  it("keeps Amy and AJ visually biased onto the ledge surface without moving placement origin", () => {
-    // Amy/AJ's animated meshes read wall-side when centered at the placement
-    // origin; the model-space X bias aligns the visible feet/body with the
-    // ledge contact patch while debug translateX keeps the logical lane centered.
-    expect(getRemyModelConfig("amy").preparation.modelOffsetX).toBeLessThanOrEqual(-0.5);
-    expect(getRemyModelConfig("aj").preparation.modelOffsetX).toBeLessThanOrEqual(-0.5);
+  it("keeps Amy and AJ model-space centers aligned with the ledge lane center", () => {
+    // The placement lane is already centered; applying a model-space lateral bias
+    // makes Amy/AJ visibly stand to one side of the ledge even when support metrics pass.
+    expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBe(0);
+    expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBe(0);
     expect(getRemyDebugDefaults("amy").translateX).toBe(0);
     expect(getRemyDebugDefaults("aj").translateX).toBe(0);
   });
