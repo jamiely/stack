@@ -81,7 +81,10 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
   },
   amy: {
     debugDefaults: REMY_AMY_DEBUG_DEFAULTS,
-    preparation: DEFAULT_REMY_PREPARATION_CONFIG,
+    preparation: {
+      ...DEFAULT_REMY_PREPARATION_CONFIG,
+      modelOffsetX: -0.7,
+    },
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
       ledgeClearance: -0.74,
@@ -90,7 +93,10 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
   },
   aj: {
     debugDefaults: REMY_AJ_DEBUG_DEFAULTS,
-    preparation: DEFAULT_REMY_PREPARATION_CONFIG,
+    preparation: {
+      ...DEFAULT_REMY_PREPARATION_CONFIG,
+      modelOffsetX: -0.7,
+    },
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
       ledgeClearance: -0.28,

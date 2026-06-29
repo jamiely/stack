@@ -53,11 +53,11 @@ describe("remy model configs", () => {
     expect(REMY_CHARACTER_MODEL_CONFIGS.aj.debugDefaults.translateY).toBe(0);
   });
 
-  it("keeps Amy and AJ centered in the ledge lane while nudging them outward on the shelf", () => {
-    // Do not apply model-space lateral bias: the placement lane owns left/right centering.
-    // Their ledge inset keeps the visible feet on the shelf top instead of flush against the wall.
-    expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBe(0);
-    expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBe(0);
+  it("keeps Amy and AJ placement lanes centered while correcting their visible mesh centers", () => {
+    // Keep debug translation at zero so lane placement stays logical and reusable.
+    // The model-space offset recenters Amy/AJ's asymmetric visible meshes on the ledge.
+    expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.7, 6);
+    expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.7, 6);
     expect(getRemyDebugDefaults("amy").translateX).toBe(0);
     expect(getRemyDebugDefaults("aj").translateX).toBe(0);
     expect(getRemyModelConfig("amy").placement.ledgeInsetRatio).toBeCloseTo(0.28, 6);
