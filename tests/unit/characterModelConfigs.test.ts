@@ -55,9 +55,9 @@ describe("remy model configs", () => {
 
   it("keeps Amy and AJ placement lanes centered while correcting their visible mesh centers", () => {
     // Keep debug translation at zero so lane placement stays logical and reusable.
-    // The model-space offset recenters Amy/AJ's asymmetric visible meshes on the ledge.
-    expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.7, 6);
-    expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.7, 6);
+    // Use only a small model-space offset so Amy/AJ remain horizontally centered on wide ledges.
+    expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.1, 6);
+    expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.22, 6);
     expect(getRemyDebugDefaults("amy").translateX).toBe(0);
     expect(getRemyDebugDefaults("aj").translateX).toBe(0);
     expect(getRemyModelConfig("amy").placement.ledgeInsetRatio).toBeCloseTo(0.28, 6);

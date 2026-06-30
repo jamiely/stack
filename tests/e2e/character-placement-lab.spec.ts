@@ -315,6 +315,50 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(support?.margins.back).toBeGreaterThanOrEqual(0);
   expect(support?.margins.front).toBeGreaterThanOrEqual(0);
 });
+test("single Amy and AJ footprints stay horizontally centered on wide ledges", async ({ page }) => {
+  await page.goto("/?debug&test&paused=1&seed=8");
+  await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
+
+  const records = await page.evaluate(async () => {
+    const api = window.__towerStackerTestApi;
+    if (!api) {
+      throw new Error("Test API unavailable");
+    }
+
+    api.startGame();
+    api.setPaused(true);
+    api.applyDebugConfig({ distractionsEnabled: false });
+    api.applyModelLabState({ showSpatialHelpers: true, forceTopFallback: false });
+    await api.autoPlayUntilCharacter({ maxPlacements: 40, stepsPerPlacement: 14, placementOffset: 0 });
+
+    const characterIds = ["amy", "aj"];
+    const snapshots = [];
+    for (const characterId of characterIds) {
+      await api.loadCharacterPair(characterId, null);
+      api.stepSimulation(6);
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+      snapshots.push({ characterId, character: api.getState().spatialDebug.primaryCharacter });
+    }
+    return snapshots;
+  });
+
+  expect(records.length).toBe(2);
+  for (const record of records) {
+    const support = record.character?.anchor?.support;
+    const footprintLocalBounds = support?.footprintLocalBounds;
+    const ledgeLocalBounds = support?.ledgeLocalBounds;
+    const footprintCenterX = footprintLocalBounds ? (footprintLocalBounds.minX + footprintLocalBounds.maxX) / 2 : Number.NaN;
+    const ledgeHalfWidth = ledgeLocalBounds ? (ledgeLocalBounds.maxX - ledgeLocalBounds.minX) / 2 : Number.NaN;
+    expect(support, `${record.characterId} support snapshot`).toBeTruthy();
+    expect(Math.abs(footprintCenterX), `${record.characterId} horizontal ledge centering`).toBeLessThanOrEqual(
+      Math.min(0.2, ledgeHalfWidth * 0.08),
+    );
+    expect(support?.footprintCoverageRatio, `${record.characterId} footprint coverage`).toBeGreaterThanOrEqual(0.99);
+    expect(support?.margins.left, `${record.characterId} left margin`).toBeGreaterThanOrEqual(0);
+    expect(support?.margins.right, `${record.characterId} right margin`).toBeGreaterThanOrEqual(0);
+  }
+});
+
 test("scripted mobile placements validate every character model footprint", async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 390, height: 844 });
