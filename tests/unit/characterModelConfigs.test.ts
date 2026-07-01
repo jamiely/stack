@@ -57,11 +57,11 @@ describe("remy model configs", () => {
     // Keep debug translation at zero so lane placement stays logical and reusable.
     // Use only a small model-space offset so Amy/AJ remain horizontally centered on wide ledges.
     expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.1, 6);
-    expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBeCloseTo(0, 6);
+    expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.14, 6);
     expect(getRemyDebugDefaults("amy").translateX).toBe(0);
     expect(getRemyDebugDefaults("aj").translateX).toBe(0);
     expect(getRemyModelConfig("amy").placement.ledgeInsetRatio).toBeCloseTo(0.28, 6);
-    expect(getRemyModelConfig("aj").placement.ledgeInsetRatio).toBeCloseTo(0.1, 6);
+    expect(getRemyModelConfig("aj").placement.ledgeInsetRatio).toBeCloseTo(0.05, 6);
   });
 
   it("defines finite animation assets and debug slider metadata", () => {

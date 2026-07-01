@@ -359,7 +359,7 @@ test("single Amy and AJ footprints stay centered on wide ledges", async ({ page 
       expect(Math.abs(footprintCenterZ), `${record.characterId} ledge-depth centering`).toBeLessThanOrEqual(
         Math.min(0.18, ledgeHalfDepth * 0.35),
       );
-      expect(support?.margins.front, `${record.characterId} front ledge margin`).toBeGreaterThanOrEqual(0.2);
+      expect(support?.margins.front, `${record.characterId} front ledge margin`).toBeGreaterThanOrEqual(0.3);
     }
     expect(support?.footprintCoverageRatio, `${record.characterId} footprint coverage`).toBeGreaterThanOrEqual(0.99);
     expect(support?.margins.left, `${record.characterId} left margin`).toBeGreaterThanOrEqual(0);
