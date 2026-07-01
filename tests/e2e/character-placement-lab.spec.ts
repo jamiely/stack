@@ -315,7 +315,7 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(support?.margins.back).toBeGreaterThanOrEqual(0);
   expect(support?.margins.front).toBeGreaterThanOrEqual(0);
 });
-test("single Amy and AJ footprints stay horizontally centered on wide ledges", async ({ page }) => {
+test("single Amy and AJ footprints stay centered on wide ledges", async ({ page }) => {
   await page.goto("/?debug&test&paused=1&seed=8");
   await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
 
@@ -348,11 +348,19 @@ test("single Amy and AJ footprints stay horizontally centered on wide ledges", a
     const footprintLocalBounds = support?.footprintLocalBounds;
     const ledgeLocalBounds = support?.ledgeLocalBounds;
     const footprintCenterX = footprintLocalBounds ? (footprintLocalBounds.minX + footprintLocalBounds.maxX) / 2 : Number.NaN;
+    const footprintCenterZ = footprintLocalBounds ? (footprintLocalBounds.minZ + footprintLocalBounds.maxZ) / 2 : Number.NaN;
     const ledgeHalfWidth = ledgeLocalBounds ? (ledgeLocalBounds.maxX - ledgeLocalBounds.minX) / 2 : Number.NaN;
+    const ledgeHalfDepth = ledgeLocalBounds ? (ledgeLocalBounds.maxZ - ledgeLocalBounds.minZ) / 2 : Number.NaN;
     expect(support, `${record.characterId} support snapshot`).toBeTruthy();
     expect(Math.abs(footprintCenterX), `${record.characterId} horizontal ledge centering`).toBeLessThanOrEqual(
       Math.min(0.2, ledgeHalfWidth * 0.08),
     );
+    if (record.characterId === "aj") {
+      expect(Math.abs(footprintCenterZ), `${record.characterId} ledge-depth centering`).toBeLessThanOrEqual(
+        Math.min(0.18, ledgeHalfDepth * 0.35),
+      );
+      expect(support?.margins.front, `${record.characterId} front ledge margin`).toBeGreaterThanOrEqual(0.2);
+    }
     expect(support?.footprintCoverageRatio, `${record.characterId} footprint coverage`).toBeGreaterThanOrEqual(0.99);
     expect(support?.margins.left, `${record.characterId} left margin`).toBeGreaterThanOrEqual(0);
     expect(support?.margins.right, `${record.characterId} right margin`).toBeGreaterThanOrEqual(0);
