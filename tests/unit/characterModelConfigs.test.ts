@@ -61,7 +61,7 @@ describe("remy model configs", () => {
     expect(getRemyDebugDefaults("amy").translateX).toBe(0);
     expect(getRemyDebugDefaults("aj").translateX).toBe(0);
     expect(getRemyModelConfig("amy").placement.ledgeInsetRatio).toBeCloseTo(0.28, 6);
-    expect(getRemyModelConfig("aj").placement.ledgeInsetRatio).toBeCloseTo(0.05, 6);
+    expect(getRemyModelConfig("aj").placement.ledgeInsetRatio).toBeCloseTo(0.12, 6);
   });
 
   it("defines finite animation assets and debug slider metadata", () => {

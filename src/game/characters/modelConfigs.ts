@@ -100,7 +100,7 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
       ledgeClearance: -0.28,
-      ledgeInsetRatio: 0.05,
+      ledgeInsetRatio: 0.12,
     },
   },
 } satisfies Record<RemyCharacterId, RemyModelConfig>;
