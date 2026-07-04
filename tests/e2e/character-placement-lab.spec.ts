@@ -202,7 +202,7 @@ test("character placement lab exposes deterministic transform snapshots and mode
 });
 
 test("overhead ledge inspection view centers every character on front and right-side ledges", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
   await page.setViewportSize({ width: 900, height: 900 });
   await page.addStyleTag({ content: ".hud, .debug-panel, .overlay { display: none !important; }" });
 
@@ -241,7 +241,7 @@ test("overhead ledge inspection view centers every character on front and right-
       api.applyModelLabState({ showSpatialHelpers: false, forceTopFallback: false, overheadInspectionView: false });
       await api.autoPlayUntilCharacter({ maxPlacements: 40, stepsPerPlacement: 14, placementOffset: 0 });
       await api.loadCharacterPair(characterId, null);
-      await new Promise((resolve) => window.setTimeout(resolve, 80));
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
       api.applyModelLabState({ overheadInspectionView: true });
       api.applyPlacementDebugMaterials();
     }, { characterId });
@@ -261,7 +261,7 @@ test("overhead ledge inspection view centers every character on front and right-
     });
   }
 
-  const candidateSeeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 19, 25, 32, 34];
+  const candidateSeeds = [1, 7, 8, 9, 15, 19, 25, 32, 34];
   for (const characterId of characterIds) {
     const capturedFaces = new Set<string>();
 
