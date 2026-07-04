@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const MAX_INTENTIONAL_LEDGE_SINK = 0.65;
+const MAX_INTENTIONAL_LEDGE_SINK = 0.16;
 
 function expectSupportedVertically(
   support: { verticalGap: number; topSurfaceVerticalGap: number; penetratesLedgeTop: boolean } | null | undefined,
@@ -9,10 +9,10 @@ function expectSupportedVertically(
   const verticalGap = support?.verticalGap ?? Number.POSITIVE_INFINITY;
   const topSurfaceVerticalGap = support?.topSurfaceVerticalGap ?? Number.POSITIVE_INFINITY;
 
-  // Some asymmetric character meshes need a small model-space sink so the rendered
-  // feet/body read as planted instead of hovering above the ledge. Keep the check
-  // one-sided against floating, while bounding intentional sink so it cannot hide
-  // an obviously buried model.
+  // Character meshes can need a tiny model-space sink so the rendered feet read
+  // planted. Keep the check one-sided against floating, but bound sink tightly
+  // enough that a character cannot look like they are standing on the floor below
+  // the ledge.
   expect(verticalGap, `${label} vertical gap`).toBeLessThanOrEqual(0.001);
   expect(verticalGap, `${label} vertical sink`).toBeGreaterThanOrEqual(-MAX_INTENTIONAL_LEDGE_SINK);
   expect(topSurfaceVerticalGap, `${label} top-surface vertical gap`).toBeLessThanOrEqual(0.001);
