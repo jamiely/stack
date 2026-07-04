@@ -1008,6 +1008,7 @@ export class Game {
       section.append(
         this.createModelLabToggleControl("Show Spatial Helpers", "showSpatialHelpers", "debug-toggle-spatial-helpers"),
         this.createModelLabToggleControl("Force Top Placement Lab", "forceTopFallback", "debug-toggle-force-top-lab"),
+        this.createModelLabToggleControl("Overhead Ledge View", "overheadInspectionView", "debug-toggle-overhead-ledge-view"),
       );
     }
 
@@ -1085,6 +1086,8 @@ export class Game {
     const nextState = applyModelLabStatePatch(this.modelLabState, state);
     this.modelLabState.showSpatialHelpers = nextState.showSpatialHelpers;
     this.modelLabState.forceTopFallback = nextState.forceTopFallback;
+    this.modelLabState.overheadInspectionView = nextState.overheadInspectionView;
+    this.shell.classList.toggle("game-shell--overhead-inspection", this.modelLabState.overheadInspectionView);
 
     this.debugPanel.querySelectorAll<HTMLInputElement>("[data-model-lab-key]").forEach((input) => {
       const key = input.dataset.modelLabKey as keyof Omit<typeof this.modelLabState, "enabled"> | undefined;
@@ -3024,6 +3027,12 @@ export class Game {
   }
 
   private updateCamera(deltaSeconds: number): void {
+    if (this.applyOverheadInspectionCamera()) {
+      return;
+    }
+
+    this.camera.up.set(0, 1, 0);
+
     const topLandedSlab = this.landedSlabs[this.landedSlabs.length - 1] ?? this.activeSlab;
     const collapseFrame = this.collapseSequence ? sampleCollapseFrame(this.collapseSequence) : null;
     const builtFloors = Math.max(0, this.landedSlabs.length - this.startingStackLevels);
@@ -3088,6 +3097,30 @@ export class Game {
     const lookAtLerp = Math.min(1, fpsAdjustedLerp * 1.25);
     this.cameraLookAtY += (lookAtTargetY - this.cameraLookAtY) * lookAtLerp;
     this.camera.lookAt(0, this.cameraLookAtY, 0);
+  }
+
+  private applyOverheadInspectionCamera(): boolean {
+    if (!this.modelLabState.enabled || !this.modelLabState.overheadInspectionView) {
+      return false;
+    }
+
+    const primaryCharacter = this.getCharacterSpatialSnapshot("primary");
+    const anchor = primaryCharacter?.anchor;
+    const ledgeTarget = anchor?.ledgePosition && anchor.slabPosition
+      ? {
+          x: anchor.ledgePosition.x + anchor.slabPosition.x,
+          y: anchor.ledgePosition.y + anchor.slabPosition.y,
+          z: anchor.ledgePosition.z + anchor.slabPosition.z,
+        }
+      : null;
+    const characterTarget = primaryCharacter?.bounds.center ?? primaryCharacter?.worldPosition ?? null;
+    const target = ledgeTarget ?? characterTarget ?? { x: 0, y: 0, z: 0 };
+    const height = Math.max(12, (anchor?.usableWidth ?? 4) * 1.75, (anchor?.ledgeDepth ?? 1.8) * 5);
+
+    this.camera.up.set(0, 0, -1);
+    this.camera.position.set(target.x, target.y + height, target.z);
+    this.camera.lookAt(target.x, target.y, target.z);
+    return true;
   }
 
   private updateMetrics(): void {

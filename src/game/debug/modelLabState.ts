@@ -2,6 +2,7 @@ export interface ModelLabState {
   enabled: boolean;
   showSpatialHelpers: boolean;
   forceTopFallback: boolean;
+  overheadInspectionView: boolean;
 }
 
 export type ModelLabStatePatch = Partial<Omit<ModelLabState, "enabled">>;
@@ -11,6 +12,7 @@ export function createModelLabState(enabled: boolean): ModelLabState {
     enabled,
     showSpatialHelpers: false,
     forceTopFallback: false,
+    overheadInspectionView: false,
   };
 }
 
@@ -23,5 +25,6 @@ export function applyModelLabStatePatch(state: ModelLabState, patch: ModelLabSta
     enabled: state.enabled,
     showSpatialHelpers: patch.showSpatialHelpers ?? state.showSpatialHelpers,
     forceTopFallback: patch.forceTopFallback ?? state.forceTopFallback,
+    overheadInspectionView: patch.overheadInspectionView ?? state.overheadInspectionView,
   };
 }

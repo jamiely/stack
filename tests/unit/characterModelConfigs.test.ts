@@ -53,15 +53,15 @@ describe("remy model configs", () => {
     expect(REMY_CHARACTER_MODEL_CONFIGS.aj.debugDefaults.translateY).toBe(0);
   });
 
-  it("keeps Amy and AJ placement lanes centered while correcting their visible mesh centers", () => {
-    // Keep debug translation at zero so lane placement stays logical and reusable.
-    // Use only a small model-space offset so Amy/AJ remain horizontally centered on wide ledges.
-    expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.1, 6);
-    expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBeCloseTo(-0.14, 6);
+  it("keeps Amy and AJ mesh origins and ledge-depth placement centered for overhead inspection", () => {
+    // Keep debug/model lateral translation and ledge-depth inset at zero so the top-down
+    // red character footprint centers on the green ledge, not merely inside its bounds.
+    expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBeCloseTo(0, 6);
+    expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBeCloseTo(0, 6);
     expect(getRemyDebugDefaults("amy").translateX).toBe(0);
     expect(getRemyDebugDefaults("aj").translateX).toBe(0);
-    expect(getRemyModelConfig("amy").placement.ledgeInsetRatio).toBeCloseTo(0.28, 6);
-    expect(getRemyModelConfig("aj").placement.ledgeInsetRatio).toBeCloseTo(0.12, 6);
+    expect(getRemyModelConfig("amy").placement.ledgeInsetRatio).toBeCloseTo(0, 6);
+    expect(getRemyModelConfig("aj").placement.ledgeInsetRatio).toBeCloseTo(0, 6);
   });
 
   it("defines finite animation assets and debug slider metadata", () => {

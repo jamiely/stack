@@ -435,6 +435,17 @@ body {
   overflow-y: auto;
 }
 
+.game-shell--overhead-inspection .hud,
+.game-shell--overhead-inspection .debug-panel {
+  opacity: 0.18;
+  transition: opacity 0.15s ease;
+}
+
+.game-shell--overhead-inspection .debug-panel:hover,
+.game-shell--overhead-inspection .debug-panel:focus-within {
+  opacity: 0.96;
+}
+
 .debug-panel h2 {
   margin: 0;
   font-size: 0.95rem;

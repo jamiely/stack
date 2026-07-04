@@ -57,7 +57,7 @@ const DEFAULT_REMY_PLACEMENT_CONFIG = {
   maxHeight: 1.28,
   ledgeClearance: -0.15,
   ledgeInsetRatio: 0.28,
-  wallClearance: 0.01,
+  wallClearance: 0,
   rotationOffsetY: 0,
 } as const;
 
@@ -68,7 +68,7 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
       ledgeClearance: -0.1628,
-      ledgeInsetRatio: 0.19,
+      ledgeInsetRatio: 0,
     },
   },
   timmy: {
@@ -76,31 +76,31 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
     preparation: DEFAULT_REMY_PREPARATION_CONFIG,
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
-      ledgeInsetRatio: 0.17,
+      ledgeInsetRatio: 0,
     },
   },
   amy: {
     debugDefaults: REMY_AMY_DEBUG_DEFAULTS,
     preparation: {
       ...DEFAULT_REMY_PREPARATION_CONFIG,
-      modelOffsetX: -0.1,
+      modelOffsetX: 0,
     },
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
       ledgeClearance: -0.74,
-      ledgeInsetRatio: 0.28,
+      ledgeInsetRatio: 0,
     },
   },
   aj: {
     debugDefaults: REMY_AJ_DEBUG_DEFAULTS,
     preparation: {
       ...DEFAULT_REMY_PREPARATION_CONFIG,
-      modelOffsetX: -0.14,
+      modelOffsetX: 0,
     },
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
       ledgeClearance: -0.28,
-      ledgeInsetRatio: 0.12,
+      ledgeInsetRatio: 0,
     },
   },
 } satisfies Record<RemyCharacterId, RemyModelConfig>;
