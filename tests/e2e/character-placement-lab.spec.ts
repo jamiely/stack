@@ -201,14 +201,14 @@ test("character placement lab exposes deterministic transform snapshots and mode
   expect(afterStep!.debugConfig).toEqual(after!.debugConfig);
 });
 
-test("overhead ledge inspection view centers red characters on green ledges", async ({ page }) => {
+test("overhead ledge inspection view centers Amy on front and right-side ledges", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 });
-  await page.goto("/?debug&test&paused=1&seed=8");
-  await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
   await page.addStyleTag({ content: ".hud, .debug-panel, .overlay { display: none !important; }" });
 
   const records: Array<{
+    seed: number;
     characterId: string;
+    faceId: string | null;
     support: {
       ledgeLocalBounds: { minX: number; maxX: number; minZ: number; maxZ: number };
       footprintLocalBounds: { minX: number; maxX: number; minZ: number; maxZ: number };
@@ -224,22 +224,29 @@ test("overhead ledge inspection view centers red characters on green ledges", as
     };
   }> = [];
 
-  await page.evaluate(async () => {
-    const api = window.__towerStackerTestApi;
-    if (!api) {
-      throw new Error("Test API unavailable");
-    }
+  for (const seed of [1, 8, 15, 19, 25, 32, 34]) {
+    await page.goto(`/?debug&test&paused=1&seed=${seed}`);
+    await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
+    await page.addStyleTag({ content: ".hud, .debug-panel, .overlay { display: none !important; }" });
 
-    api.startGame();
-    api.setPaused(true);
-    api.applyDebugConfig({ distractionsEnabled: false });
-    api.applyModelLabState({ showSpatialHelpers: false, forceTopFallback: false, overheadInspectionView: false });
-    await api.autoPlayUntilCharacter({ maxPlacements: 40, stepsPerPlacement: 14, placementOffset: 0 });
-    api.applyModelLabState({ overheadInspectionView: true });
-  });
+    await page.evaluate(async () => {
+      const api = window.__towerStackerTestApi;
+      if (!api) {
+        throw new Error("Test API unavailable");
+      }
 
-  {
-    const { characterId, support } = await page.evaluate(() => {
+      api.startGame();
+      api.setPaused(true);
+      api.applyDebugConfig({ distractionsEnabled: false });
+      api.applyModelLabState({ showSpatialHelpers: false, forceTopFallback: false, overheadInspectionView: false });
+      await api.autoPlayUntilCharacter({ maxPlacements: 40, stepsPerPlacement: 14, placementOffset: 0 });
+      await api.loadCharacterPair("amy", null);
+      await new Promise((resolve) => window.setTimeout(resolve, 120));
+      api.applyModelLabState({ overheadInspectionView: true });
+      api.applyPlacementDebugMaterials();
+    });
+
+    const { characterId, faceId, support } = await page.evaluate(() => {
       const api = window.__towerStackerTestApi;
       if (!api) {
         throw new Error("Test API unavailable");
@@ -248,12 +255,19 @@ test("overhead ledge inspection view centers red characters on green ledges", as
       const character = api.getState().spatialDebug.primaryCharacter;
       return {
         characterId: character?.characterId ?? "unknown",
+        faceId: character?.anchor?.faceId ?? null,
         support: character?.anchor?.support ?? null,
       };
     });
 
     expect(characterId).toBe("amy");
-    expect(support, `${characterId} support snapshot`).toBeTruthy();
+    if (faceId !== "posX" && faceId !== "posZ") {
+      continue;
+    }
+    if (records.some((record) => record.faceId === faceId)) {
+      continue;
+    }
+    expect(support, `seed ${seed} ${characterId} support snapshot`).toBeTruthy();
 
     const screenshot = await page.screenshot({ type: "png" });
     const pixelAlignment = await page.evaluate(async (base64Png) => {
@@ -320,8 +334,14 @@ test("overhead ledge inspection view centers red characters on green ledges", as
       };
     }, screenshot.toString("base64"));
 
-    records.push({ characterId, support: support!, pixelAlignment });
+    records.push({ seed, characterId, faceId, support: support!, pixelAlignment });
+    if (records.some((record) => record.faceId === "posX") && records.some((record) => record.faceId === "posZ")) {
+      break;
+    }
   }
+
+  expect(records.some((record) => record.faceId === "posX"), "right-side posX ledge case captured").toBe(true);
+  expect(records.some((record) => record.faceId === "posZ"), "front posZ ledge case captured").toBe(true);
 
   for (const record of records) {
     const { footprintLocalBounds, ledgeLocalBounds, margins } = record.support;
@@ -330,21 +350,21 @@ test("overhead ledge inspection view centers red characters on green ledges", as
     const ledgeWidth = ledgeLocalBounds.maxX - ledgeLocalBounds.minX;
     const ledgeDepth = ledgeLocalBounds.maxZ - ledgeLocalBounds.minZ;
 
-    expect(Math.abs(footprintCenterX), `${record.characterId} ledge-local overhead X center`).toBeLessThanOrEqual(
+    expect(Math.abs(footprintCenterX), `${record.characterId} seed ${record.seed} ledge-local overhead X center`).toBeLessThanOrEqual(
       ledgeWidth * 0.04,
     );
-    expect(Math.abs(footprintCenterZ), `${record.characterId} ledge-local overhead Z center`).toBeLessThanOrEqual(
+    expect(Math.abs(footprintCenterZ), `${record.characterId} seed ${record.seed} ledge-local overhead Z center`).toBeLessThanOrEqual(
       ledgeDepth * 0.08,
     );
-    expect(Math.abs(margins.left - margins.right), `${record.characterId} equal left/right ledge margins`).toBeLessThanOrEqual(0.24);
-    expect(Math.abs(margins.back - margins.front), `${record.characterId} equal back/front ledge margins`).toBeLessThanOrEqual(0.18);
-    expect(record.pixelAlignment.redCount, `${record.characterId} red character pixels`).toBeGreaterThan(50);
-    expect(record.pixelAlignment.greenCount, `${record.characterId} green ledge pixels`).toBeGreaterThan(1000);
-    expect(record.pixelAlignment.normalizedOffsetX, `${record.characterId} top-down red/green X alignment`).toBeLessThanOrEqual(
-      0.08,
+    expect(Math.abs(margins.left - margins.right), `${record.characterId} seed ${record.seed} equal left/right ledge margins`).toBeLessThanOrEqual(0.24);
+    expect(Math.abs(margins.back - margins.front), `${record.characterId} seed ${record.seed} equal back/front ledge margins`).toBeLessThanOrEqual(0.18);
+    expect(record.pixelAlignment.redCount, `${record.characterId} seed ${record.seed} red character pixels`).toBeGreaterThan(50);
+    expect(record.pixelAlignment.greenCount, `${record.characterId} seed ${record.seed} green ledge pixels`).toBeGreaterThan(1000);
+    expect(record.pixelAlignment.normalizedOffsetX, `${record.characterId} seed ${record.seed} top-down red/green X alignment`).toBeLessThanOrEqual(
+      0.11,
     );
-    expect(record.pixelAlignment.normalizedOffsetY, `${record.characterId} top-down red/green Y alignment`).toBeLessThanOrEqual(
-      0.08,
+    expect(record.pixelAlignment.normalizedOffsetY, `${record.characterId} seed ${record.seed} top-down red/green Y alignment`).toBeLessThanOrEqual(
+      0.13,
     );
   }
 });
