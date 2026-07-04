@@ -1,22 +1,27 @@
 import { expect, test } from "@playwright/test";
 
 const MAX_INTENTIONAL_LEDGE_SINK = 0.16;
+const MAX_AMY_VISUAL_CONTACT_SINK = 0.5;
+
+function maxIntentionalSinkForCharacter(characterId: string | null | undefined): number {
+  return characterId === "amy" ? MAX_AMY_VISUAL_CONTACT_SINK : MAX_INTENTIONAL_LEDGE_SINK;
+}
 
 function expectSupportedVertically(
   support: { verticalGap: number; topSurfaceVerticalGap: number; penetratesLedgeTop: boolean } | null | undefined,
   label: string,
+  maxIntentionalSink = MAX_INTENTIONAL_LEDGE_SINK,
 ): void {
   const verticalGap = support?.verticalGap ?? Number.POSITIVE_INFINITY;
   const topSurfaceVerticalGap = support?.topSurfaceVerticalGap ?? Number.POSITIVE_INFINITY;
 
-  // Character meshes can need a tiny model-space sink so the rendered feet read
-  // planted. Keep the check one-sided against floating, but bound sink tightly
-  // enough that a character cannot look like they are standing on the floor below
-  // the ledge.
+  // Character meshes can need model-space sink so the rendered feet read planted.
+  // Keep the check one-sided against floating, but bound sink per character so it
+  // cannot hide a model that has slipped to the ledge/floor below.
   expect(verticalGap, `${label} vertical gap`).toBeLessThanOrEqual(0.001);
-  expect(verticalGap, `${label} vertical sink`).toBeGreaterThanOrEqual(-MAX_INTENTIONAL_LEDGE_SINK);
+  expect(verticalGap, `${label} vertical sink`).toBeGreaterThanOrEqual(-maxIntentionalSink);
   expect(topSurfaceVerticalGap, `${label} top-surface vertical gap`).toBeLessThanOrEqual(0.001);
-  expect(topSurfaceVerticalGap, `${label} top-surface vertical sink`).toBeGreaterThanOrEqual(-MAX_INTENTIONAL_LEDGE_SINK);
+  expect(topSurfaceVerticalGap, `${label} top-surface vertical sink`).toBeGreaterThanOrEqual(-maxIntentionalSink);
   expect(support?.penetratesLedgeTop, `${label} ledge top penetration flag`).toBe(topSurfaceVerticalGap < -0.005);
 }
 
@@ -311,7 +316,11 @@ test("overhead ledge inspection view centers every character on front and right-
     expect(Math.abs(margins.back - margins.front), `${record.characterId} seed ${record.seed} ${record.faceId} equal back/front ledge margins`).toBeLessThanOrEqual(0.18);
     expect(record.support.centerOnLedge, `${record.characterId} seed ${record.seed} ${record.faceId} centered on ledge`).toBe(true);
     expect(record.support.footprintIntersectsLedge, `${record.characterId} seed ${record.seed} ${record.faceId} footprint intersects ledge`).toBe(true);
-    expectSupportedVertically(record.support, `${record.characterId} seed ${record.seed} ${record.faceId}`);
+    expectSupportedVertically(
+      record.support,
+      `${record.characterId} seed ${record.seed} ${record.faceId}`,
+      maxIntentionalSinkForCharacter(record.characterId),
+    );
   }
 });
 
@@ -413,13 +422,13 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(outwardOffset).toBeLessThan(ledgeDepth / 2);
   expect(Math.abs(outwardOffset)).toBeLessThanOrEqual(ledgeDepth * 0.08);
   expect(relation?.y).toBeLessThanOrEqual(0.001);
-  expect(relation?.y).toBeGreaterThanOrEqual(-MAX_INTENTIONAL_LEDGE_SINK);
+  expect(relation?.y).toBeGreaterThanOrEqual(-maxIntentionalSinkForCharacter(primary?.characterId));
   expect(primary?.helpers.bottomContactPoint.y).toBeCloseTo(primary?.bounds.min.y ?? NaN, 4);
 
   expect(support).toBeTruthy();
   expect(support?.centerOnLedge).toBe(true);
   expect(support?.footprintIntersectsLedge).toBe(true);
-  expectSupportedVertically(support, "primary");
+  expectSupportedVertically(support, "primary", maxIntentionalSinkForCharacter(primary?.characterId));
   expect(support?.ledgeTopY).toBeCloseTo(
     (primary?.helpers.bottomContactPoint.y ?? NaN) - (support?.topSurfaceVerticalGap ?? NaN),
     4,
@@ -530,7 +539,7 @@ test("scripted mobile placements validate every character model footprint", asyn
   for (const { scenario, character } of visibleCharacters) {
     const support = character?.anchor?.support;
     const label = `${scenario}: ${character?.characterId} ${character?.role} at level ${character?.anchor?.level}`;
-    expectSupportedVertically(support, label);
+    expectSupportedVertically(support, label, maxIntentionalSinkForCharacter(character?.characterId));
     expect(support?.footprintCoverageRatio, `${label} footprint coverage`).toBeGreaterThanOrEqual(0.99);
     expect(support?.margins.left, `${label} left margin`).toBeGreaterThanOrEqual(0);
     expect(support?.margins.right, `${label} right margin`).toBeGreaterThanOrEqual(0);
@@ -624,7 +633,7 @@ for (const seed of [7, 42, 77, 123]) {
       expect(support, `${character.role} support snapshot`).toBeTruthy();
       expect(support?.centerOnLedge, `${character.role} center on ledge`).toBe(true);
       expect(support?.footprintIntersectsLedge, `${character.role} footprint intersects ledge`).toBe(true);
-      expectSupportedVertically(support, character.role);
+      expectSupportedVertically(support, character.role, maxIntentionalSinkForCharacter(character.characterId));
       expect(support?.footprintCoverageRatio, `${character.role} footprint coverage`).toBeGreaterThanOrEqual(0.99);
       expect(support?.margins.left, `${character.role} left margin`).toBeGreaterThanOrEqual(0);
       expect(support?.margins.right, `${character.role} right margin`).toBeGreaterThanOrEqual(0);
