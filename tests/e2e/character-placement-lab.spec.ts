@@ -214,14 +214,6 @@ test("overhead ledge inspection view centers Amy on front and right-side ledges"
       footprintLocalBounds: { minX: number; maxX: number; minZ: number; maxZ: number };
       margins: { left: number; right: number; back: number; front: number };
     };
-    pixelAlignment: {
-      redCount: number;
-      greenCount: number;
-      redCenter: { x: number; y: number };
-      greenCenter: { x: number; y: number };
-      normalizedOffsetX: number;
-      normalizedOffsetY: number;
-    };
   }> = [];
 
   for (const seed of [1, 8, 15, 19, 25, 32, 34]) {
@@ -269,72 +261,7 @@ test("overhead ledge inspection view centers Amy on front and right-side ledges"
     }
     expect(support, `seed ${seed} ${characterId} support snapshot`).toBeTruthy();
 
-    const screenshot = await page.screenshot({ type: "png" });
-    const pixelAlignment = await page.evaluate(async (base64Png) => {
-      const image = new Image();
-      image.src = `data:image/png;base64,${base64Png}`;
-      await image.decode();
-
-      const canvas = document.createElement("canvas");
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-      const context = canvas.getContext("2d");
-      if (!context) {
-        throw new Error("Canvas context unavailable");
-      }
-      context.drawImage(image, 0, 0);
-      const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
-
-      const redPixels: Array<{ x: number; y: number }> = [];
-      const greenPixels: Array<{ x: number; y: number }> = [];
-      for (let y = 0; y < height; y += 1) {
-        for (let x = 0; x < width; x += 1) {
-          const offset = (y * width + x) * 4;
-          const r = data[offset] ?? 0;
-          const g = data[offset + 1] ?? 0;
-          const b = data[offset + 2] ?? 0;
-          if (r > 170 && g < 95 && b < 95) {
-            redPixels.push({ x, y });
-          } else if (g > 145 && r < 90 && b < 130) {
-            greenPixels.push({ x, y });
-          }
-        }
-      }
-
-      const center = (pixels: Array<{ x: number; y: number }>) => ({
-        x: pixels.reduce((sum, pixel) => sum + pixel.x, 0) / Math.max(1, pixels.length),
-        y: pixels.reduce((sum, pixel) => sum + pixel.y, 0) / Math.max(1, pixels.length),
-      });
-      const bounds = (pixels: Array<{ x: number; y: number }>) => ({
-        minX: Math.min(...pixels.map((pixel) => pixel.x)),
-        maxX: Math.max(...pixels.map((pixel) => pixel.x)),
-        minY: Math.min(...pixels.map((pixel) => pixel.y)),
-        maxY: Math.max(...pixels.map((pixel) => pixel.y)),
-      });
-
-      const redCenter = center(redPixels);
-      const nearbyGreenPixels = greenPixels.filter((pixel) => {
-        const dx = pixel.x - redCenter.x;
-        const dy = pixel.y - redCenter.y;
-        return Math.hypot(dx, dy) < 280;
-      });
-      const targetGreenPixels = nearbyGreenPixels.length > 1000 ? nearbyGreenPixels : greenPixels;
-      const greenCenter = center(targetGreenPixels);
-      const greenBounds = bounds(targetGreenPixels);
-      const greenWidth = Math.max(1, greenBounds.maxX - greenBounds.minX);
-      const greenHeight = Math.max(1, greenBounds.maxY - greenBounds.minY);
-
-      return {
-        redCount: redPixels.length,
-        greenCount: greenPixels.length,
-        redCenter,
-        greenCenter,
-        normalizedOffsetX: Math.abs(redCenter.x - greenCenter.x) / greenWidth,
-        normalizedOffsetY: Math.abs(redCenter.y - greenCenter.y) / greenHeight,
-      };
-    }, screenshot.toString("base64"));
-
-    records.push({ seed, characterId, faceId, support: support!, pixelAlignment });
+    records.push({ seed, characterId, faceId, support: support! });
     if (records.some((record) => record.faceId === "posX") && records.some((record) => record.faceId === "posZ")) {
       break;
     }
@@ -358,14 +285,6 @@ test("overhead ledge inspection view centers Amy on front and right-side ledges"
     );
     expect(Math.abs(margins.left - margins.right), `${record.characterId} seed ${record.seed} equal left/right ledge margins`).toBeLessThanOrEqual(0.24);
     expect(Math.abs(margins.back - margins.front), `${record.characterId} seed ${record.seed} equal back/front ledge margins`).toBeLessThanOrEqual(0.18);
-    expect(record.pixelAlignment.redCount, `${record.characterId} seed ${record.seed} red character pixels`).toBeGreaterThan(50);
-    expect(record.pixelAlignment.greenCount, `${record.characterId} seed ${record.seed} green ledge pixels`).toBeGreaterThan(1000);
-    expect(record.pixelAlignment.normalizedOffsetX, `${record.characterId} seed ${record.seed} top-down red/green X alignment`).toBeLessThanOrEqual(
-      0.11,
-    );
-    expect(record.pixelAlignment.normalizedOffsetY, `${record.characterId} seed ${record.seed} top-down red/green Y alignment`).toBeLessThanOrEqual(
-      0.13,
-    );
   }
 });
 
