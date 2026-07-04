@@ -201,74 +201,90 @@ test("character placement lab exposes deterministic transform snapshots and mode
   expect(afterStep!.debugConfig).toEqual(after!.debugConfig);
 });
 
-test("overhead ledge inspection view centers Amy on front and right-side ledges", async ({ page }) => {
+test("overhead ledge inspection view centers every character on front and right-side ledges", async ({ page }) => {
+  test.setTimeout(120_000);
   await page.setViewportSize({ width: 900, height: 900 });
   await page.addStyleTag({ content: ".hud, .debug-panel, .overlay { display: none !important; }" });
 
+  const characterIds = ["remy", "timmy", "amy", "aj"] as const;
+  const targetFaces = ["posZ", "posX"] as const;
   const records: Array<{
     seed: number;
-    characterId: string;
-    faceId: string | null;
+    characterId: (typeof characterIds)[number];
+    faceId: (typeof targetFaces)[number];
     support: {
       ledgeLocalBounds: { minX: number; maxX: number; minZ: number; maxZ: number };
       footprintLocalBounds: { minX: number; maxX: number; minZ: number; maxZ: number };
       margins: { left: number; right: number; back: number; front: number };
+      centerOnLedge: boolean;
+      footprintIntersectsLedge: boolean;
+      verticalGap: number;
+      topSurfaceVerticalGap: number;
+      penetratesLedgeTop: boolean;
     };
   }> = [];
 
-  for (const seed of [1, 8, 15, 19, 25, 32, 34]) {
-    await page.goto(`/?debug&test&paused=1&seed=${seed}`);
-    await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
-    await page.addStyleTag({ content: ".hud, .debug-panel, .overlay { display: none !important; }" });
+  for (const characterId of characterIds) {
+    const capturedFaces = new Set<string>();
 
-    await page.evaluate(async () => {
-      const api = window.__towerStackerTestApi;
-      if (!api) {
-        throw new Error("Test API unavailable");
+    for (let seed = 1; seed <= 90 && capturedFaces.size < targetFaces.length; seed += 1) {
+      await page.goto(`/?debug&test&paused=1&seed=${seed}`);
+      await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
+      await page.addStyleTag({ content: ".hud, .debug-panel, .overlay { display: none !important; }" });
+
+      await page.evaluate(async ({ characterId }) => {
+        const api = window.__towerStackerTestApi;
+        if (!api) {
+          throw new Error("Test API unavailable");
+        }
+
+        api.startGame();
+        api.setPaused(true);
+        api.applyDebugConfig({ distractionsEnabled: false });
+        api.applyModelLabState({ showSpatialHelpers: false, forceTopFallback: false, overheadInspectionView: false });
+        await api.autoPlayUntilCharacter({ maxPlacements: 40, stepsPerPlacement: 14, placementOffset: 0 });
+        await api.loadCharacterPair(characterId, null);
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+        api.applyModelLabState({ overheadInspectionView: true });
+        api.applyPlacementDebugMaterials();
+      }, { characterId });
+
+      const { actualCharacterId, faceId, support } = await page.evaluate(() => {
+        const api = window.__towerStackerTestApi;
+        if (!api) {
+          throw new Error("Test API unavailable");
+        }
+        api.applyPlacementDebugMaterials();
+        const character = api.getState().spatialDebug.primaryCharacter;
+        return {
+          actualCharacterId: character?.characterId ?? "unknown",
+          faceId: character?.anchor?.faceId ?? null,
+          support: character?.anchor?.support ?? null,
+        };
+      });
+
+      expect(actualCharacterId).toBe(characterId);
+      if (faceId !== "posX" && faceId !== "posZ") {
+        continue;
       }
-
-      api.startGame();
-      api.setPaused(true);
-      api.applyDebugConfig({ distractionsEnabled: false });
-      api.applyModelLabState({ showSpatialHelpers: false, forceTopFallback: false, overheadInspectionView: false });
-      await api.autoPlayUntilCharacter({ maxPlacements: 40, stepsPerPlacement: 14, placementOffset: 0 });
-      await api.loadCharacterPair("amy", null);
-      await new Promise((resolve) => window.setTimeout(resolve, 120));
-      api.applyModelLabState({ overheadInspectionView: true });
-      api.applyPlacementDebugMaterials();
-    });
-
-    const { characterId, faceId, support } = await page.evaluate(() => {
-      const api = window.__towerStackerTestApi;
-      if (!api) {
-        throw new Error("Test API unavailable");
+      if (capturedFaces.has(faceId)) {
+        continue;
       }
-      api.applyPlacementDebugMaterials();
-      const character = api.getState().spatialDebug.primaryCharacter;
-      return {
-        characterId: character?.characterId ?? "unknown",
-        faceId: character?.anchor?.faceId ?? null,
-        support: character?.anchor?.support ?? null,
-      };
-    });
+      expect(support, `${characterId} seed ${seed} ${faceId} support snapshot`).toBeTruthy();
 
-    expect(characterId).toBe("amy");
-    if (faceId !== "posX" && faceId !== "posZ") {
-      continue;
+      records.push({ seed, characterId, faceId, support: support! });
+      capturedFaces.add(faceId);
     }
-    if (records.some((record) => record.faceId === faceId)) {
-      continue;
-    }
-    expect(support, `seed ${seed} ${characterId} support snapshot`).toBeTruthy();
 
-    records.push({ seed, characterId, faceId, support: support! });
-    if (records.some((record) => record.faceId === "posX") && records.some((record) => record.faceId === "posZ")) {
-      break;
+    for (const faceId of targetFaces) {
+      expect(
+        records.some((record) => record.characterId === characterId && record.faceId === faceId),
+        `${characterId} ${faceId === "posX" ? "right-side posX" : "front posZ"} ledge case captured`,
+      ).toBe(true);
     }
   }
 
-  expect(records.some((record) => record.faceId === "posX"), "right-side posX ledge case captured").toBe(true);
-  expect(records.some((record) => record.faceId === "posZ"), "front posZ ledge case captured").toBe(true);
+  expect(records).toHaveLength(characterIds.length * targetFaces.length);
 
   for (const record of records) {
     const { footprintLocalBounds, ledgeLocalBounds, margins } = record.support;
@@ -277,14 +293,17 @@ test("overhead ledge inspection view centers Amy on front and right-side ledges"
     const ledgeWidth = ledgeLocalBounds.maxX - ledgeLocalBounds.minX;
     const ledgeDepth = ledgeLocalBounds.maxZ - ledgeLocalBounds.minZ;
 
-    expect(Math.abs(footprintCenterX), `${record.characterId} seed ${record.seed} ledge-local overhead X center`).toBeLessThanOrEqual(
+    expect(Math.abs(footprintCenterX), `${record.characterId} seed ${record.seed} ${record.faceId} ledge-local overhead X center`).toBeLessThanOrEqual(
       ledgeWidth * 0.04,
     );
-    expect(Math.abs(footprintCenterZ), `${record.characterId} seed ${record.seed} ledge-local overhead Z center`).toBeLessThanOrEqual(
+    expect(Math.abs(footprintCenterZ), `${record.characterId} seed ${record.seed} ${record.faceId} ledge-local overhead Z center`).toBeLessThanOrEqual(
       ledgeDepth * 0.08,
     );
-    expect(Math.abs(margins.left - margins.right), `${record.characterId} seed ${record.seed} equal left/right ledge margins`).toBeLessThanOrEqual(0.24);
-    expect(Math.abs(margins.back - margins.front), `${record.characterId} seed ${record.seed} equal back/front ledge margins`).toBeLessThanOrEqual(0.18);
+    expect(Math.abs(margins.left - margins.right), `${record.characterId} seed ${record.seed} ${record.faceId} equal left/right ledge margins`).toBeLessThanOrEqual(0.24);
+    expect(Math.abs(margins.back - margins.front), `${record.characterId} seed ${record.seed} ${record.faceId} equal back/front ledge margins`).toBeLessThanOrEqual(0.18);
+    expect(record.support.centerOnLedge, `${record.characterId} seed ${record.seed} ${record.faceId} centered on ledge`).toBe(true);
+    expect(record.support.footprintIntersectsLedge, `${record.characterId} seed ${record.seed} ${record.faceId} footprint intersects ledge`).toBe(true);
+    expectSupportedVertically(record.support, `${record.characterId} seed ${record.seed} ${record.faceId}`);
   }
 });
 

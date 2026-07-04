@@ -132,7 +132,7 @@ Runtime tuning panel includes:
   - High-start-stack performance smoke with archival/quality toggles and responsive input assertion
   - Deterministic scripted outcomes preserved with optimization toggles enabled
   - Fireworks render adapter regression coverage for metadata staging, expired-node cleanup, 30s cap/degradation stress bounds, and a canonical deterministic chrysanthemum screenshot gate (seed `42`, first primary-burst transition + 2 paused ticks, `threshold: 0.12`, `maxDiffPixels: 180`)
-  - Character placement model-lab coverage for top-down overhead red-character/green-ledge centering and per-character ledge-footprint support, including Amy on both front and right-side ledges from regular game spawning
+  - Character placement model-lab coverage for top-down overhead red-character/green-ledge centering and per-character ledge-footprint support, including every character on both front and right-side ledges from regular game spawning
   - Mobile-sized touch/tap stop input path
 - Unit coverage threshold is enforced at 90% for non-rendering code
 - Full regression closure command set for this milestone: `npm run test:unit`, `npm run test:e2e`, `npm run coverage`, and `npm run build` (all must pass before merge)
