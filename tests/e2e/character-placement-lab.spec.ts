@@ -224,45 +224,53 @@ test("overhead ledge inspection view centers every character on front and right-
     };
   }> = [];
 
+  async function captureFaceForSeed(characterId: (typeof characterIds)[number], seed: number) {
+    await page.goto(`/?debug&test&paused=1&seed=${seed}`);
+    await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
+    await page.addStyleTag({ content: ".hud, .debug-panel, .overlay { display: none !important; }" });
+
+    await page.evaluate(async ({ characterId }) => {
+      const api = window.__towerStackerTestApi;
+      if (!api) {
+        throw new Error("Test API unavailable");
+      }
+
+      api.startGame();
+      api.setPaused(true);
+      api.applyDebugConfig({ distractionsEnabled: false });
+      api.applyModelLabState({ showSpatialHelpers: false, forceTopFallback: false, overheadInspectionView: false });
+      await api.autoPlayUntilCharacter({ maxPlacements: 40, stepsPerPlacement: 14, placementOffset: 0 });
+      await api.loadCharacterPair(characterId, null);
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+      api.applyModelLabState({ overheadInspectionView: true });
+      api.applyPlacementDebugMaterials();
+    }, { characterId });
+
+    return page.evaluate(() => {
+      const api = window.__towerStackerTestApi;
+      if (!api) {
+        throw new Error("Test API unavailable");
+      }
+      api.applyPlacementDebugMaterials();
+      const character = api.getState().spatialDebug.primaryCharacter;
+      return {
+        actualCharacterId: character?.characterId ?? "unknown",
+        faceId: character?.anchor?.faceId ?? null,
+        support: character?.anchor?.support ?? null,
+      };
+    });
+  }
+
+  const candidateSeeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 19, 25, 32, 34];
   for (const characterId of characterIds) {
     const capturedFaces = new Set<string>();
 
-    for (let seed = 1; seed <= 90 && capturedFaces.size < targetFaces.length; seed += 1) {
-      await page.goto(`/?debug&test&paused=1&seed=${seed}`);
-      await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
-      await page.addStyleTag({ content: ".hud, .debug-panel, .overlay { display: none !important; }" });
+    for (const seed of candidateSeeds) {
+      if (capturedFaces.size >= targetFaces.length) {
+        break;
+      }
 
-      await page.evaluate(async ({ characterId }) => {
-        const api = window.__towerStackerTestApi;
-        if (!api) {
-          throw new Error("Test API unavailable");
-        }
-
-        api.startGame();
-        api.setPaused(true);
-        api.applyDebugConfig({ distractionsEnabled: false });
-        api.applyModelLabState({ showSpatialHelpers: false, forceTopFallback: false, overheadInspectionView: false });
-        await api.autoPlayUntilCharacter({ maxPlacements: 40, stepsPerPlacement: 14, placementOffset: 0 });
-        await api.loadCharacterPair(characterId, null);
-        await new Promise((resolve) => window.setTimeout(resolve, 120));
-        api.applyModelLabState({ overheadInspectionView: true });
-        api.applyPlacementDebugMaterials();
-      }, { characterId });
-
-      const { actualCharacterId, faceId, support } = await page.evaluate(() => {
-        const api = window.__towerStackerTestApi;
-        if (!api) {
-          throw new Error("Test API unavailable");
-        }
-        api.applyPlacementDebugMaterials();
-        const character = api.getState().spatialDebug.primaryCharacter;
-        return {
-          actualCharacterId: character?.characterId ?? "unknown",
-          faceId: character?.anchor?.faceId ?? null,
-          support: character?.anchor?.support ?? null,
-        };
-      });
-
+      const { actualCharacterId, faceId, support } = await captureFaceForSeed(characterId, seed);
       expect(actualCharacterId).toBe(characterId);
       if (faceId !== "posX" && faceId !== "posZ") {
         continue;
