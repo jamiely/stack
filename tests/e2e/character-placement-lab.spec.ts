@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const MAX_INTENTIONAL_LEDGE_SINK = 0.16;
-const MAX_AMY_VISUAL_CONTACT_SINK = 0.5;
+const MAX_AMY_VISUAL_CONTACT_SINK = MAX_INTENTIONAL_LEDGE_SINK;
 
 function maxIntentionalSinkForCharacter(characterId: string | null | undefined): number {
   return characterId === "amy" ? MAX_AMY_VISUAL_CONTACT_SINK : MAX_INTENTIONAL_LEDGE_SINK;
