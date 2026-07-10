@@ -42,7 +42,7 @@ import {
   shouldUseDarkWindowTrim,
 } from "./logic/decor";
 import { advanceOscillation } from "./logic/oscillation";
-import { samplePlacementCameraShake, sampleTremorCameraShake } from "./logic/cameraEffects";
+import { resolveCharacterFramingLookAtX, samplePlacementCameraShake, sampleTremorCameraShake } from "./logic/cameraEffects";
 import { sampleDayNightFrame } from "./logic/dayNight";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
 import {
@@ -461,7 +461,9 @@ export class Game {
   private frameTimeMs = 0;
   private placementShakeRemaining = 0;
   private averageFrameTimeMs = 0;
+  private cameraLookAtX = 0;
   private cameraLookAtY = STACK_LOOK_AHEAD_Y;
+  private readonly cameraCharacterWorldPosition = new Vector3();
   private readonly cameraTargetPosition = new Vector3(
     CAMERA_X,
     defaultDebugConfig.cameraHeight + defaultDebugConfig.cameraFramingOffset + defaultDebugConfig.cameraYOffset,
@@ -1417,6 +1419,7 @@ export class Game {
       STACK_LOOK_AHEAD_Y;
     const initialTargetY = initialFocusY + this.debugConfig.cameraHeight;
     this.cameraTargetPosition.set(CAMERA_X, initialTargetY, this.debugConfig.cameraDistance);
+    this.cameraLookAtX = 0;
     this.cameraLookAtY = Math.max(1.2, initialFocusY);
 
     if (this.modelLabState.enabled) {
@@ -3095,8 +3098,14 @@ export class Game {
 
     const lookAtTargetY = Math.max(1.2, focusY);
     const lookAtLerp = Math.min(1, fpsAdjustedLerp * 1.25);
+    const characterWorldX =
+      this.remyView && this.remyAnchor && !this.remySuppressedByTentacles
+        ? this.remyView.sceneNodes.placementNode.getWorldPosition(this.cameraCharacterWorldPosition).x
+        : null;
+    const lookAtTargetX = resolveCharacterFramingLookAtX(characterWorldX, this.camera.aspect);
+    this.cameraLookAtX += (lookAtTargetX - this.cameraLookAtX) * lookAtLerp;
     this.cameraLookAtY += (lookAtTargetY - this.cameraLookAtY) * lookAtLerp;
-    this.camera.lookAt(0, this.cameraLookAtY, 0);
+    this.camera.lookAt(this.cameraLookAtX, this.cameraLookAtY, 0);
   }
 
   private applyOverheadInspectionCamera(): boolean {

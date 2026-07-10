@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { samplePlacementCameraShake, sampleTremorCameraShake } from "../../src/game/logic/cameraEffects";
+import {
+  resolveCharacterFramingLookAtX,
+  samplePlacementCameraShake,
+  sampleTremorCameraShake,
+} from "../../src/game/logic/cameraEffects";
 
 describe("cameraEffects", () => {
   it("adds vertical shake during tremors", () => {
@@ -24,5 +28,15 @@ describe("cameraEffects", () => {
   it("applies placement shake across x/y/z when active", () => {
     const shake = samplePlacementCameraShake(2.4, 0.1, 0.16, 0.4);
     expect(Math.abs(shake.x) + Math.abs(shake.y) + Math.abs(shake.z)).toBeGreaterThan(0);
+  });
+
+  it("pulls a far-right character into frame on narrow mobile screens", () => {
+    expect(resolveCharacterFramingLookAtX(4.93, 390 / 844)).toBeCloseTo(2.43, 2);
+  });
+
+  it("keeps normal tower framing on wide screens and for central characters", () => {
+    expect(resolveCharacterFramingLookAtX(4.93, 1)).toBe(0);
+    expect(resolveCharacterFramingLookAtX(1.2, 390 / 844)).toBe(0);
+    expect(resolveCharacterFramingLookAtX(null, 390 / 844)).toBe(0);
   });
 });

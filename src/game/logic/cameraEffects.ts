@@ -1,3 +1,13 @@
+export function resolveCharacterFramingLookAtX(characterWorldX: number | null, viewportAspect: number): number {
+  if (characterWorldX === null || !Number.isFinite(characterWorldX) || !Number.isFinite(viewportAspect)) {
+    return 0;
+  }
+
+  const narrowScreenFactor = Math.max(0, Math.min(1, (0.75 - viewportAspect) / 0.25));
+  const outsideTowerOffset = Math.max(0, Math.abs(characterWorldX) - 2.5);
+  return Math.sign(characterWorldX) * Math.min(2.5, outsideTowerOffset) * narrowScreenFactor;
+}
+
 export function sampleTremorCameraShake(
   elapsedSeconds: number,
   tremorStrength: number,
