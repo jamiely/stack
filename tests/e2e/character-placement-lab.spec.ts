@@ -7,6 +7,10 @@ function maxIntentionalSinkForCharacter(characterId: string | null | undefined):
   return characterId === "amy" ? MAX_AMY_VISUAL_CONTACT_SINK : MAX_INTENTIONAL_LEDGE_SINK;
 }
 
+function outwardRatioRangeForCharacter(characterId: string | null | undefined): { min: number; max: number } {
+  return characterId === "amy" ? { min: 0.27, max: 0.33 } : { min: 0.14, max: 0.22 };
+}
+
 function expectSupportedVertically(
   support: { verticalGap: number; topSurfaceVerticalGap: number; penetratesLedgeTop: boolean } | null | undefined,
   label: string,
@@ -301,6 +305,7 @@ test("overhead ledge inspection keeps every character supported and visibly clea
 
   for (const record of records) {
     const { footprintLocalBounds, ledgeLocalBounds, margins } = record.support;
+    const outwardRatioRange = outwardRatioRangeForCharacter(record.characterId);
     const footprintCenterX = (footprintLocalBounds.minX + footprintLocalBounds.maxX) / 2;
     const footprintCenterZ = (footprintLocalBounds.minZ + footprintLocalBounds.maxZ) / 2;
     const ledgeWidth = ledgeLocalBounds.maxX - ledgeLocalBounds.minX;
@@ -310,10 +315,10 @@ test("overhead ledge inspection keeps every character supported and visibly clea
       ledgeWidth * 0.04,
     );
     expect(footprintCenterZ, `${record.characterId} seed ${record.seed} ${record.faceId} outward ledge-depth bias`).toBeGreaterThanOrEqual(
-      ledgeDepth * 0.14,
+      ledgeDepth * outwardRatioRange.min,
     );
     expect(footprintCenterZ, `${record.characterId} seed ${record.seed} ${record.faceId} front-edge safety`).toBeLessThanOrEqual(
-      ledgeDepth * 0.22,
+      ledgeDepth * outwardRatioRange.max,
     );
     expect(Math.abs(margins.left - margins.right), `${record.characterId} seed ${record.seed} ${record.faceId} equal left/right ledge margins`).toBeLessThanOrEqual(0.24);
     expect(margins.back - margins.front, `${record.characterId} seed ${record.seed} ${record.faceId} visible wall clearance`).toBeGreaterThanOrEqual(
@@ -416,6 +421,7 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   const outwardOffset = relation ? relation.x * Math.sin(rotationRadians) + relation.z * Math.cos(rotationRadians) : NaN;
   const ledgeDepth = primary?.anchor?.ledgeDepth ?? 0;
   const usableWidth = primary?.anchor?.usableWidth ?? 0;
+  const outwardRatioRange = outwardRatioRangeForCharacter(primary?.characterId);
 
 
   expect(primary?.anchor?.widthRatio).toBeGreaterThan(0);
@@ -426,8 +432,8 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(Math.abs(lateralOffset)).toBeLessThanOrEqual(usableWidth / 2);
   expect(outwardOffset).toBeGreaterThan(-ledgeDepth / 2);
   expect(outwardOffset).toBeLessThan(ledgeDepth / 2);
-  expect(outwardOffset).toBeGreaterThanOrEqual(ledgeDepth * 0.14);
-  expect(outwardOffset).toBeLessThanOrEqual(ledgeDepth * 0.22);
+  expect(outwardOffset).toBeGreaterThanOrEqual(ledgeDepth * outwardRatioRange.min);
+  expect(outwardOffset).toBeLessThanOrEqual(ledgeDepth * outwardRatioRange.max);
   expect(relation?.y).toBeLessThanOrEqual(0.001);
   expect(relation?.y).toBeGreaterThanOrEqual(-maxIntentionalSinkForCharacter(primary?.characterId));
   expect(primary?.helpers.bottomContactPoint.y).toBeCloseTo(primary?.bounds.min.y ?? NaN, 4);
@@ -482,14 +488,15 @@ test("single Amy and AJ footprints stay horizontally centered and visibly clear 
     const footprintCenterZ = footprintLocalBounds ? (footprintLocalBounds.minZ + footprintLocalBounds.maxZ) / 2 : Number.NaN;
     const ledgeHalfWidth = ledgeLocalBounds ? (ledgeLocalBounds.maxX - ledgeLocalBounds.minX) / 2 : Number.NaN;
     const ledgeHalfDepth = ledgeLocalBounds ? (ledgeLocalBounds.maxZ - ledgeLocalBounds.minZ) / 2 : Number.NaN;
+    const outwardRatioRange = outwardRatioRangeForCharacter(record.characterId);
     expect(support, `${record.characterId} support snapshot`).toBeTruthy();
     expect(Math.abs(footprintCenterX), `${record.characterId} horizontal ledge centering`).toBeLessThanOrEqual(
       Math.min(0.2, ledgeHalfWidth * 0.08),
     );
     expect(support?.margins.back, `${record.characterId} visible wall-side shelf margin`).toBeGreaterThanOrEqual(0.18);
     expect(support?.margins.front, `${record.characterId} visible front shelf margin`).toBeGreaterThanOrEqual(0.18);
-    expect(footprintCenterZ, `${record.characterId} outward ledge-depth bias`).toBeGreaterThanOrEqual(ledgeHalfDepth * 0.28);
-    expect(footprintCenterZ, `${record.characterId} front-edge safety`).toBeLessThanOrEqual(ledgeHalfDepth * 0.44);
+    expect(footprintCenterZ, `${record.characterId} outward ledge-depth bias`).toBeGreaterThanOrEqual(ledgeHalfDepth * outwardRatioRange.min * 2);
+    expect(footprintCenterZ, `${record.characterId} front-edge safety`).toBeLessThanOrEqual(ledgeHalfDepth * outwardRatioRange.max * 2);
     if (record.characterId === "aj") {
       expect(support?.margins.front, `${record.characterId} front ledge margin`).toBeGreaterThanOrEqual(0.3);
     }

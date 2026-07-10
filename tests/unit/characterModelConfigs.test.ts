@@ -55,14 +55,14 @@ describe("remy model configs", () => {
 
   it("keeps every character visibly separated from the wall while safely inside the ledge", () => {
     // The normal perspective makes a mathematically centered character look attached to
-    // the wall. A modest shared outward bias exposes ledge top behind the feet while
-    // preserving ample front-edge margin.
+    // the wall. A modest outward bias exposes ledge top behind the feet while preserving
+    // front-edge margin; Amy needs more because her animated pose extends wallward.
     expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBeCloseTo(0, 6);
     expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBeCloseTo(0, 6);
     expect(getRemyDebugDefaults("amy").translateX).toBe(0);
     expect(getRemyDebugDefaults("aj").translateX).toBe(0);
-    Object.values(REMY_CHARACTER_MODEL_CONFIGS).forEach((config) => {
-      expect(config.placement.ledgeInsetRatio).toBeCloseTo(0.18, 6);
+    Object.entries(REMY_CHARACTER_MODEL_CONFIGS).forEach(([characterId, config]) => {
+      expect(config.placement.ledgeInsetRatio).toBeCloseTo(characterId === "amy" ? 0.3 : 0.18, 6);
     });
   });
 
