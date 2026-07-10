@@ -53,15 +53,17 @@ describe("remy model configs", () => {
     expect(REMY_CHARACTER_MODEL_CONFIGS.aj.debugDefaults.translateY).toBe(0);
   });
 
-  it("keeps Amy and AJ mesh origins and ledge-depth placement centered for overhead inspection", () => {
-    // Keep debug/model lateral translation and ledge-depth inset at zero so the top-down
-    // red character footprint centers on the green ledge, not merely inside its bounds.
+  it("keeps every character visibly separated from the wall while safely inside the ledge", () => {
+    // The normal perspective makes a mathematically centered character look attached to
+    // the wall. A modest shared outward bias exposes ledge top behind the feet while
+    // preserving ample front-edge margin.
     expect(getRemyModelConfig("amy").preparation.modelOffsetX ?? 0).toBeCloseTo(0, 6);
     expect(getRemyModelConfig("aj").preparation.modelOffsetX ?? 0).toBeCloseTo(0, 6);
     expect(getRemyDebugDefaults("amy").translateX).toBe(0);
     expect(getRemyDebugDefaults("aj").translateX).toBe(0);
-    expect(getRemyModelConfig("amy").placement.ledgeInsetRatio).toBeCloseTo(0, 6);
-    expect(getRemyModelConfig("aj").placement.ledgeInsetRatio).toBeCloseTo(0, 6);
+    Object.values(REMY_CHARACTER_MODEL_CONFIGS).forEach((config) => {
+      expect(config.placement.ledgeInsetRatio).toBeCloseTo(0.18, 6);
+    });
   });
 
   it("defines finite animation assets and debug slider metadata", () => {

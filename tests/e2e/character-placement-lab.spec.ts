@@ -206,7 +206,7 @@ test("character placement lab exposes deterministic transform snapshots and mode
   expect(afterStep!.debugConfig).toEqual(after!.debugConfig);
 });
 
-test("overhead ledge inspection view centers every character on front and right-side ledges", async ({ page }) => {
+test("overhead ledge inspection keeps every character supported and visibly clear of the wall", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 900, height: 900 });
   await page.addStyleTag({ content: ".hud, .debug-panel, .overlay { display: none !important; }" });
@@ -309,11 +309,17 @@ test("overhead ledge inspection view centers every character on front and right-
     expect(Math.abs(footprintCenterX), `${record.characterId} seed ${record.seed} ${record.faceId} ledge-local overhead X center`).toBeLessThanOrEqual(
       ledgeWidth * 0.04,
     );
-    expect(Math.abs(footprintCenterZ), `${record.characterId} seed ${record.seed} ${record.faceId} ledge-local overhead Z center`).toBeLessThanOrEqual(
-      ledgeDepth * 0.08,
+    expect(footprintCenterZ, `${record.characterId} seed ${record.seed} ${record.faceId} outward ledge-depth bias`).toBeGreaterThanOrEqual(
+      ledgeDepth * 0.14,
+    );
+    expect(footprintCenterZ, `${record.characterId} seed ${record.seed} ${record.faceId} front-edge safety`).toBeLessThanOrEqual(
+      ledgeDepth * 0.22,
     );
     expect(Math.abs(margins.left - margins.right), `${record.characterId} seed ${record.seed} ${record.faceId} equal left/right ledge margins`).toBeLessThanOrEqual(0.24);
-    expect(Math.abs(margins.back - margins.front), `${record.characterId} seed ${record.seed} ${record.faceId} equal back/front ledge margins`).toBeLessThanOrEqual(0.18);
+    expect(margins.back - margins.front, `${record.characterId} seed ${record.seed} ${record.faceId} visible wall clearance`).toBeGreaterThanOrEqual(
+      ledgeDepth * 0.25,
+    );
+    expect(margins.front, `${record.characterId} seed ${record.seed} ${record.faceId} visible front support`).toBeGreaterThanOrEqual(0.15);
     expect(record.support.centerOnLedge, `${record.characterId} seed ${record.seed} ${record.faceId} centered on ledge`).toBe(true);
     expect(record.support.footprintIntersectsLedge, `${record.characterId} seed ${record.seed} ${record.faceId} footprint intersects ledge`).toBe(true);
     expectSupportedVertically(
@@ -420,7 +426,8 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(Math.abs(lateralOffset)).toBeLessThanOrEqual(usableWidth / 2);
   expect(outwardOffset).toBeGreaterThan(-ledgeDepth / 2);
   expect(outwardOffset).toBeLessThan(ledgeDepth / 2);
-  expect(Math.abs(outwardOffset)).toBeLessThanOrEqual(ledgeDepth * 0.08);
+  expect(outwardOffset).toBeGreaterThanOrEqual(ledgeDepth * 0.14);
+  expect(outwardOffset).toBeLessThanOrEqual(ledgeDepth * 0.22);
   expect(relation?.y).toBeLessThanOrEqual(0.001);
   expect(relation?.y).toBeGreaterThanOrEqual(-maxIntentionalSinkForCharacter(primary?.characterId));
   expect(primary?.helpers.bottomContactPoint.y).toBeCloseTo(primary?.bounds.min.y ?? NaN, 4);
@@ -439,7 +446,7 @@ test("single loaded character stays centered when a wide ledge requests dual lan
   expect(support?.margins.back).toBeGreaterThanOrEqual(0);
   expect(support?.margins.front).toBeGreaterThanOrEqual(0);
 });
-test("single Amy and AJ footprints stay centered on wide ledges", async ({ page }) => {
+test("single Amy and AJ footprints stay horizontally centered and visibly clear of the wall", async ({ page }) => {
   await page.goto("/?debug&test&paused=1&seed=8");
   await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
 
@@ -481,10 +488,9 @@ test("single Amy and AJ footprints stay centered on wide ledges", async ({ page 
     );
     expect(support?.margins.back, `${record.characterId} visible wall-side shelf margin`).toBeGreaterThanOrEqual(0.18);
     expect(support?.margins.front, `${record.characterId} visible front shelf margin`).toBeGreaterThanOrEqual(0.18);
+    expect(footprintCenterZ, `${record.characterId} outward ledge-depth bias`).toBeGreaterThanOrEqual(ledgeHalfDepth * 0.28);
+    expect(footprintCenterZ, `${record.characterId} front-edge safety`).toBeLessThanOrEqual(ledgeHalfDepth * 0.44);
     if (record.characterId === "aj") {
-      expect(Math.abs(footprintCenterZ), `${record.characterId} ledge-depth centering`).toBeLessThanOrEqual(
-        Math.min(0.28, ledgeHalfDepth * 0.35),
-      );
       expect(support?.margins.front, `${record.characterId} front ledge margin`).toBeGreaterThanOrEqual(0.3);
     }
     expect(support?.footprintCoverageRatio, `${record.characterId} footprint coverage`).toBeGreaterThanOrEqual(0.99);
