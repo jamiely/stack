@@ -7,8 +7,8 @@ function maxIntentionalSinkForCharacter(characterId: string | null | undefined):
   return characterId === "amy" ? MAX_AMY_VISUAL_CONTACT_SINK : MAX_INTENTIONAL_LEDGE_SINK;
 }
 
-function outwardRatioRangeForCharacter(characterId: string | null | undefined): { min: number; max: number } {
-  return characterId === "amy" ? { min: 0.27, max: 0.33 } : { min: 0.14, max: 0.22 };
+function outwardRatioRangeForCharacter(_characterId: string | null | undefined): { min: number; max: number } {
+  return { min: 0.14, max: 0.22 };
 }
 
 function expectSupportedVertically(
