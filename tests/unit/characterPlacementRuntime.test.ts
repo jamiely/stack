@@ -60,4 +60,30 @@ describe("character placement runtime helpers", () => {
       }),
     ).toEqual([0]);
   });
+
+  it("keeps the complete character support footprint inside both ledge ends", () => {
+    const offsets = resolveDualCharacterLaneOffsets({
+      usableWidth: 1.2,
+      useDualCharacters: true,
+      edgePadding: 0.04,
+      spreadRatio: 0.4,
+      minSpread: 0.08,
+      characterHalfWidths: [0.3, 0.24],
+    });
+    expect(offsets[0]).toBeCloseTo(-0.26);
+    expect(offsets[1]).toBeCloseTo(0.26);
+  });
+
+  it("uses one centered character when two support footprints cannot safely fit", () => {
+    expect(
+      resolveDualCharacterLaneOffsets({
+        usableWidth: 0.7,
+        useDualCharacters: true,
+        edgePadding: 0.04,
+        spreadRatio: 0.22,
+        minSpread: 0.08,
+        characterHalfWidths: [0.3, 0.28],
+      }),
+    ).toEqual([0]);
+  });
 });

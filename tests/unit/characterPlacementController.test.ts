@@ -82,6 +82,10 @@ describe("characterPlacementController", () => {
       ledgeHeight: 1.5,
       ledgeDepth: 0,
       laneOffsets: [0],
+      usableWidth: 0,
+      laneEdgePadding: 0,
+      laneSpreadRatio: 0,
+      laneMinSpread: 0,
       targetHeight: 0.63,
       sidePose: {
         pitchDegrees: 0,
@@ -255,6 +259,10 @@ describe("characterPlacementController", () => {
       ledgeHeight: 1.75,
       ledgeDepth: 0,
       laneOffsets: [0],
+      usableWidth: 0,
+      laneEdgePadding: 0,
+      laneSpreadRatio: 0,
+      laneMinSpread: 0,
       targetHeight: 0.735,
       sidePose: {
         pitchDegrees: 0,

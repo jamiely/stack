@@ -21,6 +21,10 @@ export interface CharacterPlacementContext {
   ledgeHeight: number;
   ledgeDepth: number;
   laneOffsets: readonly number[];
+  usableWidth: number;
+  laneEdgePadding: number;
+  laneSpreadRatio: number;
+  laneMinSpread: number;
   targetHeight: number;
   sidePose: RemyDebugConfig;
 }
@@ -163,6 +167,10 @@ export function buildCharacterLedgePlacementContext(
       spreadRatio: options.spreadRatio,
       minSpread: options.minSpread,
     }),
+    usableWidth: options.usableWidth,
+    laneEdgePadding: options.edgePadding,
+    laneSpreadRatio: options.spreadRatio,
+    laneMinSpread: options.minSpread,
     targetHeight: resolveRemyTargetHeight(
       options.slabHeight,
       options.placementTuning.targetHeightRatio,
@@ -185,6 +193,10 @@ export function buildCharacterTopFallbackPlacementContext(
     ledgeHeight: options.slabHeight,
     ledgeDepth: 0,
     laneOffsets: [0],
+    usableWidth: 0,
+    laneEdgePadding: 0,
+    laneSpreadRatio: 0,
+    laneMinSpread: 0,
     targetHeight: resolveRemyTargetHeight(
       options.slabHeight,
       options.placementTuning.targetHeightRatio,
@@ -298,12 +310,23 @@ export function attachCharacterViewToPlacement(
 export function attachCharacterViewsToResolvedPlacement(
   options: AttachCharacterViewsToResolvedPlacementOptions,
 ): readonly (RemyPlacementTransformResult | null)[] {
-  const shouldUseSecondaryLane = options.useSecondary && Boolean(options.secondaryView) && options.context.laneOffsets.length >= 2;
+  const characterHalfWidths = [options.primaryView, options.secondaryView].map((view) =>
+    view ? (view.baseDepth * options.context.targetHeight) / Math.max(0.001, view.baseHeight) / 2 : 0,
+  );
+  const supportedLaneOffsets = resolveDualCharacterLaneOffsets({
+    usableWidth: options.context.usableWidth,
+    useDualCharacters: options.useSecondary && Boolean(options.secondaryView),
+    edgePadding: options.context.laneEdgePadding,
+    spreadRatio: options.context.laneSpreadRatio,
+    minSpread: options.context.laneMinSpread,
+    characterHalfWidths,
+  });
+  const shouldUseSecondaryLane = supportedLaneOffsets.length >= 2;
   const primaryPlacement = attachCharacterViewToPlacement({
     view: options.primaryView,
     parent: options.parent,
     context: options.context,
-    laneOffset: shouldUseSecondaryLane ? (options.context.laneOffsets[0] ?? 0) : 0,
+    laneOffset: shouldUseSecondaryLane ? (supportedLaneOffsets[0] ?? 0) : 0,
     debugConfig: options.primaryDebugConfig,
     placementTuning: options.primaryPlacementTuning,
   });
@@ -317,7 +340,7 @@ export function attachCharacterViewsToResolvedPlacement(
     view: options.secondaryView,
     parent: options.parent,
     context: options.context,
-    laneOffset: options.context.laneOffsets[1]!,
+    laneOffset: supportedLaneOffsets[1]!,
     debugConfig: options.secondaryDebugConfig,
     placementTuning: options.secondaryPlacementTuning,
   });

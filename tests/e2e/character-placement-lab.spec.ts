@@ -558,6 +558,11 @@ test("scripted mobile placements validate every character model footprint", asyn
     expect(support?.margins.right, `${label} right margin`).toBeGreaterThanOrEqual(0);
     expect(support?.margins.back, `${label} back margin`).toBeGreaterThanOrEqual(0);
     expect(support?.margins.front, `${label} front margin`).toBeGreaterThanOrEqual(0);
+    const laneOffset = Math.abs(character?.anchor?.laneOffset ?? 0);
+    const usableWidth = character?.anchor?.usableWidth ?? 0;
+    if (usableWidth > 0) {
+      expect(laneOffset, `${label} apparent ledge-end inset`).toBeLessThanOrEqual(usableWidth * 0.18 + 0.001);
+    }
   }
 });
 

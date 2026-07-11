@@ -11,6 +11,7 @@ export interface ResolveDualCharacterLaneOffsetsOptions {
   edgePadding: number;
   spreadRatio: number;
   minSpread: number;
+  characterHalfWidths?: readonly number[];
 }
 
 export function readCharacterFaceId(faceId: unknown): CharacterFaceId | null {
@@ -37,8 +38,12 @@ export function resolveDualCharacterLaneOffsets(options: ResolveDualCharacterLan
   const usableWidth = Number.isFinite(options.usableWidth)
     ? Math.max(0, options.usableWidth)
     : 0;
-  const maxSpread = Math.max(0, usableWidth / 2 - options.edgePadding);
-  if (maxSpread <= 0) {
+  const supportHalfWidth = Math.max(
+    0,
+    ...(options.characterHalfWidths ?? []).filter(Number.isFinite),
+  );
+  const maxSpread = Math.max(0, usableWidth / 2 - options.edgePadding - supportHalfWidth);
+  if (maxSpread < options.minSpread) {
     return [0];
   }
 
