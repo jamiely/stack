@@ -3472,8 +3472,11 @@ export class Game {
         ledges.push(node);
       }
     });
+    const anchoredLedge = this.remyAnchor
+      ? this.findLedgeAnchorByLevelAndFace(this.remyAnchor.level, this.remyAnchor.faceNoiseSalt)?.ledgeMesh ?? null
+      : null;
     const worldPosition = new Vector3();
-    const topmostLedge = ledges.reduce<Mesh | null>((topmost, ledge) => {
+    const topmostLedge = anchoredLedge ?? ledges.reduce<Mesh | null>((topmost, ledge) => {
       if (!topmost) {
         return ledge;
       }
