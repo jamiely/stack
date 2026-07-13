@@ -56,7 +56,7 @@ const DEFAULT_REMY_PLACEMENT_CONFIG = {
   minHeight: 0.54,
   maxHeight: 1.28,
   ledgeClearance: -0.15,
-  ledgeInsetRatio: 0.18,
+  ledgeInsetRatio: 0.06,
   wallClearance: 0,
   rotationOffsetY: 0,
 } as const;

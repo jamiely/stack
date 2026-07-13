@@ -8,7 +8,7 @@ function maxIntentionalSinkForCharacter(characterId: string | null | undefined):
 }
 
 function outwardRatioRangeForCharacter(_characterId: string | null | undefined): { min: number; max: number } {
-  return { min: 0.14, max: 0.22 };
+  return { min: 0.04, max: 0.1 };
 }
 
 function expectSupportedVertically(
@@ -321,7 +321,7 @@ test("overhead ledge inspection keeps every character supported and visibly clea
       ledgeDepth * outwardRatioRange.max,
     );
     expect(Math.abs(margins.left - margins.right), `${record.characterId} seed ${record.seed} ${record.faceId} equal left/right ledge margins`).toBeLessThanOrEqual(0.24);
-    expect(margins.back - margins.front, `${record.characterId} seed ${record.seed} ${record.faceId} visible wall clearance`).toBeGreaterThanOrEqual(
+    expect(Math.abs(margins.back - margins.front), `${record.characterId} seed ${record.seed} ${record.faceId} balanced ledge-depth support`).toBeLessThanOrEqual(
       ledgeDepth * 0.25,
     );
     expect(margins.front, `${record.characterId} seed ${record.seed} ${record.faceId} visible front support`).toBeGreaterThanOrEqual(0.15);

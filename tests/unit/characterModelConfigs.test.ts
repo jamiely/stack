@@ -61,7 +61,7 @@ describe("remy model configs", () => {
     expect(getRemyDebugDefaults("amy").translateX).toBe(0);
     expect(getRemyDebugDefaults("aj").translateX).toBe(0);
     Object.values(REMY_CHARACTER_MODEL_CONFIGS).forEach((config) => {
-      expect(config.placement.ledgeInsetRatio).toBeCloseTo(0.18, 6);
+      expect(config.placement.ledgeInsetRatio).toBeCloseTo(0.06, 6);
     });
   });
 
