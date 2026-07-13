@@ -3466,16 +3466,29 @@ export class Game {
       metalness: 0.02,
     });
 
+    const ledges: Mesh[] = [];
+    this.stackGroup.traverse((node) => {
+      if (node instanceof Mesh && node.userData.isLedge === true) {
+        ledges.push(node);
+      }
+    });
+    const worldPosition = new Vector3();
+    const topmostLedge = ledges.reduce<Mesh | null>((topmost, ledge) => {
+      if (!topmost) {
+        return ledge;
+      }
+      ledge.getWorldPosition(worldPosition);
+      const ledgeY = worldPosition.y;
+      topmost.getWorldPosition(worldPosition);
+      return ledgeY > worldPosition.y ? ledge : topmost;
+    }, null);
+
     this.stackGroup.traverse((node) => {
       if (!(node instanceof Mesh)) {
         return;
       }
 
-      if (node.userData.isLedge === true) {
-        node.material = ledgeMaterial;
-      } else {
-        node.material = slabMaterial;
-      }
+      node.material = node === topmostLedge ? ledgeMaterial : slabMaterial;
     });
 
     [this.remyView, this.remySecondaryView].forEach((view) => {
