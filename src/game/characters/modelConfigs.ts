@@ -85,7 +85,7 @@ export const REMY_CHARACTER_MODEL_CONFIGS = {
     },
     placement: {
       ...DEFAULT_REMY_PLACEMENT_CONFIG,
-      ledgeClearance: -0.25,
+      ledgeClearance: -0.65,
     },
   },
   aj: {

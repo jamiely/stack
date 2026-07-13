@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const MAX_INTENTIONAL_LEDGE_SINK = 0.16;
-const MAX_AMY_VISUAL_CONTACT_SINK = MAX_INTENTIONAL_LEDGE_SINK;
+const MAX_AMY_VISUAL_CONTACT_SINK = 0.56;
 
 function maxIntentionalSinkForCharacter(characterId: string | null | undefined): number {
   return characterId === "amy" ? MAX_AMY_VISUAL_CONTACT_SINK : MAX_INTENTIONAL_LEDGE_SINK;
@@ -497,6 +497,9 @@ test("single Amy and AJ footprints stay horizontally centered and visibly clear 
     expect(support?.margins.front, `${record.characterId} visible front shelf margin`).toBeGreaterThanOrEqual(0.18);
     expect(footprintCenterZ, `${record.characterId} outward ledge-depth bias`).toBeGreaterThanOrEqual(ledgeHalfDepth * outwardRatioRange.min * 2);
     expect(footprintCenterZ, `${record.characterId} front-edge safety`).toBeLessThanOrEqual(ledgeHalfDepth * outwardRatioRange.max * 2);
+    if (record.characterId === "amy") {
+      expect(support?.topSurfaceVerticalGap, "Amy visual-contact sink keeps her feet on the ledge").toBeLessThanOrEqual(-0.45);
+    }
     if (record.characterId === "aj") {
       expect(support?.margins.front, `${record.characterId} front ledge margin`).toBeGreaterThanOrEqual(0.3);
     }

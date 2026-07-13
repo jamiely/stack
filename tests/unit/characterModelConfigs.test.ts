@@ -51,6 +51,7 @@ describe("remy model configs", () => {
     expect(REMY_CHARACTER_MODEL_CONFIGS.timmy.debugDefaults.translateY).toBe(0);
     expect(REMY_CHARACTER_MODEL_CONFIGS.amy.debugDefaults.translateY).toBe(0);
     expect(REMY_CHARACTER_MODEL_CONFIGS.aj.debugDefaults.translateY).toBe(0);
+    expect(REMY_CHARACTER_MODEL_CONFIGS.amy.placement.ledgeClearance).toBe(-0.65);
   });
 
   it("keeps every character visibly separated from the wall while safely inside the ledge", () => {
