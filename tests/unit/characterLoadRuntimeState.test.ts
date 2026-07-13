@@ -28,6 +28,7 @@ function buildView(label: string): CharacterView {
     baseHeight: 1,
     baseDepth: 1,
     applyPlacement: () => undefined,
+    groundAnimatedPose: () => true,
     attachTo: () => undefined,
     detach: () => undefined,
   };

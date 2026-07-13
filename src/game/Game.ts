@@ -2527,6 +2527,12 @@ export class Game {
 
     this.remyMixer?.update(deltaSeconds);
     this.remySecondaryMixer?.update(deltaSeconds);
+    if (this.activeRemyCharacterId === "amy") {
+      this.remyView?.groundAnimatedPose();
+    }
+    if (this.activeRemySecondaryCharacterId === "amy") {
+      this.remySecondaryView?.groundAnimatedPose();
+    }
   }
 
   private shouldLoadSecondaryRemyCharacter(): boolean {

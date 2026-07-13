@@ -101,6 +101,7 @@ export interface CharacterView<Object3DLike = import("three").Object3D, GroupLik
   readonly baseHeight: number;
   readonly baseDepth: number;
   applyPlacement(placement: RemyPlacementTransformResult): void;
+  groundAnimatedPose(): boolean;
   attachTo(parent: Object3DLike): void;
   detach(): void;
 }

@@ -24,6 +24,7 @@ function buildCharacterSetup(label: string): BuiltCharacterView {
       baseHeight: 1,
       baseDepth: 1,
       applyPlacement: () => undefined,
+      groundAnimatedPose: () => true,
       attachTo: () => undefined,
       detach: () => undefined,
     },
