@@ -101,7 +101,7 @@ Runtime tuning panel includes:
 - `returnToTitle()`
 - `applyDebugConfig(config)` (partial patches supported; in paused deterministic mode, cloud/distraction simulation effects apply on the next `stepSimulation(...)`)
 - `applyRemyDebugConfig(config)` for direct placement/rotation patching in tests
-- `applyModelLabState(state)` for toggling spatial helpers, forced top-placement lab mode, and overhead ledge inspection camera mode; high-contrast placement inspection colors the character's exact attached ledge green (falling back to the highest ledge only when no anchor exists), keeping normal and overhead captures tied to the same support
+- `applyModelLabState(state)` for toggling spatial helpers, forced top-placement lab mode, and overhead ledge inspection camera mode; high-contrast placement inspection colors the character's exact attached ledge green while neutralizing every other ledge and slab (falling back to the highest ledge only when no anchor exists), keeping normal and overhead captures tied to the same support
 - `stepSimulation(steps?)`
 - `setPaused(paused)`
 - `setActiveOffset(offset)`

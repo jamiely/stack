@@ -3494,6 +3494,12 @@ export class Game {
       node.material = node === topmostLedge ? ledgeMaterial : slabMaterial;
     });
 
+    this.activeMesh?.traverse((node) => {
+      if (node instanceof Mesh) {
+        node.material = slabMaterial;
+      }
+    });
+
     [this.remyView, this.remySecondaryView].forEach((view) => {
       view?.sceneNodes.characterRoot.traverse((node) => {
         if (node instanceof Mesh) {
