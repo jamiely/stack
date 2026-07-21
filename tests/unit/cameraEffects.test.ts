@@ -1,11 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveCharacterFramingLookAtX,
+  resolveResponsiveCameraDistance,
   samplePlacementCameraShake,
   sampleTremorCameraShake,
 } from "../../src/game/logic/cameraEffects";
 
 describe("cameraEffects", () => {
+  it("pulls the camera back only for mobile portrait viewports", () => {
+    expect(resolveResponsiveCameraDistance(12, 390 / 844)).toBe(18);
+    expect(resolveResponsiveCameraDistance(12, 0.75)).toBe(18);
+    expect(resolveResponsiveCameraDistance(12, 0.7501)).toBe(12);
+    expect(resolveResponsiveCameraDistance(14, 390 / 844)).toBe(20);
+    expect(resolveResponsiveCameraDistance(12, 844 / 390)).toBe(12);
+    expect(resolveResponsiveCameraDistance(12, 1280 / 720)).toBe(12);
+  });
+
+  it("falls back safely for invalid camera distances and viewport aspects", () => {
+    expect(resolveResponsiveCameraDistance(Number.NaN, 390 / 844)).toBe(18);
+    expect(resolveResponsiveCameraDistance(Number.POSITIVE_INFINITY, 390 / 844)).toBe(18);
+    expect(resolveResponsiveCameraDistance(12, Number.NaN)).toBe(12);
+    expect(resolveResponsiveCameraDistance(12, 0)).toBe(12);
+    expect(resolveResponsiveCameraDistance(12, -1)).toBe(12);
+  });
+
   it("adds vertical shake during tremors", () => {
     const shake = sampleTremorCameraShake(1.2, 0.8);
     expect(Math.abs(shake.y)).toBeGreaterThan(0);

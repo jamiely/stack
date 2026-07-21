@@ -1,3 +1,15 @@
+const MOBILE_PORTRAIT_MAX_ASPECT = 0.75;
+const MOBILE_PORTRAIT_CAMERA_PULLBACK = 6;
+const DEFAULT_CAMERA_DISTANCE = 12;
+
+export function resolveResponsiveCameraDistance(configuredDistance: number, viewportAspect: number): number {
+  const safeDistance = Number.isFinite(configuredDistance) ? configuredDistance : DEFAULT_CAMERA_DISTANCE;
+
+  return Number.isFinite(viewportAspect) && viewportAspect > 0 && viewportAspect <= MOBILE_PORTRAIT_MAX_ASPECT
+    ? safeDistance + MOBILE_PORTRAIT_CAMERA_PULLBACK
+    : safeDistance;
+}
+
 export function resolveCharacterFramingLookAtX(characterWorldX: number | null, viewportAspect: number): number {
   if (characterWorldX === null || !Number.isFinite(characterWorldX) || !Number.isFinite(viewportAspect)) {
     return 0;

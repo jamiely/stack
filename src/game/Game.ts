@@ -42,7 +42,12 @@ import {
   shouldUseDarkWindowTrim,
 } from "./logic/decor";
 import { advanceOscillation } from "./logic/oscillation";
-import { resolveCharacterFramingLookAtX, samplePlacementCameraShake, sampleTremorCameraShake } from "./logic/cameraEffects";
+import {
+  resolveCharacterFramingLookAtX,
+  resolveResponsiveCameraDistance,
+  samplePlacementCameraShake,
+  sampleTremorCameraShake,
+} from "./logic/cameraEffects";
 import { sampleDayNightFrame } from "./logic/dayNight";
 import { createDistractionState, updateDistractionState } from "./logic/distractions";
 import {
@@ -610,6 +615,7 @@ export class Game {
     this.renderer = this.createRenderer();
 
     this.scene.background = new Color("#07101c");
+    this.updateMetrics();
     this.buildScene();
     this.buildHud();
     this.buildDistractionOverlay();
@@ -636,7 +642,7 @@ export class Game {
     this.camera.position.set(
       CAMERA_X,
       this.debugConfig.cameraHeight + this.debugConfig.cameraFramingOffset + this.debugConfig.cameraYOffset,
-      this.debugConfig.cameraDistance,
+      resolveResponsiveCameraDistance(this.debugConfig.cameraDistance, this.camera.aspect),
     );
     this.gridHelper.position.y = -12;
     this.starFieldSmall.position.set(0, 0, -64);
@@ -1418,7 +1424,11 @@ export class Game {
       STARTUP_CAMERA_LIFT +
       STACK_LOOK_AHEAD_Y;
     const initialTargetY = initialFocusY + this.debugConfig.cameraHeight;
-    this.cameraTargetPosition.set(CAMERA_X, initialTargetY, this.debugConfig.cameraDistance);
+    this.cameraTargetPosition.set(
+      CAMERA_X,
+      initialTargetY,
+      resolveResponsiveCameraDistance(this.debugConfig.cameraDistance, this.camera.aspect),
+    );
     this.cameraLookAtX = 0;
     this.cameraLookAtY = Math.max(1.2, initialFocusY);
 
@@ -3055,7 +3065,9 @@ export class Game {
       STACK_LOOK_AHEAD_Y -
       (collapseFrame?.cameraDrop ?? 0);
     const targetY = focusY + this.debugConfig.cameraHeight;
-    const targetZ = this.debugConfig.cameraDistance + (collapseFrame?.cameraPullback ?? 0);
+    const targetZ =
+      resolveResponsiveCameraDistance(this.debugConfig.cameraDistance, this.camera.aspect) +
+      (collapseFrame?.cameraPullback ?? 0);
 
     const safeDeltaSeconds = Math.max(0, Math.min(0.1, deltaSeconds));
     const fpsAdjustedLerp =
