@@ -1,0 +1,8 @@
+Flying Saucer A
+
+Creator: stageweight (https://sketchfab.com/stageweight)
+Source: https://sketchfab.com/3d-models/flying-saucer-a-16be6e9528c743b190a4b2ecb91dbce9
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+License URL: https://creativecommons.org/licenses/by/4.0/
+
+The original glTF package was repacked as a single GLB for Tower Stacker without changing the model geometry, materials, or textures.

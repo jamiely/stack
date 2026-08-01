@@ -87,6 +87,7 @@ import { resolveFacadeStyle } from "./logic/facade";
 import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
+import { loadUfoModel, resolveUfoModelWidth, resolveUfoOrbitRadius, setUfoModelOpacity } from "./distractions/ufoModel";
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
 import {
@@ -448,6 +449,8 @@ export class Game {
   private ufoExitSecondsRemaining = 0;
   private ufoOrbitWorldPosition = new Vector3();
   private ufoWorldVelocity = new Vector3(UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND, 0.15, 0.8);
+  private readonly ufoModelRoot = new Group();
+  private ufoModel: Group | null = null;
   private gorillaLastSlamCycle = -1;
   private gorillaSlamRemaining = 0;
   private integrityTelemetry: IntegrityTelemetry = resolveIntegrityTelemetry(
@@ -619,6 +622,7 @@ export class Game {
     this.buildScene();
     this.buildHud();
     this.buildDistractionOverlay();
+    this.loadUfoModelAsset();
     this.resetWorld();
   }
 
@@ -650,12 +654,14 @@ export class Game {
     this.starFieldLarge.position.set(0, 0, -64);
     this.camera.add(this.starFieldSmall, this.starFieldMedium, this.starFieldLarge);
     this.scene.add(this.camera);
+    this.ufoModelRoot.visible = false;
     this.scene.add(
       this.stackGroup,
       this.archivedGroup,
       this.debrisGroup,
       this.collapseVoxelGroup,
       this.tentacleGroup,
+      this.ufoModelRoot,
       this.spatialDebugSurface.root,
       this.gridHelper,
     );
@@ -748,6 +754,8 @@ export class Game {
 
     this.ufoActor.className = "distraction-actor distraction-actor--ufo";
     this.ufoActor.dataset.testid = "actor-ufo";
+    this.ufoActor.dataset.modelState = "loading";
+    this.ufoActor.dataset.modelVisible = "false";
 
     this.batActor.className = "distraction-actor distraction-actor--bat";
     this.batActor.dataset.testid = "actor-bat";
@@ -776,6 +784,27 @@ export class Game {
       this.fireworksActor,
       this.tremorPulse,
     );
+  }
+
+  private loadUfoModelAsset(): void {
+    if (!this.renderer) {
+      this.ufoActor.dataset.modelState = "fallback";
+      return;
+    }
+
+    const targetWidth = resolveUfoModelWidth(this.debugConfig.slabHeight, this.camera.aspect);
+    void loadUfoModel(targetWidth)
+      .then((model) => {
+        this.ufoModelRoot.clear();
+        this.ufoModelRoot.add(model);
+        this.ufoModel = model;
+        this.ufoActor.dataset.modelState = "ready";
+        this.ufoActor.classList.add("distraction-actor--ufo-model-ready");
+      })
+      .catch((error: unknown) => {
+        this.ufoActor.dataset.modelState = "fallback";
+        console.warn("Failed to load the UFO model; keeping the CSS fallback.", error);
+      });
   }
 
   private createDebugControls(): DocumentFragment {
@@ -1815,7 +1844,7 @@ export class Game {
         const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
         this.syncUfoVisualSize(topSlab ?? null);
         const orbitPhase = this.distractionState.elapsedSeconds * UFO_ORBIT_ANGULAR_SPEED * this.debugConfig.distractionMotionSpeed;
-        const orbitRadius = Math.max(3.2, this.debugConfig.baseWidth * 1.15 + snapshot.signals.ufo * 1.8);
+        const orbitRadius = resolveUfoOrbitRadius(this.debugConfig.baseWidth, snapshot.signals.ufo);
         const orbitCenterX = topSlab?.position.x ?? 0;
         const topCenterY = topSlab?.position.y ?? 0;
         const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
@@ -1843,6 +1872,19 @@ export class Game {
         const clampedY = Math.min(height + 160, Math.max(-160, screenY));
         const inFrontOfCamera = projected.z > -1 && projected.z < 1;
         const ufoOpacity = inFrontOfCamera ? 0.26 + snapshot.signals.ufo * 0.74 : 0.18 + snapshot.signals.ufo * 0.2;
+        if (this.ufoModel) {
+          const desiredWidth = resolveUfoModelWidth(topSlabHeight, this.camera.aspect);
+          const loadedWidth = Number(this.ufoModel.userData.targetWidth) || desiredWidth;
+          this.ufoModelRoot.scale.setScalar(desiredWidth / loadedWidth);
+          this.ufoModelRoot.position.copy(worldPoint);
+          this.ufoModelRoot.position.y += Math.sin(orbitPhase * 2.1) * 0.18;
+          this.ufoModelRoot.rotation.y = -orbitPhase * 0.75;
+          this.ufoModelRoot.visible = inFrontOfCamera;
+          setUfoModelOpacity(this.ufoModel, ufoOpacity);
+          this.ufoActor.dataset.modelVisible = String(inFrontOfCamera);
+        } else {
+          this.ufoActor.dataset.modelVisible = "false";
+        }
         this.ufoActor.style.opacity = ufoOpacity.toFixed(3);
         this.ufoActor.style.transform = `translate(${clampedX.toFixed(2)}px, ${clampedY.toFixed(2)}px) translate(-50%, -50%)`;
       } else {
@@ -1882,9 +1924,19 @@ export class Game {
           const projected = this.ufoOrbitWorldPosition.clone().project(this.camera);
           const screenX = (projected.x * 0.5 + 0.5) * width;
           const screenY = (-projected.y * 0.5 + 0.5) * height;
-          this.ufoActor.style.opacity = (0.58 * fadeProgress).toFixed(3);
+          const exitOpacity = 0.58 * fadeProgress;
+          if (this.ufoModel) {
+            this.ufoModelRoot.position.copy(this.ufoOrbitWorldPosition);
+            this.ufoModelRoot.rotation.y -= frameDeltaSeconds * 2.4;
+            this.ufoModelRoot.visible = projected.z > -1 && projected.z < 1;
+            setUfoModelOpacity(this.ufoModel, exitOpacity);
+            this.ufoActor.dataset.modelVisible = String(this.ufoModelRoot.visible);
+          }
+          this.ufoActor.style.opacity = exitOpacity.toFixed(3);
           this.ufoActor.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%)`;
         } else {
+          this.ufoModelRoot.visible = false;
+          this.ufoActor.dataset.modelVisible = "false";
           this.ufoActor.style.opacity = "0";
         }
       }
@@ -2692,7 +2744,12 @@ export class Game {
     }
 
     const hadAnchor = this.remyAnchor !== null;
-    const shouldKeepCurrentAnchor = this.remyAnchor !== null && this.isRemyAnchorVisible(this.remyAnchor);
+    // The overhead camera is a read-only inspection lens. Re-evaluating screen
+    // visibility against that temporary camera can clear an otherwise valid live
+    // placement before its proof screenshot is captured, especially in portrait.
+    const shouldKeepCurrentAnchor =
+      this.remyAnchor !== null &&
+      (this.modelLabState.overheadInspectionView || this.isRemyAnchorVisible(this.remyAnchor));
     if (hadAnchor && !shouldKeepCurrentAnchor) {
       this.remyAnchor = null;
       this.remySuppressedByTentacles = false;

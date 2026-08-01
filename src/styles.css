@@ -111,6 +111,11 @@ body {
     inset 0 -0.45rem 0.55rem rgba(30, 56, 101, 0.55);
 }
 
+.distraction-actor--ufo-model-ready {
+  background: transparent;
+  box-shadow: none;
+}
+
 .distraction-actor--bat {
   width: 3.2rem;
   height: 1.4rem;

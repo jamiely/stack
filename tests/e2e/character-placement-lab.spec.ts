@@ -210,6 +210,49 @@ test("character placement lab exposes deterministic transform snapshots and mode
   expect(afterStep!.debugConfig).toEqual(after!.debugConfig);
 });
 
+test("overhead inspection preserves the exact paired placement after the camera renders", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?debug&test&paused=1&seed=42");
+  await page.waitForFunction(() => Boolean(window.__towerStackerTestApi));
+
+  const snapshots = await page.evaluate(async () => {
+    const api = window.__towerStackerTestApi;
+    if (!api) {
+      throw new Error("Test API unavailable");
+    }
+
+    api.startGame();
+    api.setPaused(true);
+    api.applyDebugConfig({ distractionsEnabled: false });
+    api.applyModelLabState({ showSpatialHelpers: false, forceTopFallback: false, overheadInspectionView: false });
+    for (let placementIndex = 0; placementIndex < 8; placementIndex += 1) {
+      api.placeAtOffset(0);
+      api.stepSimulation(8);
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+    }
+    await api.loadCharacterPair("amy", "aj");
+    api.stepSimulation(6);
+    await new Promise((resolve) => window.setTimeout(resolve, 80));
+
+    const before = api.getState().spatialDebug;
+    api.applyModelLabState({ overheadInspectionView: true });
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+    const after = api.getState().spatialDebug;
+    return { before, after };
+  });
+
+  expect(snapshots.before.primaryCharacter).not.toBeNull();
+  expect(snapshots.before.secondaryCharacter).not.toBeNull();
+  expect(snapshots.after.primaryCharacter).not.toBeNull();
+  expect(snapshots.after.secondaryCharacter).not.toBeNull();
+  expect(snapshots.after.primaryCharacter?.characterId).toBe(snapshots.before.primaryCharacter?.characterId);
+  expect(snapshots.after.secondaryCharacter?.characterId).toBe(snapshots.before.secondaryCharacter?.characterId);
+  expect(snapshots.after.primaryCharacter?.worldPosition).toEqual(snapshots.before.primaryCharacter?.worldPosition);
+  expect(snapshots.after.secondaryCharacter?.worldPosition).toEqual(snapshots.before.secondaryCharacter?.worldPosition);
+  expect(snapshots.after.primaryCharacter?.anchor).toEqual(snapshots.before.primaryCharacter?.anchor);
+  expect(snapshots.after.secondaryCharacter?.anchor).toEqual(snapshots.before.secondaryCharacter?.anchor);
+});
+
 test("overhead ledge inspection keeps every character supported and visibly clear of the wall", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 900, height: 900 });

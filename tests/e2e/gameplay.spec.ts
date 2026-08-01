@@ -630,6 +630,10 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.fireworks).toBe(true);
 
+  const ufoActor = page.getByTestId("actor-ufo");
+  await expect(ufoActor).toHaveAttribute("data-model-state", "ready");
+  await expect(ufoActor).toHaveAttribute("data-model-visible", "true");
+
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.cloudOpacity ?? 0).toBeGreaterThan(0.1);
