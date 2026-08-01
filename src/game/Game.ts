@@ -1838,7 +1838,10 @@ export class Game {
     if (shouldUpdateUfo) {
       const width = this.container.clientWidth || window.innerWidth;
       const height = this.container.clientHeight || window.innerHeight;
-      const frameDeltaSeconds = Math.max(1 / 120, this.frameTimeMs > 0 ? this.frameTimeMs / 1000 : 1 / 60);
+      // Actor motion must follow the simulation delta, not the previous wall-clock
+      // frame duration. Slow frames (for example while CI loads the GLB) should
+      // not consume the entire UFO exit animation in a single update.
+      const frameDeltaSeconds = Math.min(1 / 15, Math.max(1 / 120, deltaSeconds));
 
       if (snapshot.active.ufo) {
         const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
