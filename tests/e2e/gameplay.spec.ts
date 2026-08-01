@@ -655,7 +655,7 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
 });
 
 test("gorilla/ufo/cloud actors are level-gated and core placement still works while active", async ({ page }) => {
-  await page.goto("/?debug&test&paused=0&seed=42");
+  await page.goto("/?debug&test&paused=1&seed=42");
   await expect(page.getByTestId("debug-panel")).toBeVisible();
 
   await page.locator('input[data-debug-key="distractionTentacleStartLevel"]').evaluate((node) => {
