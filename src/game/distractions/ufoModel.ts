@@ -1,9 +1,13 @@
 import {
   Box3,
+  type Camera,
   Group,
   Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
   type Material,
   type Object3D,
+  Texture,
   Vector3,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -20,6 +24,16 @@ interface UfoGltf {
 
 export interface UfoGltfLoaderLike {
   loadAsync(url: string): Promise<UfoGltf>;
+}
+
+export interface UfoModelPrecompilerLike {
+  compileAsync(scene: Object3D, camera: Camera): Promise<unknown>;
+  initTexture(texture: Texture): void;
+  render(scene: Object3D, camera: Camera): void;
+}
+
+function waitForUfoWarmupFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 type OpacityMaterial = Material & {
@@ -58,20 +72,90 @@ export function normalizeUfoModel(source: Group, targetWidth: number): Group {
   return wrapper;
 }
 
+function createLightweightUfoMaterial(material: Material): Material {
+  if (!(material instanceof MeshStandardMaterial)) {
+    return material;
+  }
+
+  const usesEmissiveMap = material.emissiveMap !== null;
+  return new MeshBasicMaterial({
+    name: material.name,
+    color: usesEmissiveMap ? material.emissive : material.color,
+    map: material.emissiveMap ?? material.map,
+    alphaMap: material.alphaMap,
+    alphaTest: material.alphaTest,
+    opacity: material.opacity,
+    side: material.side,
+    transparent: true,
+    depthWrite: false,
+    vertexColors: material.vertexColors,
+  });
+}
+
 export async function loadUfoModel(
   targetWidth: number,
   loader: UfoGltfLoaderLike = new GLTFLoader(),
 ): Promise<Group> {
   const gltf = await loader.loadAsync(UFO_MODEL_URL);
   const model = normalizeUfoModel(gltf.scene, targetWidth);
+  const materialCache = new Map<Material, Material>();
   model.traverse((child: Object3D) => {
     if (!(child instanceof Mesh)) {
       return;
     }
+    const resolveMaterial = (material: Material): Material => {
+      const cached = materialCache.get(material);
+      if (cached) {
+        return cached;
+      }
+      const lightweightMaterial = createLightweightUfoMaterial(material);
+      materialCache.set(material, lightweightMaterial);
+      return lightweightMaterial;
+    };
+    child.material = Array.isArray(child.material)
+      ? child.material.map(resolveMaterial)
+      : resolveMaterial(child.material);
     child.castShadow = true;
     child.receiveShadow = true;
   });
   return model;
+}
+
+export async function precompileUfoModel(
+  renderer: UfoModelPrecompilerLike,
+  scene: Object3D,
+  camera: Camera,
+  modelRoot: Group,
+  nextFrame: () => Promise<void> = waitForUfoWarmupFrame,
+): Promise<void> {
+  const wasVisible = modelRoot.visible;
+  modelRoot.visible = true;
+  setUfoModelOpacity(modelRoot, 0);
+  const textures = new Set<Texture>();
+  modelRoot.traverse((child: Object3D) => {
+    if (!(child instanceof Mesh)) {
+      return;
+    }
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.forEach((material) => {
+      Object.values(material).forEach((value) => {
+        if (value instanceof Texture) {
+          textures.add(value);
+        }
+      });
+    });
+  });
+  textures.forEach((texture) => renderer.initTexture(texture));
+  try {
+    await renderer.compileAsync(scene, camera);
+    setUfoModelOpacity(modelRoot, 1 / 255);
+    renderer.render(scene, camera);
+    await nextFrame();
+    await nextFrame();
+  } finally {
+    setUfoModelOpacity(modelRoot, 0);
+    modelRoot.visible = wasVisible;
+  }
 }
 
 export function setUfoModelOpacity(root: Object3D, opacity: number): void {
@@ -88,10 +172,13 @@ export function setUfoModelOpacity(root: Object3D, opacity: number): void {
         ? opacityMaterial.userData.ufoOriginalOpacity
         : opacityMaterial.opacity;
       opacityMaterial.userData.ufoOriginalOpacity = originalOpacity;
-      opacityMaterial.transparent = clampedOpacity < 1 || originalOpacity < 1;
+      const renderStateChanged = !opacityMaterial.transparent || opacityMaterial.depthWrite;
+      opacityMaterial.transparent = true;
       opacityMaterial.opacity = originalOpacity * clampedOpacity;
-      opacityMaterial.depthWrite = clampedOpacity >= 1;
-      opacityMaterial.needsUpdate = true;
+      opacityMaterial.depthWrite = false;
+      if (renderStateChanged) {
+        opacityMaterial.needsUpdate = true;
+      }
     });
   });
 }

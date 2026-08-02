@@ -87,7 +87,7 @@ import { resolveFacadeStyle } from "./logic/facade";
 import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
-import { loadUfoModel, resolveUfoModelWidth, resolveUfoOrbitRadius, setUfoModelOpacity } from "./distractions/ufoModel";
+import { loadUfoModel, precompileUfoModel, resolveUfoModelWidth, resolveUfoOrbitRadius, setUfoModelOpacity } from "./distractions/ufoModel";
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
 import {
@@ -794,16 +794,21 @@ export class Game {
 
     const targetWidth = resolveUfoModelWidth(this.debugConfig.slabHeight, this.camera.aspect);
     void loadUfoModel(targetWidth)
-      .then((model) => {
+      .then(async (model) => {
         this.ufoModelRoot.clear();
         this.ufoModelRoot.add(model);
+        this.ufoActor.dataset.modelState = "warming";
+        await precompileUfoModel(this.renderer!, this.scene, this.camera, this.ufoModelRoot);
         this.ufoModel = model;
         this.ufoActor.dataset.modelState = "ready";
         this.ufoActor.classList.add("distraction-actor--ufo-model-ready");
       })
       .catch((error: unknown) => {
+        this.ufoModelRoot.clear();
+        this.ufoModel = null;
         this.ufoActor.dataset.modelState = "fallback";
-        console.warn("Failed to load the UFO model; keeping the CSS fallback.", error);
+        this.ufoActor.classList.remove("distraction-actor--ufo-model-ready");
+        console.warn("Failed to load and precompile the UFO model; keeping the CSS fallback.", error);
       });
   }
 

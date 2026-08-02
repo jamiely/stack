@@ -1,14 +1,28 @@
-import { Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Vector3 } from "three";
+import { readFileSync } from "node:fs";
+import { Box3, BoxGeometry, DataTexture, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import {
   loadUfoModel,
   normalizeUfoModel,
+  precompileUfoModel,
   resolveUfoModelWidth,
   resolveUfoOrbitRadius,
   setUfoModelOpacity,
 } from "../../src/game/distractions/ufoModel";
 
 describe("UFO model presentation", () => {
+  it("keeps the embedded texture payload below the first-appearance upload budget", () => {
+    const glb = readFileSync(new URL("../../assets/flying_saucer_a.glb", import.meta.url));
+    const jsonChunkLength = glb.readUInt32LE(12);
+    const manifest = JSON.parse(glb.subarray(20, 20 + jsonChunkLength).toString("utf8"));
+    const textureBytes = manifest.images.reduce(
+      (total: number, image: { bufferView: number }) => total + manifest.bufferViews[image.bufferView].byteLength,
+      0,
+    );
+
+    expect(textureBytes).toBeLessThanOrEqual(512 * 1024);
+  });
+
   it("keeps the saucer readable without making it as wide as the tower", () => {
     expect(resolveUfoModelWidth(3)).toBeCloseTo(4.05, 5);
     expect(resolveUfoModelWidth(1)).toBe(2.5);
@@ -40,9 +54,11 @@ describe("UFO model presentation", () => {
     expect(center.z).toBeCloseTo(0, 5);
   });
 
-  it("loads through the game loader seam and returns a normalized scene", async () => {
+  it("loads through the game loader seam with lightweight render materials", async () => {
     const source = new Group();
-    source.add(new Mesh(new BoxGeometry(8, 2, 5), new MeshStandardMaterial()));
+    const sourceTexture = new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    const sourceMaterial = new MeshStandardMaterial({ map: sourceTexture });
+    source.add(new Mesh(new BoxGeometry(8, 2, 5), sourceMaterial));
     const requestedUrls: string[] = [];
     const loader = {
       loadAsync: async (url: string) => {
@@ -53,10 +69,68 @@ describe("UFO model presentation", () => {
 
     const loaded = await loadUfoModel(4, loader);
     const width = new Box3().setFromObject(loaded).getSize(new Vector3()).x;
+    const loadedMesh = loaded.getObjectByProperty("isMesh", true) as Mesh;
 
     expect(requestedUrls).toHaveLength(1);
     expect(requestedUrls[0]).toContain("flying_saucer_a.glb");
     expect(width).toBeCloseTo(4, 5);
+    expect(loadedMesh.material).toBeInstanceOf(MeshBasicMaterial);
+    expect((loadedMesh.material as MeshBasicMaterial).map).toBe(sourceTexture);
+  });
+
+  it("precompiles the transparent first-appearance shader before exposing the model", async () => {
+    const scene = new Group();
+    const modelRoot = new Group();
+    const texture = new DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    texture.needsUpdate = true;
+    const material = new MeshStandardMaterial({ map: texture });
+    modelRoot.add(new Mesh(new BoxGeometry(1, 1, 1), material));
+    modelRoot.visible = false;
+    scene.add(modelRoot);
+    const visibilityDuringCompile: boolean[] = [];
+    const visibilityDuringUpload: boolean[] = [];
+    const opacityDuringUpload: number[] = [];
+    const warmedTextures: DataTexture[] = [];
+    const renderer = {
+      compileAsync: async () => {
+        visibilityDuringCompile.push(modelRoot.visible);
+      },
+      initTexture: (candidate: DataTexture) => {
+        warmedTextures.push(candidate);
+      },
+      render: () => {
+        visibilityDuringUpload.push(modelRoot.visible);
+        opacityDuringUpload.push(material.opacity);
+      },
+    };
+
+    let warmupFrames = 0;
+    await precompileUfoModel(renderer, scene, {} as never, modelRoot, async () => {
+      warmupFrames += 1;
+    });
+
+    expect(warmupFrames).toBe(2);
+    expect(visibilityDuringCompile).toEqual([true]);
+    expect(warmedTextures).toEqual([texture]);
+    expect(visibilityDuringUpload).toEqual([true]);
+    expect(opacityDuringUpload[0]).toBeGreaterThan(0);
+    expect(modelRoot.visible).toBe(false);
+    expect(material.transparent).toBe(true);
+    expect(material.opacity).toBe(0);
+    expect(material.depthWrite).toBe(false);
+  });
+
+  it("does not invalidate the UFO shader when only fade opacity changes", () => {
+    const source = new Group();
+    const material = new MeshStandardMaterial();
+    source.add(new Mesh(new BoxGeometry(1, 1, 1), material));
+
+    setUfoModelOpacity(source, 0);
+    const warmedVersion = material.version;
+    setUfoModelOpacity(source, 0.5);
+
+    expect(material.version).toBe(warmedVersion);
+    expect(material.opacity).toBeCloseTo(0.5, 5);
   });
 
   it("applies fade opacity without disabling the source material depth test", () => {
