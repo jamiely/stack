@@ -17,6 +17,7 @@ export const UFO_MODEL_URL = new URL("../../../assets/flying_saucer_a.glb", impo
 const UFO_WORLD_WIDTH_TO_SLAB_HEIGHT_RATIO = 1.35;
 const UFO_MIN_WORLD_WIDTH = 2.5;
 const UFO_MAX_WORLD_WIDTH = 4.2;
+const UFO_ORBIT_HEIGHT_IN_SLABS = 2.25;
 
 interface UfoGltf {
   scene: Group;
@@ -52,6 +53,10 @@ export function resolveUfoModelWidth(slabHeight: number, viewportAspect = 1): nu
 export function resolveUfoOrbitRadius(baseWidth: number, signal: number): number {
   const clampedSignal = Math.min(1, Math.max(0, signal));
   return Math.max(3.2, baseWidth * 0.78 + clampedSignal * 0.9);
+}
+
+export function resolveUfoOrbitAltitude(topSlabCenterY: number, slabHeight: number): number {
+  return topSlabCenterY + slabHeight * UFO_ORBIT_HEIGHT_IN_SLABS;
 }
 
 export function normalizeUfoModel(source: Group, targetWidth: number): Group {

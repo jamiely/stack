@@ -6,6 +6,7 @@ import {
   normalizeUfoModel,
   precompileUfoModel,
   resolveUfoModelWidth,
+  resolveUfoOrbitAltitude,
   resolveUfoOrbitRadius,
   setUfoModelOpacity,
 } from "../../src/game/distractions/ufoModel";
@@ -35,6 +36,18 @@ describe("UFO model presentation", () => {
     expect(resolveUfoOrbitRadius(7, 0)).toBeCloseTo(5.46, 5);
     expect(resolveUfoOrbitRadius(7, 1)).toBeCloseTo(6.36, 5);
     expect(resolveUfoOrbitRadius(2, 0)).toBe(3.2);
+  });
+
+  it("routes the UFO fully above the moving slab instead of through its center plane", () => {
+    const landedTopCenterY = 12;
+
+    for (const slabHeight of [1, 3, 5]) {
+      const movingSlabTopY = landedTopCenterY + slabHeight * 1.5;
+      const ufoHalfHeight = resolveUfoModelWidth(slabHeight) * 0.267 * 0.5;
+      const lowestBobbedUfoBottomY = resolveUfoOrbitAltitude(landedTopCenterY, slabHeight) - 0.18 - ufoHalfHeight;
+
+      expect(lowestBobbedUfoBottomY).toBeGreaterThan(movingSlabTopY + 0.2);
+    }
   });
 
   it("centers and scales a loaded saucer to the requested world width", () => {

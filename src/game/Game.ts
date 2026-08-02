@@ -87,7 +87,14 @@ import { resolveFacadeStyle } from "./logic/facade";
 import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
-import { loadUfoModel, precompileUfoModel, resolveUfoModelWidth, resolveUfoOrbitRadius, setUfoModelOpacity } from "./distractions/ufoModel";
+import {
+  loadUfoModel,
+  precompileUfoModel,
+  resolveUfoModelWidth,
+  resolveUfoOrbitAltitude,
+  resolveUfoOrbitRadius,
+  setUfoModelOpacity,
+} from "./distractions/ufoModel";
 import { createSeededRandom } from "./logic/random";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
 import {
@@ -1856,7 +1863,7 @@ export class Game {
         const orbitCenterX = topSlab?.position.x ?? 0;
         const topCenterY = topSlab?.position.y ?? 0;
         const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
-        const orbitCenterY = topCenterY + topSlabHeight;
+        const orbitCenterY = resolveUfoOrbitAltitude(topCenterY, topSlabHeight);
         const orbitCenterZ = topSlab?.position.z ?? 0;
 
         const worldPoint = new Vector3(
