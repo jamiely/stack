@@ -1,0 +1,15 @@
+Animated Monsters — Bat
+
+Creator: Quaternius
+Canonical source: https://quaternius.com/packs/animatedmonster.html
+Downloaded model mirror: https://github.com/electronstudio/rlzero/blob/b5be4555cb802daf9737cb7fd376887281fd3932/examples/data/models/monsters/Bat.glb
+Asset-specific license proof: https://github.com/electronstudio/rlzero/blob/b5be4555cb802daf9737cb7fd376887281fd3932/examples/data/models/monsters/License.txt
+License: CC0 1.0 Universal (Public Domain Dedication)
+License URL: https://creativecommons.org/publicdomain/zero/1.0/
+SHA-256: bac0479f14dc6274303011f562d6f49b3ce9cf29f554c37f80f82e305bd3efee
+
+No attribution is legally required. Optional credit requested by the creator:
+Animated Monsters by Quaternius
+https://www.patreon.com/quaternius
+
+The source GLB is included unchanged. Tower Stacker normalizes its scene scale and placement at runtime.

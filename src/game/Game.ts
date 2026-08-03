@@ -88,6 +88,12 @@ import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import {
+  loadBatModel,
+  precompileBatModel,
+  resolveBatModelSpan,
+  setBatModelOpacity,
+} from "./distractions/batModel";
+import {
   loadUfoModel,
   precompileUfoModel,
   resolveUfoModelWidth,
@@ -458,6 +464,9 @@ export class Game {
   private ufoWorldVelocity = new Vector3(UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND, 0.15, 0.8);
   private readonly ufoModelRoot = new Group();
   private ufoModel: Group | null = null;
+  private readonly batModelRoot = new Group();
+  private batModel: Group | null = null;
+  private batMixer: AnimationMixer | null = null;
   private gorillaLastSlamCycle = -1;
   private gorillaSlamRemaining = 0;
   private integrityTelemetry: IntegrityTelemetry = resolveIntegrityTelemetry(
@@ -630,6 +639,7 @@ export class Game {
     this.buildHud();
     this.buildDistractionOverlay();
     this.loadUfoModelAsset();
+    this.loadBatModelAsset();
     this.resetWorld();
   }
 
@@ -662,6 +672,7 @@ export class Game {
     this.camera.add(this.starFieldSmall, this.starFieldMedium, this.starFieldLarge);
     this.scene.add(this.camera);
     this.ufoModelRoot.visible = false;
+    this.batModelRoot.visible = false;
     this.scene.add(
       this.stackGroup,
       this.archivedGroup,
@@ -669,6 +680,7 @@ export class Game {
       this.collapseVoxelGroup,
       this.tentacleGroup,
       this.ufoModelRoot,
+      this.batModelRoot,
       this.spatialDebugSurface.root,
       this.gridHelper,
     );
@@ -766,6 +778,8 @@ export class Game {
 
     this.batActor.className = "distraction-actor distraction-actor--bat";
     this.batActor.dataset.testid = "actor-bat";
+    this.batActor.dataset.modelState = "loading";
+    this.batActor.dataset.modelVisible = "false";
 
     this.cloudLayer.className = "distraction-clouds";
     this.cloudLayer.dataset.testid = "actor-clouds";
@@ -816,6 +830,34 @@ export class Game {
         this.ufoActor.dataset.modelState = "fallback";
         this.ufoActor.classList.remove("distraction-actor--ufo-model-ready");
         console.warn("Failed to load and precompile the UFO model; keeping the CSS fallback.", error);
+      });
+  }
+
+  private loadBatModelAsset(): void {
+    if (!this.renderer) {
+      this.batActor.dataset.modelState = "fallback";
+      return;
+    }
+
+    const targetSpan = resolveBatModelSpan(this.debugConfig.slabHeight, this.camera.aspect);
+    void loadBatModel(targetSpan)
+      .then(async ({ model, mixer }) => {
+        this.batModelRoot.clear();
+        this.batModelRoot.add(model);
+        this.batActor.dataset.modelState = "warming";
+        await precompileBatModel(this.renderer!, this.scene, this.camera, this.batModelRoot);
+        this.batModel = model;
+        this.batMixer = mixer;
+        this.batActor.dataset.modelState = "ready";
+        this.batActor.classList.add("distraction-actor--bat-model-ready");
+      })
+      .catch((error: unknown) => {
+        this.batModelRoot.clear();
+        this.batModel = null;
+        this.batMixer = null;
+        this.batActor.dataset.modelState = "fallback";
+        this.batActor.classList.remove("distraction-actor--bat-model-ready");
+        console.warn("Failed to load and precompile the bat model; keeping the CSS fallback.", error);
       });
   }
 
@@ -1958,28 +2000,50 @@ export class Game {
     }
 
     if (!snapshot.active.bat) {
+      this.batModelRoot.visible = false;
+      this.batActor.dataset.modelVisible = "false";
       this.batActor.style.opacity = "0";
-    } else if (shouldUpdateForLod(this.distractionLod.bat, this.frameCounter, scalars.distractionUpdateStride)) {
-      const width = this.container.clientWidth || window.innerWidth;
-      const height = this.container.clientHeight || window.innerHeight;
-      const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
-      const centerX = topSlab?.position.x ?? 0;
-      const centerY = (topSlab?.position.y ?? 0) + (topSlab?.dimensions.height ?? this.debugConfig.slabHeight) * 0.9;
-      const centerZ = topSlab?.position.z ?? 0;
-      const phase = this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * 2.2;
-      const orbitRadius = Math.max(2.4, this.debugConfig.baseWidth * 0.9 + snapshot.signals.bat * 1.2);
-      const worldPoint = new Vector3(
-        centerX + Math.cos(phase) * orbitRadius,
-        centerY + Math.sin(phase * 2.4) * 0.65,
-        centerZ + Math.sin(phase * 1.15) * orbitRadius * 0.6,
-      );
-      const projected = worldPoint.project(this.camera);
-      const screenX = (projected.x * 0.5 + 0.5) * width;
-      const screenY = (-projected.y * 0.5 + 0.5) * height;
-      const flap = 0.85 + Math.sin(phase * 6.4) * 0.35;
-      const opacity = projected.z > -1 && projected.z < 1 ? 0.22 + snapshot.signals.bat * 0.7 : 0.08;
-      this.batActor.style.opacity = opacity.toFixed(3);
-      this.batActor.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(${flap.toFixed(3)})`;
+    } else {
+      this.batMixer?.update(Math.min(1 / 15, Math.max(0, deltaSeconds)));
+      if (shouldUpdateForLod(this.distractionLod.bat, this.frameCounter, scalars.distractionUpdateStride)) {
+        const width = this.container.clientWidth || window.innerWidth;
+        const height = this.container.clientHeight || window.innerHeight;
+        const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
+        const centerX = topSlab?.position.x ?? 0;
+        const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
+        const centerY = (topSlab?.position.y ?? 0) + topSlabHeight * 0.9;
+        const centerZ = topSlab?.position.z ?? 0;
+        const phase = this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * 2.2;
+        const orbitRadius = Math.max(2.4, this.debugConfig.baseWidth * 0.9 + snapshot.signals.bat * 1.2);
+        const worldPoint = new Vector3(
+          centerX + Math.cos(phase) * orbitRadius,
+          centerY + Math.sin(phase * 2.4) * 0.65,
+          centerZ + Math.sin(phase * 1.15) * orbitRadius * 0.6,
+        );
+        const projected = worldPoint.clone().project(this.camera);
+        const screenX = (projected.x * 0.5 + 0.5) * width;
+        const screenY = (-projected.y * 0.5 + 0.5) * height;
+        const flap = 0.85 + Math.sin(phase * 6.4) * 0.35;
+        const inFrontOfCamera = projected.z > -1 && projected.z < 1;
+        const opacity = inFrontOfCamera ? 0.22 + snapshot.signals.bat * 0.7 : 0.08;
+        if (this.batModel) {
+          const desiredSpan = resolveBatModelSpan(topSlabHeight, this.camera.aspect);
+          const loadedSpan = Number(this.batModel.userData.targetSpan) || desiredSpan;
+          this.batModelRoot.scale.setScalar(desiredSpan / loadedSpan);
+          this.batModelRoot.position.copy(worldPoint);
+          this.batModelRoot.rotation.y = Math.atan2(
+            this.camera.position.x - worldPoint.x,
+            this.camera.position.z - worldPoint.z,
+          );
+          this.batModelRoot.visible = inFrontOfCamera;
+          setBatModelOpacity(this.batModel, opacity);
+          this.batActor.dataset.modelVisible = String(inFrontOfCamera);
+        } else {
+          this.batActor.dataset.modelVisible = "false";
+        }
+        this.batActor.style.opacity = opacity.toFixed(3);
+        this.batActor.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%) scale(${flap.toFixed(3)})`;
+      }
     }
 
     if (shouldUpdateForLod(this.distractionLod.clouds, this.frameCounter, scalars.distractionUpdateStride)) {

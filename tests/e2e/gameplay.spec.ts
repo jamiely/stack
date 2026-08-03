@@ -40,6 +40,7 @@ interface E2EState {
       gorilla: boolean;
       tremor: boolean;
       ufo: boolean;
+      bat: boolean;
       contrastWash: boolean;
       clouds: boolean;
       fireworks: boolean;
@@ -590,6 +591,12 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
+  await page.locator('input[data-debug-key="distractionBatStartLevel"]').evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.value = "120";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
   await page.locator('input[data-debug-key="distractionCloudStartLevel"]').evaluate((node) => {
     const input = node as HTMLInputElement;
     input.value = "120";
@@ -611,6 +618,7 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   await expect.poll(async () => (await getTestState(page))?.distractions.active.tentacle).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.bat).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.fireworks).toBe(false);
 
@@ -618,6 +626,7 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   await page.getByTestId("debug-launch-gorilla").click();
   await page.getByTestId("debug-launch-tremor").click();
   await page.getByTestId("debug-launch-ufo").click();
+  await page.getByTestId("debug-launch-bat").click();
   await page.getByTestId("debug-launch-contrastWash").click();
   await page.getByTestId("debug-launch-clouds").click();
   await page.getByTestId("debug-launch-fireworks").click();
@@ -626,6 +635,7 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.tremor).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(true);
+  await expect.poll(async () => (await getTestState(page))?.distractions.active.bat).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.contrastWash).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.fireworks).toBe(true);
@@ -633,6 +643,10 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   const ufoActor = page.getByTestId("actor-ufo");
   await expect(ufoActor).toHaveAttribute("data-model-state", "ready");
   await expect(ufoActor).toHaveAttribute("data-model-visible", "true");
+
+  const batActor = page.getByTestId("actor-bat");
+  await expect(batActor).toHaveAttribute("data-model-state", "ready");
+  await expect(batActor).toHaveAttribute("data-model-visible", "true");
 
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0.2);
