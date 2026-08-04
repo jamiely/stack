@@ -1,12 +1,15 @@
 import { readFileSync } from "node:fs";
 import { AnimationClip, Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Vector3 } from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { describe, expect, it } from "vitest";
 import {
   BAT_FLYING_CLIP_NAME,
+  BAT_ORBIT_VERTICAL_AMPLITUDE,
   loadBatModel,
   normalizeBatModel,
   precompileBatModel,
   resolveBatModelSpan,
+  resolveBatOrbitAltitude,
   setBatModelOpacity,
 } from "../../src/game/distractions/batModel";
 
@@ -36,6 +39,40 @@ describe("bat model presentation", () => {
     expect(resolveBatModelSpan(1)).toBe(1.6);
     expect(resolveBatModelSpan(5)).toBe(2.8);
     expect(resolveBatModelSpan(3, 0.5)).toBeCloseTo(1.92, 5);
+  });
+
+  it("keeps the real animated bat envelope above the moving block", async () => {
+    const glb = readFileSync(new URL("../../assets/quaternius_bat.glb", import.meta.url));
+    const arrayBuffer = glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength) as ArrayBuffer;
+    const parsed = await new GLTFLoader().parseAsync(arrayBuffer, "");
+    const loaded = await loadBatModel(1, {
+      loadAsync: async () => ({ scene: parsed.scene, animations: parsed.animations }),
+    });
+    let normalizedAnimatedMinY = Number.POSITIVE_INFINITY;
+    for (let sample = 0; sample <= 60; sample += 1) {
+      loaded.mixer.setTime(loaded.clip.duration * sample / 60);
+      loaded.model.updateMatrixWorld(true);
+      const sampleBounds = new Box3().setFromObject(loaded.model, true);
+      normalizedAnimatedMinY = Math.min(normalizedAnimatedMinY, sampleBounds.min.y);
+    }
+    const animatedDownwardExtentRatio = -normalizedAnimatedMinY;
+    const landedTopCenterY = 12;
+
+    for (const slabHeight of [1, 3, 5]) {
+      for (const viewportAspect of [0.5, 1]) {
+        const movingSlabCenterY = landedTopCenterY + slabHeight;
+        const movingSlabTopY = movingSlabCenterY + slabHeight * 0.5;
+        const batAnimatedDownwardExtent = resolveBatModelSpan(slabHeight, viewportAspect)
+          * animatedDownwardExtentRatio;
+        const lowestBatBottomY = resolveBatOrbitAltitude(
+          movingSlabCenterY,
+          slabHeight,
+          viewportAspect,
+        ) - BAT_ORBIT_VERTICAL_AMPLITUDE - batAnimatedDownwardExtent;
+
+        expect(lowestBatBottomY).toBeGreaterThan(movingSlabTopY + 0.2);
+      }
+    }
   });
 
   it("centers and scales the larger front-view dimension to the requested span", () => {

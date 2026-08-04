@@ -88,9 +88,11 @@ import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import {
+  BAT_ORBIT_VERTICAL_AMPLITUDE,
   loadBatModel,
   precompileBatModel,
   resolveBatModelSpan,
+  resolveBatOrbitAltitude,
   setBatModelOpacity,
 } from "./distractions/batModel";
 import {
@@ -2011,13 +2013,20 @@ export class Game {
         const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
         const centerX = topSlab?.position.x ?? 0;
         const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
-        const centerY = (topSlab?.position.y ?? 0) + topSlabHeight * 0.9;
+        const movingSlabHeight = this.activeSlab?.dimensions.height ?? topSlabHeight;
+        const movingSlabCenterY = this.activeSlab?.position.y
+          ?? (topSlab?.position.y ?? 0) + topSlabHeight;
+        const centerY = resolveBatOrbitAltitude(
+          movingSlabCenterY,
+          movingSlabHeight,
+          this.camera.aspect,
+        );
         const centerZ = topSlab?.position.z ?? 0;
         const phase = this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * 2.2;
         const orbitRadius = Math.max(2.4, this.debugConfig.baseWidth * 0.9 + snapshot.signals.bat * 1.2);
         const worldPoint = new Vector3(
           centerX + Math.cos(phase) * orbitRadius,
-          centerY + Math.sin(phase * 2.4) * 0.65,
+          centerY + Math.sin(phase * 2.4) * BAT_ORBIT_VERTICAL_AMPLITUDE,
           centerZ + Math.sin(phase * 1.15) * orbitRadius * 0.6,
         );
         const projected = worldPoint.clone().project(this.camera);

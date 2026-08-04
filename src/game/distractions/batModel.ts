@@ -14,10 +14,13 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export const BAT_MODEL_URL = new URL("../../../assets/quaternius_bat.glb", import.meta.url).href;
 export const BAT_FLYING_CLIP_NAME = "Bat_Flying";
+export const BAT_ORBIT_VERTICAL_AMPLITUDE = 0.65;
 
 const BAT_WORLD_SPAN_TO_SLAB_HEIGHT_RATIO = 0.8;
 const BAT_MIN_WORLD_SPAN = 1.6;
 const BAT_MAX_WORLD_SPAN = 2.8;
+const BAT_ANIMATED_DOWNWARD_EXTENT_TO_SPAN_RATIO = 0.7;
+const BAT_MOVING_SLAB_CLEARANCE = 0.25;
 
 interface BatGltf {
   scene: Group;
@@ -58,6 +61,20 @@ export function resolveBatModelSpan(slabHeight: number, viewportAspect = 1): num
   );
   const responsiveScale = viewportAspect <= 0.75 ? 0.8 : 1;
   return Math.max(BAT_MIN_WORLD_SPAN, desktopSpan * responsiveScale);
+}
+
+export function resolveBatOrbitAltitude(
+  movingSlabCenterY: number,
+  movingSlabHeight: number,
+  viewportAspect = 1,
+): number {
+  const movingSlabTopY = movingSlabCenterY + movingSlabHeight * 0.5;
+  const batAnimatedDownwardExtent = resolveBatModelSpan(movingSlabHeight, viewportAspect)
+    * BAT_ANIMATED_DOWNWARD_EXTENT_TO_SPAN_RATIO;
+  return movingSlabTopY
+    + BAT_ORBIT_VERTICAL_AMPLITUDE
+    + batAnimatedDownwardExtent
+    + BAT_MOVING_SLAB_CLEARANCE;
 }
 
 export function normalizeBatModel(source: Group, targetSpan: number): Group {
