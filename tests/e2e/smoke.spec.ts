@@ -49,3 +49,20 @@ test("mobile debug panel can collapse and expand without leaving the viewport bl
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(body).toBeVisible();
 });
+
+test("debug block motion control resumes a paused debug test link", async ({ page }) => {
+  await page.goto("/?debug&test&paused=1&seed=7");
+
+  const motionToggle = page.getByTestId("debug-toggle-block-motion");
+  await expect(motionToggle).toHaveText(/Resume simulation/i);
+
+  const initialX = await page.evaluate(() => window.__towerStackerTestApi?.getState().activePosition?.x ?? null);
+  expect(initialX).not.toBeNull();
+
+  await motionToggle.click();
+
+  await expect(motionToggle).toHaveText(/Pause block motion/i);
+  await expect
+    .poll(async () => page.evaluate(() => window.__towerStackerTestApi?.getState().activePosition?.x ?? null))
+    .not.toBe(initialX);
+});

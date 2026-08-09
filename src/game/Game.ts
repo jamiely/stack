@@ -1052,6 +1052,14 @@ export class Game {
     toggleButton.className = "button button--secondary debug-panel__action";
     toggleButton.dataset.testid = "debug-toggle-block-motion";
     toggleButton.addEventListener("click", () => {
+      if (this.simulationPaused) {
+        this.simulationPaused = false;
+        this.activeBlockMotionPaused = false;
+        this.renderHud();
+        this.updateBlockMotionButtonLabel();
+        return;
+      }
+
       this.activeBlockMotionPaused = !this.activeBlockMotionPaused;
       this.updateBlockMotionButtonLabel();
     });
@@ -1065,6 +1073,11 @@ export class Game {
 
   private updateBlockMotionButtonLabel(): void {
     if (!this.pauseBlockMotionButton) {
+      return;
+    }
+
+    if (this.simulationPaused) {
+      this.pauseBlockMotionButton.textContent = "Resume Simulation";
       return;
     }
 
@@ -3602,6 +3615,8 @@ export class Game {
         ? String(this.debugConfig[key])
         : `${this.debugConfig[key].toFixed(2)}`;
     });
+
+    this.updateBlockMotionButtonLabel();
   }
 
   private setActiveOffset(offset: number): boolean {
