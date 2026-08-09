@@ -463,6 +463,34 @@ body {
   text-transform: uppercase;
 }
 
+.debug-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.debug-panel__collapse {
+  padding: 0.42rem 0.65rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.debug-panel__body {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.debug-panel__body[hidden] {
+  display: none;
+}
+
+.debug-panel--collapsed {
+  max-height: none;
+  overflow-y: visible;
+}
+
 .debug-panel__actions {
   display: grid;
   gap: 0.45rem;
@@ -536,8 +564,13 @@ body {
   }
 
   .debug-panel {
-    top: auto;
-    bottom: 17rem;
+    top: 1rem;
+    bottom: 1rem;
+    max-height: calc(100vh - 2rem);
+  }
+
+  .debug-panel--collapsed {
+    bottom: auto;
   }
 
   .debug-panel__actions-grid {

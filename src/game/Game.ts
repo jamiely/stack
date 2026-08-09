@@ -865,15 +865,40 @@ export class Game {
 
   private createDebugControls(): DocumentFragment {
     const fragment = document.createDocumentFragment();
+    const header = document.createElement("div");
+    header.className = "debug-panel__header";
+
     const title = document.createElement("h2");
     title.textContent = "Runtime Debug";
-    fragment.append(
-      title,
+
+    const body = document.createElement("div");
+    body.className = "debug-panel__body";
+    body.dataset.testid = "debug-panel-body";
+    body.id = "tower-stacker-debug-panel-body";
+
+    const collapseButton = document.createElement("button");
+    collapseButton.type = "button";
+    collapseButton.className = "button button--secondary debug-panel__collapse";
+    collapseButton.dataset.testid = "debug-panel-toggle";
+    collapseButton.setAttribute("aria-controls", body.id);
+    collapseButton.setAttribute("aria-expanded", "true");
+    collapseButton.textContent = "Hide debug";
+    collapseButton.addEventListener("click", () => {
+      const collapsed = !this.debugPanel.classList.contains("debug-panel--collapsed");
+      this.debugPanel.classList.toggle("debug-panel--collapsed", collapsed);
+      body.hidden = collapsed;
+      collapseButton.setAttribute("aria-expanded", String(!collapsed));
+      collapseButton.textContent = collapsed ? "Show debug" : "Hide debug";
+    });
+
+    header.append(title, collapseButton);
+    body.append(
       this.createDistractionLaunchControls(),
       this.createNormalizeBlockControl(),
       this.createBlockMotionControl(),
       this.createRemyPlacementControls(),
     );
+    fragment.append(header, body);
 
     (Object.entries(DEBUG_RANGES) as [DebugNumberKey, (typeof DEBUG_RANGES)[DebugNumberKey]][]).forEach(
       ([key, meta]) => {
@@ -929,7 +954,7 @@ export class Game {
         });
 
         label.append(row, input);
-        fragment.append(label);
+        body.append(label);
       },
     );
 
@@ -950,7 +975,7 @@ export class Game {
       });
 
       toggleLabel.append(toggle);
-      fragment.append(toggleLabel);
+      body.append(toggleLabel);
     });
 
     return fragment;
