@@ -12,6 +12,20 @@ export interface LedgeAnimationFrame {
   completed: boolean;
 }
 
+export interface LedgeLipPlacementInput {
+  ledgeHeight: number;
+  ledgeDepth: number;
+  lipHeight: number;
+  lipDepth: number;
+}
+
+export interface LedgeLipPlacement {
+  y: number;
+  z: number;
+}
+
+const LEDGE_LIP_SURFACE_GAP = 0.002;
+
 const LEDGE_MIN_WIDTH_RATIO = 0.25;
 const LEDGE_MAX_WIDTH_RATIO = 1;
 const LEDGE_MIN_WIDTH = 0.24;
@@ -51,6 +65,13 @@ export function resolveLedgeDimensions(faceSpan: number, slabHeight: number, wid
     ledgeDepth,
     lipHeight,
     lipDepth,
+  };
+}
+
+export function resolveLedgeLipPlacement(input: LedgeLipPlacementInput): LedgeLipPlacement {
+  return {
+    y: input.ledgeHeight / 2 + input.lipHeight / 2 + LEDGE_LIP_SURFACE_GAP,
+    z: input.ledgeDepth / 2 - input.lipDepth / 2,
   };
 }
 

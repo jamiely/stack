@@ -66,7 +66,7 @@ import {
   toQualityPreset,
 } from "./logic/performance";
 import { resolveIntegrityTelemetry } from "./logic/integrity";
-import { LEDGE_ANIMATION_DURATION_SECONDS, resolveLedgeDimensions, resolveLedgeFaceIndex, sampleLedgeAnimationScaleX } from "./logic/ledges";
+import { LEDGE_ANIMATION_DURATION_SECONDS, resolveLedgeDimensions, resolveLedgeFaceIndex, resolveLedgeLipPlacement, sampleLedgeAnimationScaleX } from "./logic/ledges";
 import {
   getWindowHorizontalOffsets,
   resolveTentacleOutDepth,
@@ -4690,7 +4690,8 @@ export class Game {
         roughness: 0.7,
       }),
     );
-    lip.position.set(0, ledgeHeight / 2 - lipHeight / 2, ledgeDepth / 2 - lipDepth / 2);
+    const lipPlacement = resolveLedgeLipPlacement({ ledgeHeight, ledgeDepth, lipHeight, lipDepth });
+    lip.position.set(0, lipPlacement.y, lipPlacement.z);
     ledge.add(lip);
 
     ledge.userData.isLedge = true;

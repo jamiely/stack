@@ -3,6 +3,7 @@ import {
   LEDGE_ANIMATION_DURATION_SECONDS,
   resolveLedgeDimensions,
   resolveLedgeFaceIndex,
+  resolveLedgeLipPlacement,
   sampleLedgeAnimationScaleX,
 } from "../../src/game/logic/ledges";
 
@@ -41,6 +42,27 @@ describe("resolveLedgeDimensions", () => {
     const highNoise = resolveLedgeDimensions(0.4, 12, 9);
     expect(highNoise.widthRatio).toBeCloseTo(1, 6);
     expect(highNoise.ledgeDepth).toBeCloseTo(1.8, 6);
+  });
+});
+
+describe("resolveLedgeLipPlacement", () => {
+  it("keeps the lip outside the ledge body so coplanar faces cannot flicker", () => {
+    const placement = resolveLedgeLipPlacement({
+      ledgeHeight: 0.3,
+      ledgeDepth: 1.8,
+      lipHeight: 0.102,
+      lipDepth: 0.396,
+    });
+
+    const ledgeTop = 0.3 / 2;
+    const lipBottom = placement.y - 0.102 / 2;
+    const ledgeFront = 1.8 / 2;
+    const lipBack = placement.z - 0.396 / 2;
+    const lipFront = placement.z + 0.396 / 2;
+
+    expect(lipBottom).toBeGreaterThan(ledgeTop);
+    expect(lipBack).toBeGreaterThanOrEqual(-ledgeFront);
+    expect(lipFront).toBeCloseTo(ledgeFront, 6);
   });
 });
 
