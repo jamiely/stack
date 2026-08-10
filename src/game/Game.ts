@@ -88,11 +88,10 @@ import { sampleGorillaClimbPosition } from "./logic/gorilla";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import {
-  BAT_ORBIT_VERTICAL_AMPLITUDE,
   loadBatModel,
   precompileBatModel,
   resolveBatModelSpan,
-  resolveBatOrbitAltitude,
+  sampleBatOrbitPosition,
   setBatModelOpacity,
 } from "./distractions/batModel";
 import {
@@ -2054,19 +2053,20 @@ export class Game {
         const movingSlabHeight = this.activeSlab?.dimensions.height ?? topSlabHeight;
         const movingSlabCenterY = this.activeSlab?.position.y
           ?? (topSlab?.position.y ?? 0) + topSlabHeight;
-        const centerY = resolveBatOrbitAltitude(
-          movingSlabCenterY,
-          movingSlabHeight,
-          this.camera.aspect,
-        );
         const centerZ = topSlab?.position.z ?? 0;
         const phase = this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * 2.2;
-        const orbitRadius = Math.max(2.4, this.debugConfig.baseWidth * 0.9 + snapshot.signals.bat * 1.2);
-        const worldPoint = new Vector3(
-          centerX + Math.cos(phase) * orbitRadius,
-          centerY + Math.sin(phase * 2.4) * BAT_ORBIT_VERTICAL_AMPLITUDE,
-          centerZ + Math.sin(phase * 1.15) * orbitRadius * 0.6,
-        );
+        const worldPoint = sampleBatOrbitPosition({
+          centerX,
+          movingSlabCenterY,
+          centerZ,
+          slabWidth: this.activeSlab?.dimensions.width ?? topSlab?.dimensions.width ?? this.debugConfig.baseWidth,
+          slabHeight: movingSlabHeight,
+          slabDepth: this.activeSlab?.dimensions.depth ?? topSlab?.dimensions.depth ?? this.debugConfig.baseDepth,
+          baseWidth: this.debugConfig.baseWidth,
+          signal: snapshot.signals.bat,
+          phase,
+          viewportAspect: this.camera.aspect,
+        });
         const projected = worldPoint.clone().project(this.camera);
         const screenX = (projected.x * 0.5 + 0.5) * width;
         const screenY = (-projected.y * 0.5 + 0.5) * height;

@@ -4,14 +4,15 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { describe, expect, it } from "vitest";
 import {
   BAT_FLYING_CLIP_NAME,
-  BAT_ORBIT_VERTICAL_AMPLITUDE,
   loadBatModel,
   normalizeBatModel,
   precompileBatModel,
   resolveBatModelSpan,
   resolveBatOrbitAltitude,
+  sampleBatOrbitPosition,
   setBatModelOpacity,
 } from "../../src/game/distractions/batModel";
+import { resolveUfoOrbitAltitude } from "../../src/game/distractions/ufoModel";
 
 describe("bat model presentation", () => {
   it("keeps the self-contained animated asset inside its mobile runtime budget", () => {
@@ -41,7 +42,21 @@ describe("bat model presentation", () => {
     expect(resolveBatModelSpan(3, 0.5)).toBeCloseTo(1.92, 5);
   });
 
-  it("keeps the real animated bat envelope above the moving block", async () => {
+  it("keeps the bat flight band lower on screen than the UFO band", () => {
+    const landedTopCenterY = 12;
+
+    for (const slabHeight of [1, 3, 5]) {
+      for (const viewportAspect of [0.5, 1]) {
+        const movingSlabCenterY = landedTopCenterY + slabHeight;
+        const batOrbitCenterY = resolveBatOrbitAltitude(movingSlabCenterY, slabHeight, viewportAspect);
+        const ufoOrbitCenterY = resolveUfoOrbitAltitude(landedTopCenterY, slabHeight);
+
+        expect(batOrbitCenterY).toBeLessThan(ufoOrbitCenterY - slabHeight * 0.35);
+      }
+    }
+  });
+
+  it("keeps the real animated low-flying bat envelope clear of the moving block", async () => {
     const glb = readFileSync(new URL("../../assets/quaternius_bat.glb", import.meta.url));
     const arrayBuffer = glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength) as ArrayBuffer;
     const parsed = await new GLTFLoader().parseAsync(arrayBuffer, "");
@@ -49,28 +64,60 @@ describe("bat model presentation", () => {
       loadAsync: async () => ({ scene: parsed.scene, animations: parsed.animations }),
     });
     let normalizedAnimatedMinY = Number.POSITIVE_INFINITY;
+    let normalizedAnimatedMaxY = Number.NEGATIVE_INFINITY;
+    let normalizedAnimatedHalfWidth = 0;
+    let normalizedAnimatedHalfDepth = 0;
     for (let sample = 0; sample <= 60; sample += 1) {
       loaded.mixer.setTime(loaded.clip.duration * sample / 60);
       loaded.model.updateMatrixWorld(true);
       const sampleBounds = new Box3().setFromObject(loaded.model, true);
       normalizedAnimatedMinY = Math.min(normalizedAnimatedMinY, sampleBounds.min.y);
+      normalizedAnimatedMaxY = Math.max(normalizedAnimatedMaxY, sampleBounds.max.y);
+      normalizedAnimatedHalfWidth = Math.max(
+        normalizedAnimatedHalfWidth,
+        Math.max(Math.abs(sampleBounds.min.x), Math.abs(sampleBounds.max.x)),
+      );
+      normalizedAnimatedHalfDepth = Math.max(
+        normalizedAnimatedHalfDepth,
+        Math.max(Math.abs(sampleBounds.min.z), Math.abs(sampleBounds.max.z)),
+      );
     }
-    const animatedDownwardExtentRatio = -normalizedAnimatedMinY;
     const landedTopCenterY = 12;
+    const movingSlabCenterX = 0;
+    const movingSlabCenterZ = 0;
+    const clearanceMargin = 0.2;
 
     for (const slabHeight of [1, 3, 5]) {
       for (const viewportAspect of [0.5, 1]) {
         const movingSlabCenterY = landedTopCenterY + slabHeight;
-        const movingSlabTopY = movingSlabCenterY + slabHeight * 0.5;
-        const batAnimatedDownwardExtent = resolveBatModelSpan(slabHeight, viewportAspect)
-          * animatedDownwardExtentRatio;
-        const lowestBatBottomY = resolveBatOrbitAltitude(
-          movingSlabCenterY,
-          slabHeight,
-          viewportAspect,
-        ) - BAT_ORBIT_VERTICAL_AMPLITUDE - batAnimatedDownwardExtent;
+        const batSpan = resolveBatModelSpan(slabHeight, viewportAspect);
+        const batHalfWidth = normalizedAnimatedHalfWidth * batSpan;
+        const batHalfDepth = normalizedAnimatedHalfDepth * batSpan;
+        const batMinY = normalizedAnimatedMinY * batSpan;
+        const batMaxY = normalizedAnimatedMaxY * batSpan;
+        for (let phaseSample = 0; phaseSample < 96; phaseSample += 1) {
+          const phase = phaseSample / 96 * Math.PI * 2;
+          const sample = sampleBatOrbitPosition({
+            centerX: movingSlabCenterX,
+            movingSlabCenterY,
+            centerZ: movingSlabCenterZ,
+            slabWidth: 7,
+            slabHeight,
+            slabDepth: 7,
+            baseWidth: 7,
+            signal: phaseSample % 2,
+            phase,
+            viewportAspect,
+          });
+          const separatedOnX = sample.x + batHalfWidth < movingSlabCenterX - 3.5 - clearanceMargin
+            || sample.x - batHalfWidth > movingSlabCenterX + 3.5 + clearanceMargin;
+          const separatedOnY = sample.y + batMaxY < movingSlabCenterY - slabHeight * 0.5 - clearanceMargin
+            || sample.y + batMinY > movingSlabCenterY + slabHeight * 0.5 + clearanceMargin;
+          const separatedOnZ = sample.z + batHalfDepth < movingSlabCenterZ - 3.5 - clearanceMargin
+            || sample.z - batHalfDepth > movingSlabCenterZ + 3.5 + clearanceMargin;
 
-        expect(lowestBatBottomY).toBeGreaterThan(movingSlabTopY + 0.2);
+          expect(separatedOnX || separatedOnY || separatedOnZ).toBe(true);
+        }
       }
     }
   });

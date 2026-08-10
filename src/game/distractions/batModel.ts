@@ -19,8 +19,9 @@ export const BAT_ORBIT_VERTICAL_AMPLITUDE = 0.65;
 const BAT_WORLD_SPAN_TO_SLAB_HEIGHT_RATIO = 0.8;
 const BAT_MIN_WORLD_SPAN = 1.6;
 const BAT_MAX_WORLD_SPAN = 2.8;
-const BAT_ANIMATED_DOWNWARD_EXTENT_TO_SPAN_RATIO = 0.7;
-const BAT_MOVING_SLAB_CLEARANCE = 0.25;
+const BAT_SCREEN_BAND_BELOW_MOVING_SLAB_RATIO = 0.5;
+const BAT_FOREGROUND_CLEARANCE = 0.45;
+const BAT_FOREGROUND_SWAY_RATIO = 0.16;
 
 interface BatGltf {
   scene: Group;
@@ -63,18 +64,56 @@ export function resolveBatModelSpan(slabHeight: number, viewportAspect = 1): num
   return Math.max(BAT_MIN_WORLD_SPAN, desktopSpan * responsiveScale);
 }
 
+export interface BatOrbitPositionInput {
+  centerX: number;
+  movingSlabCenterY: number;
+  centerZ: number;
+  slabWidth: number;
+  slabHeight: number;
+  slabDepth: number;
+  baseWidth: number;
+  signal: number;
+  phase: number;
+  viewportAspect?: number;
+}
+
 export function resolveBatOrbitAltitude(
   movingSlabCenterY: number,
   movingSlabHeight: number,
-  viewportAspect = 1,
+  _viewportAspect = 1,
 ): number {
-  const movingSlabTopY = movingSlabCenterY + movingSlabHeight * 0.5;
-  const batAnimatedDownwardExtent = resolveBatModelSpan(movingSlabHeight, viewportAspect)
-    * BAT_ANIMATED_DOWNWARD_EXTENT_TO_SPAN_RATIO;
-  return movingSlabTopY
-    + BAT_ORBIT_VERTICAL_AMPLITUDE
-    + batAnimatedDownwardExtent
-    + BAT_MOVING_SLAB_CLEARANCE;
+  return movingSlabCenterY - movingSlabHeight * BAT_SCREEN_BAND_BELOW_MOVING_SLAB_RATIO;
+}
+
+export function sampleBatOrbitPosition({
+  centerX,
+  movingSlabCenterY,
+  centerZ,
+  slabWidth,
+  slabHeight,
+  slabDepth,
+  baseWidth,
+  signal,
+  phase,
+  viewportAspect = 1,
+}: BatOrbitPositionInput): Vector3 {
+  const batSpan = resolveBatModelSpan(slabHeight, viewportAspect);
+  const clampedSignal = Math.min(1, Math.max(0, signal));
+  const horizontalRadius = Math.max(1.6, Math.max(baseWidth, slabWidth) * 0.35 + clampedSignal * 0.8);
+  const foregroundSwayRadius = Math.max(2.4, Math.max(baseWidth, slabWidth) * 0.9 + clampedSignal * 1.2);
+  const foregroundCenterZ = centerZ
+    + slabDepth * 0.5
+    + batSpan * 0.5
+    + BAT_FOREGROUND_CLEARANCE
+    + foregroundSwayRadius * BAT_FOREGROUND_SWAY_RATIO;
+  const foregroundSway = Math.sin(phase * 1.15) * foregroundSwayRadius * BAT_FOREGROUND_SWAY_RATIO;
+
+  return new Vector3(
+    centerX + Math.cos(phase) * horizontalRadius,
+    resolveBatOrbitAltitude(movingSlabCenterY, slabHeight, viewportAspect)
+      + Math.sin(phase * 2.4) * BAT_ORBIT_VERTICAL_AMPLITUDE,
+    foregroundCenterZ + foregroundSway,
+  );
 }
 
 export function normalizeBatModel(source: Group, targetSpan: number): Group {
