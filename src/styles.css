@@ -101,6 +101,11 @@ body {
     0 0.6rem 1.2rem rgba(0, 0, 0, 0.34);
 }
 
+.distraction-actor--gorilla-model-ready {
+  background: transparent;
+  box-shadow: none;
+}
+
 .distraction-actor--ufo {
   width: 5.4rem;
   height: 2.3rem;

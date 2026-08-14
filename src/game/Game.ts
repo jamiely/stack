@@ -95,6 +95,12 @@ import {
   setBatModelOpacity,
 } from "./distractions/batModel";
 import {
+  loadGorillaModel,
+  precompileGorillaModel,
+  resolveGorillaModelHeight,
+  setGorillaModelOpacity,
+} from "./distractions/gorillaModel";
+import {
   loadUfoModel,
   precompileUfoModel,
   resolveUfoModelWidth,
@@ -103,6 +109,7 @@ import {
   setUfoModelOpacity,
 } from "./distractions/ufoModel";
 import { createSeededRandom } from "./logic/random";
+import { resolveDistractionOrbitAnchorY } from "./distractions/orbitAnchor";
 import { CharacterAnimationManager, createCharacterAnimationCallbackBridge } from "./logic/characterAnimationManager";
 import {
   loadCharacterCoordinatorResult,
@@ -465,6 +472,9 @@ export class Game {
   private ufoWorldVelocity = new Vector3(UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND, 0.15, 0.8);
   private readonly ufoModelRoot = new Group();
   private ufoModel: Group | null = null;
+  private readonly gorillaModelRoot = new Group();
+  private gorillaModel: Group | null = null;
+  private gorillaMixer: AnimationMixer | null = null;
   private readonly batModelRoot = new Group();
   private batModel: Group | null = null;
   private batMixer: AnimationMixer | null = null;
@@ -639,6 +649,7 @@ export class Game {
     this.buildScene();
     this.buildHud();
     this.buildDistractionOverlay();
+    this.loadGorillaModelAsset();
     this.loadUfoModelAsset();
     this.loadBatModelAsset();
     this.resetWorld();
@@ -672,6 +683,7 @@ export class Game {
     this.starFieldLarge.position.set(0, 0, -64);
     this.camera.add(this.starFieldSmall, this.starFieldMedium, this.starFieldLarge);
     this.scene.add(this.camera);
+    this.gorillaModelRoot.visible = false;
     this.ufoModelRoot.visible = false;
     this.batModelRoot.visible = false;
     this.scene.add(
@@ -680,6 +692,7 @@ export class Game {
       this.debrisGroup,
       this.collapseVoxelGroup,
       this.tentacleGroup,
+      this.gorillaModelRoot,
       this.ufoModelRoot,
       this.batModelRoot,
       this.spatialDebugSurface.root,
@@ -771,6 +784,8 @@ export class Game {
 
     this.gorillaActor.className = "distraction-actor distraction-actor--gorilla";
     this.gorillaActor.dataset.testid = "actor-gorilla";
+    this.gorillaActor.dataset.modelState = "loading";
+    this.gorillaActor.dataset.modelVisible = "false";
 
     this.ufoActor.className = "distraction-actor distraction-actor--ufo";
     this.ufoActor.dataset.testid = "actor-ufo";
@@ -806,6 +821,34 @@ export class Game {
       this.fireworksActor,
       this.tremorPulse,
     );
+  }
+
+  private loadGorillaModelAsset(): void {
+    if (!this.renderer) {
+      this.gorillaActor.dataset.modelState = "fallback";
+      return;
+    }
+
+    const targetHeight = resolveGorillaModelHeight(this.debugConfig.slabHeight, this.camera.aspect);
+    void loadGorillaModel(targetHeight)
+      .then(async ({ model, mixer }) => {
+        this.gorillaModelRoot.clear();
+        this.gorillaModelRoot.add(model);
+        this.gorillaActor.dataset.modelState = "warming";
+        await precompileGorillaModel(this.renderer!, this.scene, this.camera, this.gorillaModelRoot);
+        this.gorillaModel = model;
+        this.gorillaMixer = mixer;
+        this.gorillaActor.dataset.modelState = "ready";
+        this.gorillaActor.classList.add("distraction-actor--gorilla-model-ready");
+      })
+      .catch((error: unknown) => {
+        this.gorillaModelRoot.clear();
+        this.gorillaModel = null;
+        this.gorillaMixer = null;
+        this.gorillaActor.dataset.modelState = "fallback";
+        this.gorillaActor.classList.remove("distraction-actor--gorilla-model-ready");
+        console.warn("Failed to load and precompile the gorilla model; keeping the CSS fallback.", error);
+      });
   }
 
   private loadUfoModelAsset(): void {
@@ -1881,19 +1924,24 @@ export class Game {
     };
 
     if (!snapshot.active.gorilla) {
+      this.gorillaModelRoot.visible = false;
+      this.gorillaActor.dataset.modelVisible = "false";
       this.gorillaActor.style.opacity = "0";
       this.gorillaLastSlamCycle = -1;
-    } else if (shouldUpdateForLod(this.distractionLod.gorilla, this.frameCounter, scalars.distractionUpdateStride)) {
+    } else {
+      this.gorillaMixer?.update(Math.min(1 / 15, Math.max(0, deltaSeconds)));
+      if (shouldUpdateForLod(this.distractionLod.gorilla, this.frameCounter, scalars.distractionUpdateStride)) {
       const width = this.container.clientWidth || window.innerWidth;
       const height = this.container.clientHeight || window.innerHeight;
       const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
       const topPosition = topSlab?.position ?? { x: 0, y: 0, z: 0 };
+      const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
       const orbitRadius = Math.max(this.debugConfig.baseWidth, this.debugConfig.baseDepth) * 0.55 + 1.35;
       const climbPoint = sampleGorillaClimbPosition({
         topX: topPosition.x,
         topY: topPosition.y,
         topZ: topPosition.z,
-        topHeight: topSlab?.dimensions.height ?? this.debugConfig.slabHeight,
+        topHeight: topSlabHeight,
         towerLevels: Math.max(1, this.landedSlabs.length - this.startingStackLevels),
         elapsedSeconds: this.distractionState.elapsedSeconds * GORILLA_CLIMB_SPEED,
         motionSpeed: this.debugConfig.distractionMotionSpeed,
@@ -1910,6 +1958,20 @@ export class Game {
       const depthScale = 0.88 + (1 - Math.max(0, Math.min(1, (projected.z + 1) * 0.5))) * 0.32;
       const gorillaOpacity = inFrontOfCamera ? 0.26 + snapshot.signals.gorilla * 0.72 : 0.12 + snapshot.signals.gorilla * 0.18;
 
+      if (this.gorillaModel) {
+        const desiredHeight = resolveGorillaModelHeight(topSlabHeight, this.camera.aspect);
+        const loadedHeight = Number(this.gorillaModel.userData.targetHeight) || desiredHeight;
+        const inwardYaw = Math.atan2(topPosition.x - climbPoint.x, topPosition.z - climbPoint.z);
+        this.gorillaModelRoot.scale.setScalar(desiredHeight / loadedHeight);
+        this.gorillaModelRoot.position.copy(worldPoint);
+        this.gorillaModelRoot.rotation.y = inwardYaw;
+        this.gorillaModelRoot.visible = inFrontOfCamera;
+        setGorillaModelOpacity(this.gorillaModel, gorillaOpacity);
+        this.gorillaActor.dataset.modelVisible = String(inFrontOfCamera);
+      } else {
+        this.gorillaActor.dataset.modelVisible = "false";
+      }
+
       this.gorillaActor.style.opacity = gorillaOpacity.toFixed(3);
       this.gorillaActor.style.transform = `translate(${clampedX.toFixed(2)}px, ${clampedY.toFixed(2)}px) translate(-50%, -50%) scale(${depthScale.toFixed(3)})`;
 
@@ -1920,6 +1982,7 @@ export class Game {
         this.gorillaLastSlamCycle = slamCycleIndex;
         this.gorillaSlamRemaining = GORILLA_SLAM_DURATION_SECONDS;
         this.triggerImpactPulse(0.1);
+      }
       }
     }
 
@@ -1944,7 +2007,13 @@ export class Game {
         const orbitCenterX = topSlab?.position.x ?? 0;
         const topCenterY = topSlab?.position.y ?? 0;
         const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
-        const orbitCenterY = resolveUfoOrbitAltitude(topCenterY, topSlabHeight);
+        const anchoredTopCenterY = resolveDistractionOrbitAnchorY({
+          anchorY: topCenterY,
+          currentLevel: snapshot.level,
+          startLevel: this.debugConfig.distractionUfoStartLevel,
+          slabHeight: topSlabHeight,
+        });
+        const orbitCenterY = resolveUfoOrbitAltitude(anchoredTopCenterY, topSlabHeight);
         const orbitCenterZ = topSlab?.position.z ?? 0;
 
         const worldPoint = new Vector3(
@@ -2051,8 +2120,14 @@ export class Game {
         const centerX = topSlab?.position.x ?? 0;
         const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
         const movingSlabHeight = this.activeSlab?.dimensions.height ?? topSlabHeight;
-        const movingSlabCenterY = this.activeSlab?.position.y
+        const rawMovingSlabCenterY = this.activeSlab?.position.y
           ?? (topSlab?.position.y ?? 0) + topSlabHeight;
+        const movingSlabCenterY = resolveDistractionOrbitAnchorY({
+          anchorY: rawMovingSlabCenterY,
+          currentLevel: snapshot.level,
+          startLevel: this.debugConfig.distractionBatStartLevel,
+          slabHeight: movingSlabHeight,
+        });
         const centerZ = topSlab?.position.z ?? 0;
         const phase = this.distractionState.elapsedSeconds * this.debugConfig.distractionMotionSpeed * 2.2;
         const worldPoint = sampleBatOrbitPosition({

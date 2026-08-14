@@ -35,11 +35,11 @@ describe("bat model presentation", () => {
     expect(manifest.animations[0].name).toBe(BAT_FLYING_CLIP_NAME);
   });
 
-  it("keeps the animated bat readable without letting it dominate portrait play", () => {
-    expect(resolveBatModelSpan(3)).toBeCloseTo(2.4, 5);
-    expect(resolveBatModelSpan(1)).toBe(1.6);
-    expect(resolveBatModelSpan(5)).toBe(2.8);
-    expect(resolveBatModelSpan(3, 0.5)).toBeCloseTo(1.92, 5);
+  it("keeps the animated bat smaller than the UFO so it does not dominate portrait play", () => {
+    expect(resolveBatModelSpan(3)).toBeCloseTo(1.8, 5);
+    expect(resolveBatModelSpan(1)).toBe(1.25);
+    expect(resolveBatModelSpan(5)).toBe(2.1);
+    expect(resolveBatModelSpan(3, 0.5)).toBeCloseTo(1.44, 5);
   });
 
   it("keeps the bat flight band lower on screen than the UFO band", () => {
