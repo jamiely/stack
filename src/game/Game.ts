@@ -1926,6 +1926,7 @@ export class Game {
     if (!snapshot.active.gorilla) {
       this.gorillaModelRoot.visible = false;
       this.gorillaActor.dataset.modelVisible = "false";
+      this.gorillaActor.dataset.visualOpacity = "0";
       this.gorillaActor.style.opacity = "0";
       this.gorillaLastSlamCycle = -1;
     } else {
@@ -1936,7 +1937,7 @@ export class Game {
       const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
       const topPosition = topSlab?.position ?? { x: 0, y: 0, z: 0 };
       const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
-      const orbitRadius = Math.max(this.debugConfig.baseWidth, this.debugConfig.baseDepth) * 0.55 + 1.35;
+      const facadeDepthOffset = (topSlab?.dimensions.depth ?? this.debugConfig.baseDepth) * 0.5 + 0.2;
       const climbPoint = sampleGorillaClimbPosition({
         topX: topPosition.x,
         topY: topPosition.y,
@@ -1945,7 +1946,7 @@ export class Game {
         towerLevels: Math.max(1, this.landedSlabs.length - this.startingStackLevels),
         elapsedSeconds: this.distractionState.elapsedSeconds * GORILLA_CLIMB_SPEED,
         motionSpeed: this.debugConfig.distractionMotionSpeed,
-        baseRadius: orbitRadius,
+        baseRadius: facadeDepthOffset,
       });
 
       const worldPoint = new Vector3(climbPoint.x, climbPoint.y, climbPoint.z);
@@ -1956,8 +1957,9 @@ export class Game {
       const clampedY = Math.min(height + 120, Math.max(-120, screenY));
       const inFrontOfCamera = projected.z > -1 && projected.z < 1;
       const depthScale = 0.88 + (1 - Math.max(0, Math.min(1, (projected.z + 1) * 0.5))) * 0.32;
-      const gorillaOpacity = inFrontOfCamera ? 0.26 + snapshot.signals.gorilla * 0.72 : 0.12 + snapshot.signals.gorilla * 0.18;
+      const gorillaOpacity = inFrontOfCamera ? 0.78 + snapshot.signals.gorilla * 0.18 : 0.12 + snapshot.signals.gorilla * 0.18;
 
+      const shouldRenderGorillaModel = Boolean(this.gorillaModel && inFrontOfCamera);
       if (this.gorillaModel) {
         const desiredHeight = resolveGorillaModelHeight(topSlabHeight, this.camera.aspect);
         const loadedHeight = Number(this.gorillaModel.userData.targetHeight) || desiredHeight;
@@ -1965,14 +1967,15 @@ export class Game {
         this.gorillaModelRoot.scale.setScalar(desiredHeight / loadedHeight);
         this.gorillaModelRoot.position.copy(worldPoint);
         this.gorillaModelRoot.rotation.y = inwardYaw;
-        this.gorillaModelRoot.visible = inFrontOfCamera;
+        this.gorillaModelRoot.visible = shouldRenderGorillaModel;
         setGorillaModelOpacity(this.gorillaModel, gorillaOpacity);
-        this.gorillaActor.dataset.modelVisible = String(inFrontOfCamera);
+        this.gorillaActor.dataset.modelVisible = String(shouldRenderGorillaModel);
       } else {
         this.gorillaActor.dataset.modelVisible = "false";
       }
 
-      this.gorillaActor.style.opacity = gorillaOpacity.toFixed(3);
+      this.gorillaActor.dataset.visualOpacity = gorillaOpacity.toFixed(3);
+      this.gorillaActor.style.opacity = shouldRenderGorillaModel ? "0" : gorillaOpacity.toFixed(3);
       this.gorillaActor.style.transform = `translate(${clampedX.toFixed(2)}px, ${clampedY.toFixed(2)}px) translate(-50%, -50%) scale(${depthScale.toFixed(3)})`;
 
       const slamCycle = this.distractionState.elapsedSeconds * GORILLA_SLAM_CYCLE_SPEED * this.debugConfig.distractionMotionSpeed;
@@ -3898,7 +3901,7 @@ export class Game {
         active: { ...distractionSnapshot.active },
         signals: { ...distractionSnapshot.signals },
         visuals: {
-          gorillaOpacity: Number(this.gorillaActor.style.opacity || 0),
+          gorillaOpacity: Number(this.gorillaActor.dataset.visualOpacity ?? this.gorillaActor.style.opacity ?? 0),
           ufoOpacity: Number(this.ufoActor.style.opacity || 0),
           batOpacity: Number(this.batActor.style.opacity || 0),
           cloudOpacity: Number(this.cloudLayer.style.opacity || 0),

@@ -643,6 +643,7 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   const gorillaActor = page.getByTestId("actor-gorilla");
   await expect(gorillaActor).toHaveAttribute("data-model-state", "ready");
   await expect(gorillaActor).toHaveAttribute("data-model-visible", "true");
+  await expect(gorillaActor).toHaveCSS("opacity", "0");
 
   const ufoActor = page.getByTestId("actor-ufo");
   await expect(ufoActor).toHaveAttribute("data-model-state", "ready");

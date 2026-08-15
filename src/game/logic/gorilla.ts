@@ -9,49 +9,24 @@ export interface GorillaPathInput {
   baseRadius: number;
 }
 
+const GORILLA_FACE_SWAY_RATIO = 0.68;
+const GORILLA_VISIBLE_START_LEVELS_BELOW_TOP = 1.4;
+const GORILLA_VISIBLE_END_LEVELS_ABOVE_TOP = 0.2;
+
 export function sampleGorillaClimbPosition(input: GorillaPathInput): { x: number; y: number; z: number } {
-  const levels = Math.max(1, input.towerLevels);
   const slabHeight = Math.max(0.5, input.topHeight);
-  const climbRate = Math.max(0.15, input.motionSpeed) * 0.48;
+  const climbRate = Math.max(0.15, input.motionSpeed) * 0.22;
   const cycleProgress = (Math.max(0, input.elapsedSeconds) * climbRate) % 1;
+  const easedProgress = cycleProgress * cycleProgress * (3 - 2 * cycleProgress);
 
-  const totalClimbHeight = slabHeight * (levels - 1);
-  const startY = input.topY - totalClimbHeight;
-  const progressLevels = cycleProgress * levels;
-  const levelIndex = Math.min(levels - 1, Math.floor(progressLevels));
-  const levelLerp = progressLevels - levelIndex;
-  const easedLerp = levelLerp * levelLerp * (3 - 2 * levelLerp);
-  const y = startY + (levelIndex + easedLerp) * slabHeight;
+  const startY = input.topY - slabHeight * GORILLA_VISIBLE_START_LEVELS_BELOW_TOP;
+  const endY = input.topY + slabHeight * GORILLA_VISIBLE_END_LEVELS_ABOVE_TOP;
+  const y = startY + easedProgress * (endY - startY);
 
-  const sideIndex = levelIndex % 4;
-  const sideProgress = easedLerp;
   const radius = Math.max(0.85, input.baseRadius);
-  const span = radius * 2;
+  const handholdPhase = cycleProgress * Math.PI * 2;
+  const x = input.topX + Math.sin(handholdPhase) * radius * GORILLA_FACE_SWAY_RATIO;
+  const z = input.topZ + radius;
 
-  switch (sideIndex) {
-    case 0:
-      return {
-        x: input.topX - radius + span * sideProgress,
-        y,
-        z: input.topZ + radius,
-      };
-    case 1:
-      return {
-        x: input.topX + radius,
-        y,
-        z: input.topZ + radius - span * sideProgress,
-      };
-    case 2:
-      return {
-        x: input.topX + radius - span * sideProgress,
-        y,
-        z: input.topZ - radius,
-      };
-    default:
-      return {
-        x: input.topX - radius,
-        y,
-        z: input.topZ - radius + span * sideProgress,
-      };
-  }
+  return { x, y, z };
 }

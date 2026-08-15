@@ -46,11 +46,11 @@ describe("gorilla model presentation", () => {
     expect(manifest.animations.some((clip: { name: string }) => clip.name === GORILLA_CLIMB_CLIP_NAME)).toBe(true);
   });
 
-  it("sizes the gorilla as a readable climber without covering the whole slab", () => {
-    expect(resolveGorillaModelHeight(3)).toBeCloseTo(4.65, 5);
-    expect(resolveGorillaModelHeight(1)).toBe(3.1);
-    expect(resolveGorillaModelHeight(5)).toBe(5.2);
-    expect(resolveGorillaModelHeight(3, 0.5)).toBeCloseTo(3.813, 5);
+  it("sizes the gorilla as a ledge-scale climber instead of a facade-sized overlay", () => {
+    expect(resolveGorillaModelHeight(3)).toBeCloseTo(2.34, 5);
+    expect(resolveGorillaModelHeight(1)).toBe(1.8);
+    expect(resolveGorillaModelHeight(5)).toBe(2.7);
+    expect(resolveGorillaModelHeight(3, 0.5)).toBeCloseTo(1.9188, 5);
   });
 
   it("grounds and scales the source model to the requested height", () => {

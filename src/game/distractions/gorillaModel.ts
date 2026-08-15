@@ -15,9 +15,9 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 export const GORILLA_MODEL_URL = new URL("../../../assets/quaternius_yeti_model_b.glb", import.meta.url).href;
 export const GORILLA_CLIMB_CLIP_NAME = "Walk";
 
-const GORILLA_WORLD_HEIGHT_TO_SLAB_HEIGHT_RATIO = 1.55;
-const GORILLA_MIN_WORLD_HEIGHT = 3.1;
-const GORILLA_MAX_WORLD_HEIGHT = 5.2;
+const GORILLA_WORLD_HEIGHT_TO_SLAB_HEIGHT_RATIO = 0.78;
+const GORILLA_MIN_WORLD_HEIGHT = 1.8;
+const GORILLA_MAX_WORLD_HEIGHT = 2.7;
 
 interface GorillaGltf {
   scene: Group;
