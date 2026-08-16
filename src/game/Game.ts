@@ -1939,6 +1939,7 @@ export class Game {
       const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
       const topPosition = topSlab?.position ?? { x: 0, y: 0, z: 0 };
       const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
+      const desiredHeight = resolveGorillaModelHeight(topSlabHeight, this.camera.aspect);
       const facadeDepthOffset = (topSlab?.dimensions.depth ?? this.debugConfig.baseDepth) * 0.5 + GORILLA_FACADE_HANDHOLD_CLEARANCE;
       const climbPoint = sampleGorillaClimbPosition({
         topX: topPosition.x,
@@ -1949,6 +1950,7 @@ export class Game {
         elapsedSeconds: this.distractionState.elapsedSeconds * GORILLA_CLIMB_SPEED,
         motionSpeed: this.debugConfig.distractionMotionSpeed,
         baseRadius: facadeDepthOffset,
+        actorHeight: desiredHeight,
       });
 
       const worldPoint = new Vector3(climbPoint.x, climbPoint.y, climbPoint.z);
@@ -1963,7 +1965,6 @@ export class Game {
 
       const shouldRenderGorillaModel = Boolean(this.gorillaModel && inFrontOfCamera);
       if (this.gorillaModel) {
-        const desiredHeight = resolveGorillaModelHeight(topSlabHeight, this.camera.aspect);
         const loadedHeight = Number(this.gorillaModel.userData.targetHeight) || desiredHeight;
         const loadedHalfDepth = Number(this.gorillaModel.userData.halfDepth) || 0;
         const effectiveHalfDepth = loadedHalfDepth * (desiredHeight / loadedHeight);

@@ -41,6 +41,45 @@ describe("gorilla climb path", () => {
     });
   });
 
+  it("ping-pongs vertically instead of snapping from the top back to the bottom", () => {
+    const input = {
+      topX: 0,
+      topY: 48,
+      topZ: 0,
+      topHeight: 3,
+      towerLevels: 16,
+      motionSpeed: 1,
+      baseRadius: 4.2,
+    };
+
+    const climbRate = Math.max(0.15, input.motionSpeed) * 0.22;
+    const peak = sampleGorillaClimbPosition({ ...input, elapsedSeconds: 1 / climbRate });
+    const justAfterTurn = sampleGorillaClimbPosition({ ...input, elapsedSeconds: 1.01 / climbRate });
+
+    expect(justAfterTurn.y).toBeLessThan(peak.y);
+    expect(justAfterTurn.y).toBeGreaterThan(peak.y - input.topHeight * 0.2);
+  });
+
+  it("keeps the rendered Yeti crown below the top eave decoration", () => {
+    const input = {
+      topX: 0,
+      topY: 48,
+      topZ: 0,
+      topHeight: 3,
+      towerLevels: 16,
+      motionSpeed: 1,
+      baseRadius: 4.2,
+      actorHeight: 1.9188,
+    };
+
+    const climbRate = Math.max(0.15, input.motionSpeed) * 0.22;
+    const topSample = sampleGorillaClimbPosition({ ...input, elapsedSeconds: 0.99 / climbRate });
+    const eaveHeight = Math.max(0.44, Math.min(0.78, input.topHeight * 0.26));
+    const eaveLowerY = input.topY + input.topHeight / 2 - eaveHeight * 0.92;
+
+    expect(topSample.y + input.actorHeight).toBeLessThanOrEqual(eaveLowerY - 0.08 + 1e-6);
+  });
+
   it("applies slab-height and radius minimum floors", () => {
     const sample = sampleGorillaClimbPosition({
       topX: 0,
