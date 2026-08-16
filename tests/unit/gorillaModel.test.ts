@@ -8,6 +8,7 @@ import {
   normalizeGorillaModel,
   precompileGorillaModel,
   resolveGorillaModelHeight,
+  resolveGorillaModelRootPosition,
   setGorillaModelOpacity,
 } from "../../src/game/distractions/gorillaModel";
 
@@ -68,6 +69,25 @@ describe("gorilla model presentation", () => {
     expect(bounds.min.y).toBeCloseTo(0, 5);
     expect(center.x).toBeCloseTo(0, 5);
     expect(center.z).toBeCloseTo(0, 5);
+    expect(normalized.userData.halfDepth).toBeCloseTo(0.325, 5);
+  });
+
+  it("offsets the model root so the full Yeti depth clears the building facade", () => {
+    const source = new Group();
+    const mesh = new Mesh(new BoxGeometry(2, 8, 4), new MeshStandardMaterial());
+    source.add(mesh);
+    const normalized = normalizeGorillaModel(source, 2.4);
+
+    const rootPosition = resolveGorillaModelRootPosition({
+      climbPoint: new Vector3(0, 12, 1.7),
+      topPoint: new Vector3(0, 12, 0),
+      modelHalfDepth: Number(normalized.userData.halfDepth),
+    });
+
+    const buildingFrontZ = 1.5;
+    const modelBackZ = rootPosition.z - Number(normalized.userData.halfDepth);
+    expect(modelBackZ).toBeGreaterThanOrEqual(buildingFrontZ + 0.08 - 1e-6);
+    expect(rootPosition.y).toBe(12);
   });
 
   it("loads through the game loader seam and starts the named climbing clip", async () => {

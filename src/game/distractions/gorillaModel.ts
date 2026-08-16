@@ -18,6 +18,8 @@ export const GORILLA_CLIMB_CLIP_NAME = "Walk";
 const GORILLA_WORLD_HEIGHT_TO_SLAB_HEIGHT_RATIO = 0.78;
 const GORILLA_MIN_WORLD_HEIGHT = 1.8;
 const GORILLA_MAX_WORLD_HEIGHT = 2.7;
+export const GORILLA_FACADE_HANDHOLD_CLEARANCE = 0.2;
+export const GORILLA_FACADE_MODEL_CLEARANCE = 0.08;
 
 interface GorillaGltf {
   scene: Group;
@@ -60,6 +62,34 @@ export function resolveGorillaModelHeight(slabHeight: number, viewportAspect = 1
   return Math.max(GORILLA_MIN_WORLD_HEIGHT, desktopHeight * responsiveScale);
 }
 
+export interface GorillaModelRootPositionInput {
+  climbPoint: Vector3;
+  topPoint: Vector3;
+  modelHalfDepth: number;
+  handholdClearance?: number;
+  facadeClearance?: number;
+}
+
+export function resolveGorillaModelRootPosition(input: GorillaModelRootPositionInput): Vector3 {
+  const handholdClearance = Number.isFinite(input.handholdClearance)
+    ? Math.max(0, input.handholdClearance ?? GORILLA_FACADE_HANDHOLD_CLEARANCE)
+    : GORILLA_FACADE_HANDHOLD_CLEARANCE;
+  const facadeClearance = Number.isFinite(input.facadeClearance)
+    ? Math.max(0, input.facadeClearance ?? GORILLA_FACADE_MODEL_CLEARANCE)
+    : GORILLA_FACADE_MODEL_CLEARANCE;
+  const halfDepth = Number.isFinite(input.modelHalfDepth) ? Math.max(0, input.modelHalfDepth) : 0;
+  const outward = input.climbPoint.clone().sub(input.topPoint);
+  outward.y = 0;
+  if (outward.lengthSq() === 0) {
+    outward.set(0, 0, 1);
+  } else {
+    outward.normalize();
+  }
+
+  const extraOutwardOffset = Math.max(0, halfDepth + facadeClearance - handholdClearance);
+  return input.climbPoint.clone().add(outward.multiplyScalar(extraOutwardOffset));
+}
+
 export function normalizeGorillaModel(source: Group, targetHeight: number): Group {
   const sourceBounds = new Box3().setFromObject(source);
   const sourceSize = sourceBounds.getSize(new Vector3());
@@ -77,6 +107,7 @@ export function normalizeGorillaModel(source: Group, targetHeight: number): Grou
   groundedSource.scale.setScalar(targetHeight / sourceSize.y);
   wrapper.add(groundedSource);
   wrapper.userData.targetHeight = targetHeight;
+  wrapper.userData.halfDepth = (sourceSize.z / sourceSize.y) * targetHeight * 0.5;
   return wrapper;
 }
 

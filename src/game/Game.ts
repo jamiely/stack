@@ -95,9 +95,11 @@ import {
   setBatModelOpacity,
 } from "./distractions/batModel";
 import {
+  GORILLA_FACADE_HANDHOLD_CLEARANCE,
   loadGorillaModel,
   precompileGorillaModel,
   resolveGorillaModelHeight,
+  resolveGorillaModelRootPosition,
   setGorillaModelOpacity,
 } from "./distractions/gorillaModel";
 import {
@@ -1937,7 +1939,7 @@ export class Game {
       const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
       const topPosition = topSlab?.position ?? { x: 0, y: 0, z: 0 };
       const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
-      const facadeDepthOffset = (topSlab?.dimensions.depth ?? this.debugConfig.baseDepth) * 0.5 + 0.2;
+      const facadeDepthOffset = (topSlab?.dimensions.depth ?? this.debugConfig.baseDepth) * 0.5 + GORILLA_FACADE_HANDHOLD_CLEARANCE;
       const climbPoint = sampleGorillaClimbPosition({
         topX: topPosition.x,
         topY: topPosition.y,
@@ -1963,9 +1965,15 @@ export class Game {
       if (this.gorillaModel) {
         const desiredHeight = resolveGorillaModelHeight(topSlabHeight, this.camera.aspect);
         const loadedHeight = Number(this.gorillaModel.userData.targetHeight) || desiredHeight;
+        const loadedHalfDepth = Number(this.gorillaModel.userData.halfDepth) || 0;
+        const effectiveHalfDepth = loadedHalfDepth * (desiredHeight / loadedHeight);
         const inwardYaw = Math.atan2(topPosition.x - climbPoint.x, topPosition.z - climbPoint.z);
         this.gorillaModelRoot.scale.setScalar(desiredHeight / loadedHeight);
-        this.gorillaModelRoot.position.copy(worldPoint);
+        this.gorillaModelRoot.position.copy(resolveGorillaModelRootPosition({
+          climbPoint: worldPoint,
+          topPoint: new Vector3(topPosition.x, topPosition.y, topPosition.z),
+          modelHalfDepth: effectiveHalfDepth,
+        }));
         this.gorillaModelRoot.rotation.y = inwardYaw;
         this.gorillaModelRoot.visible = shouldRenderGorillaModel;
         setGorillaModelOpacity(this.gorillaModel, gorillaOpacity);
