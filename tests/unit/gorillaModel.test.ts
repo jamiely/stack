@@ -4,6 +4,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { describe, expect, it } from "vitest";
 import {
   GORILLA_CLIMB_CLIP_NAME,
+  GORILLA_MODEL_RENDER_ORDER,
   loadGorillaModel,
   normalizeGorillaModel,
   precompileGorillaModel,
@@ -112,6 +113,7 @@ describe("gorilla model presentation", () => {
     expect(loaded.clip.name).toBe(GORILLA_CLIMB_CLIP_NAME);
     expect(loaded.action.isRunning()).toBe(true);
     expect(loadedMaterial).not.toBe(sourceMaterial);
+    expect(loadedMesh.renderOrder).toBe(GORILLA_MODEL_RENDER_ORDER);
     expect(loadedMesh.castShadow).toBe(true);
     expect(loadedMesh.receiveShadow).toBe(true);
   });

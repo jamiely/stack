@@ -20,6 +20,7 @@ const GORILLA_MIN_WORLD_HEIGHT = 1.8;
 const GORILLA_MAX_WORLD_HEIGHT = 2.7;
 export const GORILLA_FACADE_HANDHOLD_CLEARANCE = 0.2;
 export const GORILLA_FACADE_MODEL_CLEARANCE = 0.08;
+export const GORILLA_MODEL_RENDER_ORDER = 12;
 
 interface GorillaGltf {
   scene: Group;
@@ -141,6 +142,7 @@ export async function loadGorillaModel(
     child.material = Array.isArray(child.material)
       ? child.material.map(cloneMaterial)
       : cloneMaterial(child.material);
+    child.renderOrder = GORILLA_MODEL_RENDER_ORDER;
     child.castShadow = true;
     child.receiveShadow = true;
   });
