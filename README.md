@@ -1,6 +1,6 @@
 # Tower Stacker
 
-Desktop-first browser prototype for the `Tower Stacker` stacking game described in [docs/design.md](/Users/jamiely/code/stack/docs/design.md) and staged through [plan.md](/Users/jamiely/code/stack/plan.md).
+Desktop-first browser and offline Electron versions of the `Tower Stacker` stacking game described in [docs/design.md](/Users/jamiely/code/stack/docs/design.md) and staged through [plan.md](/Users/jamiely/code/stack/plan.md).
 
 Feature tracking notes live in [docs/features.md](/Users/jamiely/code/stack/docs/features.md).
 
@@ -10,6 +10,7 @@ The repo now includes a playable early milestone:
 
 - Vite + TypeScript + Three.js application shell
 - Character placement/model prep refactor: `Game.ts` now orchestrates while character-specific loading, async load coordination, normalization, scene-node wiring, and spatial helper math live under `src/game/characters/*` and `src/game/debug/*`
+- Offline Electron desktop game with fullscreen launch, bundled model/animation/Draco assets, and Windows portable + NSIS packaging
 - Alternating X/Z stack placement with trim-or-miss gameplay
 - Combo streak tracking (default target: 8 perfect hits) with live HUD progress
 - Recovery rewards at combo milestones: capped slab-growth recovery plus temporary movement slowdown windows
@@ -43,12 +44,18 @@ The dev server runs on `http://127.0.0.1:4173`.
 - `npm run test:unit`: run the unit suite used by pre-commit
 - `npm run coverage`: enforce the non-rendering-code coverage threshold
 - `npm run test:e2e`: run the Playwright suite used by pre-commit and pre-push
+- `npm run build:electron:web`: type-check and bundle desktop web assets
+- `npm run electron:start`: build and launch the offline desktop game
+- `npm run electron:dev`: run Vite hot reload inside Electron
+- `npm run electron:smoke`: exercise actual WebGL startup, offline model/animation/Draco loading, keyboard placement, and audio; save `dist_electron/electron-smoke.png`
+- `npm run build:electron:win`: package Windows x64 portable + NSIS executables
 
 ## Controls
 
 - Runs start automatically on load; the `Tower stacker` title briefly appears, then eases out to the left
 - `Space`/`Enter` on key release, mouse click, or tap while playing: stop the moving slab
 - During `game_over`, gameplay input (`Space`/`Enter` release, click, or touch in the play area) immediately restarts the run (no restart button)
+- In Electron, `Escape` exits and `F11` toggles fullscreen; closing the window quits the game
 - Visit `/?debug` to expose the runtime tuning panel; use the panel's `Hide debug` / `Show debug` button to collapse it on constrained mobile viewports
 - In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
 - Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused; optional `&seed=<int>` drives deterministic seeded distraction/simulation state and is surfaced through test-state snapshots
@@ -62,3 +69,25 @@ The dev server runs on `http://127.0.0.1:4173`.
 - Fireworks visual-regression workflow: the canonical gate is `fireworks chrysanthemum canonical snapshot remains stable` (seed `42`, first primary burst transition + 2 paused ticks). Run it in isolation with `npm run test:e2e -- tests/e2e/fireworks.spec.ts -g "fireworks chrysanthemum canonical snapshot remains stable"`; refresh the baseline intentionally with `npx playwright test tests/e2e/fireworks.spec.ts -g "fireworks chrysanthemum canonical snapshot remains stable" --update-snapshots`.
 - Local hooks can be enabled with `git config core.hooksPath .githooks` if they are not already configured.
 - `.github/workflows/deploy-pages.yml` publishes the built site to GitHub Pages from `main` and builds with a repository-name base path so project Pages URLs resolve assets correctly.
+
+## Desktop Packaging
+
+Run `npm run electron:start` for the offline game or `npm run electron:dev` for hot reload.
+
+On Windows:
+
+```sh
+npm ci
+npm run build:electron:win
+```
+
+Artifacts:
+
+- `dist_electron/Tower-Stacker-0.1.0-win-x64-portable.exe`
+- `dist_electron/Tower-Stacker-0.1.0-win-x64-setup.exe`
+
+For LaunchBox, use the portable executable directly, without an emulator or command-line arguments. It opens fullscreen; `Escape` returns to the launcher.
+
+`.github/workflows/release-electron.yml` builds and smokes the Windows app, uploads executables, and publishes a rolling `latest` prerelease from `main` or a versioned release from a `v*` tag.
+
+Bundled assets use the local standard/secure `stack://app` protocol so GLTF fetches and Draco workers work offline without enabling Node integration or disabling the renderer sandbox. The smoke checks normal startup before entering deterministic test mode, which intentionally skips character preloading.

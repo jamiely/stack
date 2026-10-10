@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.mjs",
+  "description": "Offline-ready Tower Stacker arcade game",
+  "author": "Jamie Ly",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -11,7 +14,12 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:electron:web": "tsc --noEmit && vite build",
+    "electron:start": "npm run build:electron:web && electron .",
+    "electron:dev": "node scripts/electron-dev.mjs",
+    "electron:smoke": "npm run build:electron:web && node scripts/electron-smoke.mjs",
+    "build:electron:win": "npm run build:electron:web && electron-builder --win portable nsis --x64 --publish never"
   },
   "dependencies": {
     "three": "^0.183.2"
@@ -21,9 +29,37 @@
     "@types/node": "^25.5.0",
     "@types/three": "^0.183.1",
     "@vitest/coverage-v8": "^4.1.2",
+    "electron": "^37.10.3",
+    "electron-builder": "^26.15.3",
     "playwright": "^1.58.2",
     "typescript": "^6.0.2",
     "vite": "^8.0.3",
     "vitest": "^4.1.2"
+  },
+  "build": {
+    "appId": "com.jamiely.towerstacker",
+    "productName": "Tower Stacker",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "portable": {
+      "artifactName": "Tower-Stacker-${version}-win-${arch}-portable.${ext}"
+    },
+    "nsis": {
+      "artifactName": "Tower-Stacker-${version}-win-${arch}-setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

@@ -1,4 +1,5 @@
 dist
+dist_electron
 coverage
 playwright-report
 test-results
