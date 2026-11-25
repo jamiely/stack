@@ -67,10 +67,26 @@ test("resizing between landscape and portrait reframes the slab", async ({ page 
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("/?test&seed=3");
   await page.evaluate(() => (window as Window & { __towerStackerTestApi?: TestApi }).__towerStackerTestApi!.startGame());
-  expectOnScreen(await slabBoundsAt(page, 4.5));
+  const landscape = await slabBoundsAt(page, 4.5);
+  expectOnScreen(landscape);
+  const canvasAspect = () => page.evaluate(() => {
+    const canvas = document.querySelector("canvas")!;
+    return canvas.width / canvas.height;
+  });
 
+  // The renderer and camera follow the resize: the drawing buffer turns tall, and the slab's projection changes
+  // (a stale landscape camera would leave the bounds identical).
   await page.setViewportSize({ width: 1080, height: 1920 });
-  await expect.poll(() => page.evaluate(() => window.innerHeight)).toBe(1920);
-  expectOnScreen(await slabBoundsAt(page, 4.5));
+  await expect.poll(canvasAspect).toBeCloseTo(1080 / 1920, 2);
+  const portrait = await slabBoundsAt(page, 4.5);
+  expectOnScreen(portrait);
   expectOnScreen(await slabBoundsAt(page, -4.5));
+  expect(portrait!.maxX - portrait!.minX).not.toBeCloseTo(landscape!.maxX - landscape!.minX, 2);
+
+  // Back to landscape restores the original framing.
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await expect.poll(canvasAspect).toBeCloseTo(1920 / 1080, 2);
+  const restored = await slabBoundsAt(page, 4.5);
+  expect(restored!.minX).toBeCloseTo(landscape!.minX, 2);
+  expect(restored!.maxX).toBeCloseTo(landscape!.maxX, 2);
 });
