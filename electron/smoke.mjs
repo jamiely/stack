@@ -116,8 +116,22 @@ export function prepareSmoke(win, projectRoot) {
     const screenshotPath = path.join(projectRoot, "dist_electron", "electron-smoke.png");
     await mkdir(path.dirname(screenshotPath), { recursive: true });
     await writeFile(screenshotPath, (await win.webContents.capturePage()).toPNG());
+    // A portrait window (vertical cabinet monitor) widens the vertical FOV so the slab's travel stays in frame.
+    win.setContentSize(405, 720);
+    await waitFor(() => evaluate("window.innerHeight > window.innerWidth"), "tall window");
+    await pause(250);
+    const bounds = await evaluate(`(() => {
+      const api = window.__towerStackerTestApi;
+      api.setActiveOffset(4.5);
+      api.stepSimulation(1);
+      api.setActiveOffset(4.5);
+      return api.getState().activeScreenBounds;
+    })()`);
+    assert.ok(bounds && bounds.minX >= -1 && bounds.maxX <= 1, `Portrait slab must stay in frame: ${JSON.stringify(bounds)}`);
+    const portraitPath = path.join(projectRoot, "dist_electron", "electron-smoke-portrait.png");
+    await writeFile(portraitPath, (await win.webContents.capturePage()).toPNG());
     assert.deepEqual(failures, [], "Renderer/resource failures");
-    console.log(`[electron-smoke] passed: WebGL, offline cast/animation/Draco, keyboard placement, audio; screenshot=${screenshotPath}`);
+    console.log(`[electron-smoke] passed: WebGL, offline cast/animation/Draco, keyboard placement, audio, portrait framing; screenshots=${screenshotPath}, ${portraitPath}`);
     app.quit();
   };
 }

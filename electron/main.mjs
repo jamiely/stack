@@ -1,7 +1,8 @@
-import { app, BrowserWindow, protocol } from "electron";
+import { app, BrowserWindow, protocol, screen } from "electron";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { windowLayout } from "./window.mjs";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const distRoot = path.join(projectRoot, "dist");
@@ -63,11 +64,11 @@ function serveAssets() {
 }
 
 async function createWindow() {
+  const layout = windowLayout(screen.getPrimaryDisplay(), process.argv);
   const win = new BrowserWindow({
     title: "Tower Stacker",
-    width: 1280,
-    height: 800,
-    fullscreen: !smoke,
+    ...(smoke ? { width: 1280, height: 800 } : layout.bounds),
+    fullscreen: !smoke && layout.fullscreen,
     autoHideMenuBar: true,
     show: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
@@ -107,6 +108,7 @@ async function createWindow() {
   if (smokeRun) {
     await smokeRun();
   } else {
+    if (!layout.fullscreen) win.maximize();
     win.show();
   }
 }

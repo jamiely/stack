@@ -45,6 +45,7 @@ import { advanceOscillation } from "./logic/oscillation";
 import {
   resolveCharacterFramingLookAtX,
   resolveResponsiveCameraDistance,
+  resolveResponsiveCameraFov,
   samplePlacementCameraShake,
   sampleTremorCameraShake,
 } from "./logic/cameraEffects";
@@ -3424,6 +3425,7 @@ export class Game {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
     this.camera.aspect = width / height;
+    this.camera.fov = resolveResponsiveCameraFov(this.camera.aspect);
     this.camera.updateProjectionMatrix();
     this.renderer?.setSize(width, height, false);
 
@@ -3872,6 +3874,28 @@ export class Game {
     };
   }
 
+  private getActiveScreenBounds(): PublicGameState["activeScreenBounds"] {
+    const slab = this.activeSlab;
+    if (!slab) {
+      return null;
+    }
+    this.camera.updateMatrixWorld();
+    const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+    const { width, height, depth } = slab.dimensions;
+    for (const corner of [0, 1, 2, 3, 4, 5, 6, 7]) {
+      const projected = new Vector3(
+        slab.position.x + (corner & 1 ? width : -width) / 2,
+        slab.position.y + (corner & 2 ? height : -height) / 2,
+        slab.position.z + (corner & 4 ? depth : -depth) / 2,
+      ).project(this.camera);
+      bounds.minX = Math.min(bounds.minX, projected.x);
+      bounds.maxX = Math.max(bounds.maxX, projected.x);
+      bounds.minY = Math.min(bounds.minY, projected.y);
+      bounds.maxY = Math.max(bounds.maxY, projected.y);
+    }
+    return bounds;
+  }
+
   private getPublicState(): PublicGameState {
     const feedback = this.feedbackManager.getSnapshot();
     const distractionSnapshot = this.getEffectiveDistractionSnapshot();
@@ -3890,6 +3914,7 @@ export class Game {
             z: this.activeSlab.position.z,
           }
         : null,
+      activeScreenBounds: this.getActiveScreenBounds(),
       lastPlacementOutcome: this.lastPlacementOutcome,
       topDimensions: this.landedSlabs.length > 0 ? { ...this.landedSlabs[this.landedSlabs.length - 1]!.dimensions } : null,
       combo: {

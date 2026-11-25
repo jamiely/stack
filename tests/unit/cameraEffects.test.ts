@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveCharacterFramingLookAtX,
   resolveResponsiveCameraDistance,
+  resolveResponsiveCameraFov,
   samplePlacementCameraShake,
   sampleTremorCameraShake,
 } from "../../src/game/logic/cameraEffects";
@@ -22,6 +23,17 @@ describe("cameraEffects", () => {
     expect(resolveResponsiveCameraDistance(12, Number.NaN)).toBe(12);
     expect(resolveResponsiveCameraDistance(12, 0)).toBe(12);
     expect(resolveResponsiveCameraDistance(12, -1)).toBe(12);
+  });
+
+  it("widens the vertical FOV on tall viewports so the horizontal view matches a square one", () => {
+    expect(resolveResponsiveCameraFov(1920 / 1080)).toBe(50);
+    expect(resolveResponsiveCameraFov(1)).toBe(50);
+    const tall = resolveResponsiveCameraFov(1080 / 1920);
+    expect(tall).toBeGreaterThan(50);
+    const horizontalHalfTan = Math.tan((tall * Math.PI) / 360) * (1080 / 1920);
+    expect(horizontalHalfTan).toBeCloseTo(Math.tan((50 * Math.PI) / 360));
+    expect(resolveResponsiveCameraFov(Number.NaN)).toBe(50);
+    expect(resolveResponsiveCameraFov(0)).toBe(50);
   });
 
   it("adds vertical shake during tremors", () => {

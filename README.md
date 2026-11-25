@@ -55,7 +55,8 @@ The dev server runs on `http://127.0.0.1:4173`.
 - Runs start automatically on load; the `Tower stacker` title briefly appears, then eases out to the left
 - `Space`/`Enter` on key release, mouse click, or tap while playing: stop the moving slab
 - During `game_over`, gameplay input (`Space`/`Enter` release, click, or touch in the play area) immediately restarts the run (no restart button)
-- In Electron, `Escape` exits and `F11` toggles fullscreen; closing the window quits the game
+- In Electron, the window opens maximized to fill the display it starts on, portrait or landscape; launch with `--fullscreen` to start fullscreen. `F11` toggles fullscreen, `Escape` exits, and closing the window quits the game
+- On a tall (portrait) window, such as a cabinet monitor rotated vertically, the camera widens its vertical field of view so the tower and the slab's full travel stay in frame; landscape framing is unchanged
 - Visit `/?debug` to expose the runtime tuning panel; use the panel's `Hide debug` / `Show debug` button to collapse it on constrained mobile viewports
 - In debug mode, additional diagnostics appear: the top-bar status card plus overlay body/renderer details
 - Add `?test` (or `?testMode`) for deterministic test mode; add `&paused=0` to auto-run instead of booting paused; optional `&seed=<int>` drives deterministic seeded distraction/simulation state and is surfaced through test-state snapshots
@@ -86,7 +87,7 @@ Artifacts:
 - `dist_electron/Tower-Stacker-0.1.0-win-x64-portable.exe`
 - `dist_electron/Tower-Stacker-0.1.0-win-x64-setup.exe`
 
-For LaunchBox, use the portable executable directly, without an emulator or command-line arguments. It opens fullscreen; `Escape` returns to the launcher.
+For LaunchBox, use the portable executable directly, without an emulator, and pass `--fullscreen` as its command-line argument. Without it the game opens as a maximized window sized to the display; `F11` toggles fullscreen, and `Escape` returns to the launcher.
 
 `.github/workflows/release-electron.yml` builds and smokes the Windows app, uploads executables, and publishes a rolling `latest` prerelease from `main` or a versioned release from a `v*` tag.
 

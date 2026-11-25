@@ -1,6 +1,18 @@
 const MOBILE_PORTRAIT_MAX_ASPECT = 0.75;
 const MOBILE_PORTRAIT_CAMERA_PULLBACK = 6;
 const DEFAULT_CAMERA_DISTANCE = 12;
+export const BASE_CAMERA_FOV = 50;
+// Narrower than square, the vertical FOV widens so the horizontal view keeps the slab's full travel in frame.
+const MIN_HORIZONTAL_ASPECT = 1;
+
+/** Vertical FOV that keeps a tall (portrait) viewport as wide as a square one; landscape keeps the base FOV. */
+export function resolveResponsiveCameraFov(viewportAspect: number): number {
+  if (!Number.isFinite(viewportAspect) || viewportAspect <= 0 || viewportAspect >= MIN_HORIZONTAL_ASPECT) {
+    return BASE_CAMERA_FOV;
+  }
+  const halfTan = Math.tan((BASE_CAMERA_FOV * Math.PI) / 360) * (MIN_HORIZONTAL_ASPECT / viewportAspect);
+  return (Math.atan(halfTan) * 360) / Math.PI;
+}
 
 export function resolveResponsiveCameraDistance(configuredDistance: number, viewportAspect: number): number {
   const safeDistance = Number.isFinite(configuredDistance) ? configuredDistance : DEFAULT_CAMERA_DISTANCE;

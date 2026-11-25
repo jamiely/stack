@@ -128,6 +128,8 @@ export interface PublicGameState {
   level: number;
   activeAxis: Axis | null;
   activePosition: { x: number; y: number; z: number } | null;
+  /** Active slab's projected box corners in normalized device coordinates (-1..1 is on screen). */
+  activeScreenBounds: { minX: number; maxX: number; minY: number; maxY: number } | null;
   lastPlacementOutcome: TrimResult["outcome"] | null;
   topDimensions: SlabDimensions | null;
   combo: {
