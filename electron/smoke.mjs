@@ -122,8 +122,10 @@ export function prepareSmoke(win, projectRoot) {
     await pause(250);
     const bounds = await evaluate(`(() => {
       const api = window.__towerStackerTestApi;
+      // Let the camera ease to its portrait framing before measuring: on a slow runner few real frames run
+      // between the resize and this check, so one step leaves it mid-way.
       api.setActiveOffset(4.5);
-      api.stepSimulation(1);
+      api.stepSimulation(120);
       api.setActiveOffset(4.5);
       return api.getState().activeScreenBounds;
     })()`);
