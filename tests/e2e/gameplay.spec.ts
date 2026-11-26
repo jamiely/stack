@@ -660,6 +660,10 @@ test("debug distraction launch buttons can trigger channels on demand", async ({
   await expect(batActor).toHaveAttribute("data-model-state", "ready");
   await expect(batActor).toHaveAttribute("data-model-visible", "true");
 
+  // The yeti fades in as it drops onto a ledge, which takes simulated time.
+  await page.evaluate(() => {
+    (window as Window & { __towerStackerTestApi?: { stepSimulation: (steps?: number) => void } }).__towerStackerTestApi?.stepSimulation(30);
+  });
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.cloudOpacity ?? 0).toBeGreaterThan(0.1);
