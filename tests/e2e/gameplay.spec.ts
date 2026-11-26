@@ -37,6 +37,7 @@ interface E2EState {
     audioEventsPlayed: number;
     hapticEventsPlayed: number;
     lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | "collapse_failure" | null;
+    juiceCues: Record<string, number>;
   };
   distractions: {
     enabled: boolean;
@@ -739,7 +740,7 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
   await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(true);
   // The yeti waits for a settled balcony ledge (its grow-in animation takes 0.3 s), then drops onto it.
   await page.evaluate(() => {
-    (window as Window & { __towerStackerTestApi?: { stepSimulation: (steps?: number) => void } }).__towerStackerTestApi?.stepSimulation(70);
+    (window as Window & { __towerStackerTestApi?: { stepSimulation: (steps?: number) => void } }).__towerStackerTestApi?.stepSimulation(110);
   });
   await expect.poll(async () => (await getTestState(page))?.distractions.yeti.phase).toBe("perched");
   await expect.poll(async () => (await getTestState(page))?.distractions.yeti.overlapsObstacle).toBe(false);
@@ -816,9 +817,9 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0);
-  // The yeti fades out over 0.3 s rather than popping.
+  // The yeti fades out over 0.3 s rather than popping (after the placement's hit-stop).
   await page.evaluate(() => {
-    (window as Window & { __towerStackerTestApi?: { stepSimulation: (steps?: number) => void } }).__towerStackerTestApi?.stepSimulation(20);
+    (window as Window & { __towerStackerTestApi?: { stepSimulation: (steps?: number) => void } }).__towerStackerTestApi?.stepSimulation(40);
   });
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 1).toBe(0);
 
@@ -972,24 +973,37 @@ test("audio/haptics toggles gate runtime feedback emission", async ({ page }) =>
         return Promise.resolve();
       }
 
-      public createOscillator() {
-        return {
-          type: "triangle",
-          frequency: { setValueAtTime: () => undefined },
-          connect: () => undefined,
-          start: () => undefined,
-          stop: () => undefined,
-        };
+      public sampleRate = 44100;
+
+      // Every audio node the synth uses: params accept any automation call, nodes chain through connect().
+      private node(): Record<string, unknown> {
+        const param = () => new Proxy({}, { get: (_target, key) => (key === "value" ? 0 : () => undefined), set: () => true });
+        const node: Record<string, unknown> = {};
+        return new Proxy(node, {
+          get: (target, key) => {
+            if (key in target) return target[key as string];
+            if (key === "connect") return (next: unknown) => next;
+            if (["frequency", "gain", "detune", "Q", "threshold", "ratio"].includes(String(key))) {
+              target[key as string] = param();
+              return target[key as string];
+            }
+            return () => undefined;
+          },
+          set: (target, key, value) => {
+            target[key as string] = value;
+            return true;
+          },
+        });
       }
 
-      public createGain() {
-        return {
-          gain: {
-            setValueAtTime: () => undefined,
-            linearRampToValueAtTime: () => undefined,
-          },
-          connect: () => undefined,
-        };
+      public createOscillator() { return this.node(); }
+      public createGain() { return this.node(); }
+      public createBiquadFilter() { return this.node(); }
+      public createDynamicsCompressor() { return this.node(); }
+      public createBufferSource() { return this.node(); }
+      public createBuffer(_channels: number, length: number) {
+        const data = new Float32Array(length);
+        return { getChannelData: () => data };
       }
     }
 
@@ -1258,4 +1272,49 @@ test("a qualifying run enters initials with one button, saves the top-ten table,
   expect(fresh?.arcade.initials).toBeNull();
   expect(fresh?.arcade.hiScore).toBe(40);
   await expect(page.getByTestId("menu-overlay")).toHaveClass(/overlay--hidden/);
+});
+
+test("juice: drops slam with dust and cues, perfects stamp and escalate, the game over tallies, and restart clears it all", async ({ page }) => {
+  await page.goto("/?test&seed=7");
+  await page.evaluate(() => localStorage.removeItem("tower-stacker-scores"));
+  type Api = { startGame: () => void; placeAtOffset: (offset: number) => unknown; setActiveOffset: (offset: number) => boolean; stopActiveSlab: () => void; stepSimulation: (steps?: number) => void; getState: () => E2EState & { juice: Record<string, unknown> } };
+  const run = <T>(fn: (api: Api) => T) => page.evaluate(`(${fn.toString()})(window.__towerStackerTestApi)`) as Promise<T>;
+
+  const afterPerfect = await run((api) => {
+    api.startGame();
+    api.placeAtOffset(0);
+    const s = api.getState();
+    return { juice: s.juice, cues: s.feedback.juiceCues };
+  });
+  expect(afterPerfect.cues.drop).toBe(1);
+  expect(afterPerfect.cues.perfect).toBe(1);
+  expect(afterPerfect.juice.slamming).toBe(true);
+  expect(afterPerfect.juice.hitStop as number).toBeGreaterThan(0);
+  expect(afterPerfect.juice.particles as number).toBeGreaterThan(10);
+  expect(afterPerfect.juice.lastStamp).toBe("PERFECT!");
+  expect(afterPerfect.juice.rings).toBe(1);
+
+  // Five perfects in a row reach the x5 tier; a trimmed drop then cracks off an overhang and breaks the streak.
+  const streak = await run((api) => {
+    for (let i = 0; i < 4; i += 1) api.placeAtOffset(0);
+    const atFive = { stamp: api.getState().juice.lastStamp, combo: document.querySelector("[data-testid=juice-combo]")!.textContent };
+    api.placeAtOffset(1.2);
+    return { atFive, cues: api.getState().feedback.juiceCues };
+  });
+  expect(streak.atFive).toEqual({ stamp: "AMAZING!", combo: "x5" });
+  expect(streak.cues.crunch).toBe(1);
+  await expect(page.getByTestId("juice-combo")).toHaveText("");
+
+  // A miss: slow-motion collapse, then the score counts up to its final value.
+  await run((api) => { api.setActiveOffset(12); api.stopActiveSlab(); });
+  await expect.poll(async () => (await getTestState(page) as unknown as { juice: { gameOverElapsed: number | null } }).juice.gameOverElapsed).not.toBeNull();
+  await run((api) => api.stepSimulation(240));
+  await expect.poll(async () => (await getTestState(page))?.feedback.juiceCues).toMatchObject({ collapse: 1, finale: 1 });
+  await expect(page.getByTestId("score-value")).toHaveText("6");
+
+  // Restart: no leftover particles, stamp, slow motion or tally.
+  await run((api) => api.startGame());
+  const fresh = await run((api) => api.getState().juice);
+  expect(fresh).toMatchObject({ particles: 0, stamps: 0, lastStamp: "", hitStop: 0, slamming: false, gameOverElapsed: null, tallyShown: -1 });
+  await expect(page.getByTestId("score-value")).toHaveText("0");
 });

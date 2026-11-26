@@ -88,6 +88,23 @@ import {
   tickDistractionTimerRecord,
 } from "./logic/runtime";
 import { resolveFacadeStyle } from "./logic/facade";
+import { JuiceLayer } from "./juice/JuiceLayer";
+import {
+  SLAM_SECONDS,
+  TALLY_DELAY_SECONDS,
+  WINDOW_GLOW_SECONDS,
+  WINDOW_WAVE_STEP_SECONDS,
+  comboSemitones,
+  comboTier,
+  hitStopSeconds,
+  isNearMiss,
+  milestoneReached,
+  sampleSlam,
+  slowMoScale,
+  tallyDuration,
+  tallyValue,
+  windowGlow,
+} from "./logic/juice";
 import {
   AttractCycle,
   ButtonLatch,
@@ -214,6 +231,8 @@ interface DebrisPiece {
   velocity: { x: number; y: number; z: number };
   angularVelocity: { x: number; y: number; z: number };
   remainingLifetime: number;
+  /** Shatters into shards once it has fallen this far below where it was cut. */
+  shatterBelowY?: number;
 }
 
 interface CollapseVoxel {
@@ -592,6 +611,22 @@ export class Game {
   private pressOwnedByInitials = false;
   private restartBlockedUntil = 0;
   private arcadePanelHtml = "";
+  private readonly juice = new JuiceLayer();
+  /** Landed slab squash/stretch: the mesh and how long it has been settling. */
+  private slam: { mesh: Mesh; elapsed: number; strength: number; baseY: number; height: number } | null = null;
+  private hitStopRemaining = 0;
+  private cameraKick = 0;
+  /** Milestone zoom-out: extra camera distance that eases back. */
+  private milestoneZoom = 0;
+  private windowWave: { elapsed: number; topLevel: number } | null = null;
+  /** Seconds since the game over began (drives slow motion and the score tally); null while playing. */
+  private gameOverElapsed: number | null = null;
+  private tallyShown = -1;
+  private gameOverFinaleQueued = false;
+  /** Dancer reactions: squash-hop on perfects, shiver on near misses. */
+  private dancerReaction: { kind: "cheer" | "panic"; elapsed: number } | null = null;
+  private yetiReaction: { kind: "cheer" | "panic"; elapsed: number } | null = null;
+  private readonly windowGlassMaterials = new Map<number, MeshStandardMaterial>();
   private introExitTimeoutId: number | null = null;
   private introHideTimeoutId: number | null = null;
   private readonly windowTexture = this.createWindowTexture();
@@ -713,7 +748,7 @@ export class Game {
 
   public mount(): void {
     this.container.replaceChildren(this.shell);
-    this.shell.append(this.canvas, this.distractionLayer, this.hud, this.introTitle);
+    this.shell.append(this.canvas, this.distractionLayer, this.juice.overlay, this.hud, this.introTitle);
     this.updateMetrics();
     this.applyDebugConfig(this.debugConfig);
     this.startGame();
@@ -757,6 +792,7 @@ export class Game {
       this.batModelRoot,
       this.spatialDebugSurface.root,
       this.gridHelper,
+      this.juice.root,
     );
 
     this.directionalLight.position.set(10, 18, 12);
@@ -1579,6 +1615,15 @@ export class Game {
   };
 
   private runSimulationStep(deltaSeconds: number): void {
+    // Juice runs on real time; the world freezes briefly on impact and slows while the tower falls.
+    const realDeltaSeconds = deltaSeconds;
+    this.updateJuice(realDeltaSeconds);
+    if (this.hitStopRemaining > 0) {
+      this.hitStopRemaining = Math.max(0, this.hitStopRemaining - realDeltaSeconds);
+      deltaSeconds = 0;
+    } else if (this.gameOverElapsed !== null) {
+      deltaSeconds *= slowMoScale(this.gameOverElapsed);
+    }
     this.simulationElapsedSeconds += deltaSeconds;
     this.frameCounter += 1;
     this.tickForcedDistractionTimers(deltaSeconds);
@@ -1723,6 +1768,20 @@ export class Game {
     this.ufoOrbitWorldPosition.set(0, 0, 0);
     this.ufoWorldVelocity.set(UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND, 0.15, 0.8);
     this.gorillaSlamRemaining = 0;
+    this.juice.reset();
+    this.juice.setRandom(this.seededRandom ?? Math.random);
+    this.slam = null;
+    this.hitStopRemaining = 0;
+    this.cameraKick = 0;
+    this.milestoneZoom = 0;
+    this.windowWave = null;
+    this.windowGlassMaterials.clear();
+    this.gameOverElapsed = null;
+    this.tallyShown = -1;
+    this.gameOverFinaleQueued = false;
+    this.dancerReaction = null;
+    this.yetiReaction = null;
+    this.feedbackManager.stopFinale();
     this.yetiMotion.reset();
     this.yetiPose = null;
     this.shell.style.setProperty("--impact-alpha", "0");
@@ -1858,6 +1917,7 @@ export class Game {
       this.feedbackManager.play(getPlacementFeedbackPlan(result.outcome));
       this.beginCollapseSequence("miss", missOffset, supplementalBurstSlabs);
       this.gameState = "game_over";
+      this.beginGameOverJuice();
       this.statusMessage = "Hard miss! Tower collapse sequence triggered.";
       if (qualifies(this.highScoreTable, this.score)) {
         this.initials = new InitialsEntry(this.arcadeNow());
@@ -1891,6 +1951,7 @@ export class Game {
 
     this.triggerImpactPulse(result.outcome === "perfect" ? 0.25 : 0.18);
     this.triggerPlacementShake();
+    const floorsBefore = Math.max(0, this.landedSlabs.length - this.startingStackLevels);
     this.landedSlabs.push(rewardedLandedSlab);
     this.maybeSpawnTentacleBurstForPlacedSlab(rewardedLandedSlab);
     const landedMesh = this.createSlabMesh(rewardedLandedSlab, false);
@@ -1899,6 +1960,7 @@ export class Game {
     this.syncArchivedRepresentation();
     this.refreshIntegrityTelemetry();
     this.score += 1;
+    this.playPlacementJuice(result, rewardedLandedSlab, landedMesh, floorsBefore);
 
     if (this.integrityTelemetry.tier === "unstable") {
       this.statusMessage = "Tower integrity is unstable. Keep stacking, or a hard miss will end the run.";
@@ -1922,6 +1984,246 @@ export class Game {
     this.spawnNextActive();
     this.renderHud();
   }
+
+  /** "Juice it or lose it" for one placement: slam, dust, chips, sound, stamp, streak, glow and milestones. */
+  private playPlacementJuice(
+    result: TrimResult,
+    landed: SlabData,
+    landedMesh: Mesh,
+    floorsBefore: number,
+  ): void {
+    const perfect = result.outcome === "perfect";
+    const combo = this.combo.current;
+    // The boot title must never cover a stamp: the first drop sends it off.
+    this.introTitle.classList.add("intro-title--exit");
+    const topY = landed.position.y - landed.dimensions.height / 2;
+    const center = new Vector3(landed.position.x, topY, landed.position.z);
+    const color = this.getSlabColor(landed.level);
+    const footprint = Math.max(landed.dimensions.width, landed.dimensions.depth);
+
+    // Squash on impact, stretch back up, settle; a freeze-frame and a downward camera punch.
+    this.slam = {
+      mesh: landedMesh,
+      elapsed: 0,
+      strength: perfect ? 1 + Math.min(1, combo / 10) : 0.8,
+      baseY: landedMesh.position.y,
+      height: landed.dimensions.height,
+    };
+    this.hitStopRemaining = hitStopSeconds(perfect ? "perfect" : "landed", combo);
+    this.cameraKick = perfect ? 0.7 + Math.min(0.5, combo * 0.05) : 0.55;
+
+    // Dust puffs out along every edge of the seam.
+    const halfW = landed.dimensions.width / 2;
+    const halfD = landed.dimensions.depth / 2;
+    for (const [dx, dz, nx, nz] of [[0, halfD, 0, 1], [0, -halfD, 0, -1], [halfW, 0, 1, 0], [-halfW, 0, -1, 0]] as const) {
+      this.juice.emit("dust", center.clone().add(new Vector3(dx, 0, dz)), {
+        count: perfect ? 9 : 6,
+        color,
+        spread: new Vector3(nx === 0 ? halfW : 0.05, 0.05, nz === 0 ? halfD : 0.05),
+        direction: new Vector3(nx, 0, nz),
+        speed: 2.6,
+        up: 0.6,
+      });
+    }
+
+    let semitones = comboSemitones(perfect ? combo : 1);
+    if (!perfect) semitones -= 3;
+    this.feedbackManager.juice("drop", (sound) => sound.drop(semitones));
+    if (perfect) {
+      this.feedbackManager.juice("perfect", (sound) => sound.perfect(semitones));
+    }
+
+    if (result.debrisSlab) {
+      // Chips fly from the cut edge; the overhang itself tumbles off (see spawnDebris).
+      const debris = result.debrisSlab;
+      const sign = landed.axis === "x"
+        ? Math.sign(debris.position.x - landed.position.x) || 1
+        : Math.sign(debris.position.z - landed.position.z) || 1;
+      const edge = new Vector3(
+        landed.position.x + (landed.axis === "x" ? sign * halfW : 0),
+        landed.position.y,
+        landed.position.z + (landed.axis === "z" ? sign * halfD : 0),
+      );
+      const out = new Vector3(landed.axis === "x" ? sign : 0, 0.3, landed.axis === "z" ? sign : 0);
+      this.juice.emit("chip", edge, {
+        count: 14,
+        color,
+        spread: new Vector3(landed.axis === "x" ? 0.05 : halfW, landed.dimensions.height / 2, landed.axis === "z" ? 0.05 : halfD),
+        direction: out,
+        speed: 4.5,
+        up: 2.4,
+      });
+      this.feedbackManager.juice("crunch", (sound) => sound.crunch());
+      const keptSize = landed.axis === "x" ? landed.dimensions.width : landed.dimensions.depth;
+      const originalSize = keptSize + result.trimmedSize;
+      if (isNearMiss(keptSize, originalSize)) {
+        this.juice.showStamp("CLOSE ONE!", "big");
+        this.feedbackManager.juice("nearMiss", (sound) => sound.nearMiss());
+        this.dancerReaction = { kind: "panic", elapsed: 0 };
+        this.yetiReaction = { kind: "panic", elapsed: 0 };
+      }
+    }
+
+    if (perfect) {
+      const tier = comboTier(combo);
+      this.juice.flashRing(new Vector3(landed.position.x, topY + 0.02, landed.position.z), footprint * 0.75);
+      this.juice.showStamp(tier >= 3 ? "UNSTOPPABLE!" : tier >= 2 ? "AMAZING!" : "PERFECT!", tier >= 2 ? "big" : "perfect");
+      this.windowWave = { elapsed: 0, topLevel: landed.level };
+      this.dancerReaction = { kind: "cheer", elapsed: 0 };
+      this.yetiReaction = { kind: "cheer", elapsed: 0 };
+      if (tier >= 2) {
+        this.juice.emit("confetti", new Vector3(landed.position.x, landed.position.y + 1, landed.position.z), {
+          count: tier >= 3 ? 40 : 20, spread: new Vector3(halfW, 0.3, halfD), speed: 3, up: 5,
+        });
+      }
+    }
+    this.juice.showCombo(perfect ? combo : 0);
+
+    const floors = Math.max(0, this.landedSlabs.length - this.startingStackLevels);
+    const milestone = milestoneReached(floorsBefore, floors);
+    if (milestone !== null) {
+      this.juice.showStamp(`${milestone} FLOORS!`, "milestone");
+      this.milestoneZoom = 7;
+      this.juice.emit("confetti", new Vector3(landed.position.x, landed.position.y + 2, landed.position.z), {
+        count: 90, spread: new Vector3(halfW + 1, 0.5, halfD + 1), speed: 4.5, up: 7,
+      });
+      if (this.canForceDistractionChannel("fireworks")) {
+        this.forcedDistractionTimers.fireworks = Math.max(this.forcedDistractionTimers.fireworks, 4);
+      }
+      this.feedbackManager.juice("milestone", (sound) => sound.milestone());
+    }
+  }
+
+  private beginGameOverJuice(): void {
+    this.gameOverElapsed = 0;
+    this.tallyShown = -1;
+    this.hitStopRemaining = 0.08;
+    this.cameraKick = 1.4;
+    this.juice.showCombo(0);
+    this.feedbackManager.juice("collapse", (sound) => sound.collapse());
+    // A new top score gets the full finale once the tally lands.
+    this.gameOverFinaleQueued = this.score > 0 && this.score > (this.highScoreTable[0]?.score ?? 0);
+  }
+
+  /** Real-time juice: particles, squash, camera punch decay, window wave, reactions and the score tally. */
+  private updateJuice(deltaSeconds: number): void {
+    const dt = Math.max(0, Math.min(0.1, deltaSeconds));
+    this.juice.update(dt);
+    this.cameraKick = Math.max(0, this.cameraKick - dt * 6);
+    this.milestoneZoom = Math.max(0, this.milestoneZoom - dt * 2.2);
+
+    if (this.slam) {
+      this.slam.elapsed += dt;
+      const { scaleY, scaleXZ } = sampleSlam(this.slam.elapsed, this.slam.strength);
+      // Pivot on the slab's base, so it squashes onto the tower instead of sinking into it.
+      this.slam.mesh.scale.set(scaleXZ, scaleY, scaleXZ);
+      this.slam.mesh.position.y = this.slam.baseY - (1 - scaleY) * this.slam.height / 2;
+      if (this.slam.elapsed >= SLAM_SECONDS) {
+        this.slam.mesh.scale.set(1, 1, 1);
+        this.slam.mesh.position.y = this.slam.baseY;
+        this.slam = null;
+      }
+    }
+
+    if (this.windowWave) {
+      this.windowWave.elapsed += dt;
+      let anyLit = false;
+      this.windowGlassMaterials.forEach((material, level) => {
+        const glow = windowGlow(this.windowWave!.elapsed, this.windowWave!.topLevel - level);
+        material.emissive.setRGB(0.24 + glow * 0.76, 0.34 + glow * 0.5, 0.45 - glow * 0.2);
+        material.emissiveIntensity = 0.2 + glow * 1.4;
+        anyLit ||= glow > 0;
+      });
+      const span = WINDOW_GLOW_SECONDS + (this.windowWave.topLevel + 1) * WINDOW_WAVE_STEP_SECONDS;
+      if (!anyLit && this.windowWave.elapsed > Math.min(span, 1.6)) {
+        this.windowWave = null;
+      }
+    }
+
+    this.updateCharacterReactions(dt);
+
+    if (this.gameOverElapsed !== null) {
+      this.gameOverElapsed += dt;
+      const shown = tallyValue(this.score, this.gameOverElapsed);
+      if (shown !== this.tallyShown) {
+        if (shown > this.tallyShown && this.tallyShown >= 0) {
+          const step = shown;
+          this.feedbackManager.juice("tally", (sound) => sound.tally(step));
+        }
+        this.tallyShown = shown;
+        this.renderHud();
+      }
+      const done = this.gameOverElapsed >= TALLY_DELAY_SECONDS + tallyDuration(this.score);
+      if (done && this.gameOverFinaleQueued) {
+        this.gameOverFinaleQueued = false;
+        this.juice.showStamp("NEW RECORD!", "record");
+        this.juice.emit("confetti", new Vector3(0, this.camera.position.y - 4, 0), {
+          count: 160, spread: new Vector3(6, 1, 3), speed: 5, up: 9,
+        });
+        if (this.canForceDistractionChannel("fireworks")) {
+          this.forcedDistractionTimers.fireworks = Math.max(this.forcedDistractionTimers.fireworks, 8);
+        }
+        this.feedbackManager.juice("finale", (sound) => sound.playFinale());
+      }
+    }
+  }
+
+  /** Snap squash, hops and shivers back to rest (for exact placement measurements). */
+  private settleJuiceTransforms(): void {
+    if (this.slam) {
+      this.slam.mesh.scale.set(1, 1, 1);
+      this.slam.mesh.position.y = this.slam.baseY;
+      this.slam = null;
+    }
+    [this.remyView, this.remySecondaryView].forEach((view) => view?.sceneNodes.characterRoot.scale.set(1, 1, 1));
+    this.gorillaModel?.scale.set(1, 1, 1);
+    this.dancerReaction = null;
+    this.yetiReaction = null;
+  }
+
+  /** Dancers hop on perfects and shiver on near misses; the yeti does the same, bigger. */
+  private updateCharacterReactions(dt: number): void {
+    const roots = [this.remyView, this.remySecondaryView]
+      .map((view) => view?.sceneNodes.characterRoot)
+      .filter((root): root is Group => Boolean(root));
+    if (this.dancerReaction) {
+      this.dancerReaction.elapsed += dt;
+      const t = this.dancerReaction.elapsed;
+      const duration = this.dancerReaction.kind === "cheer" ? 0.5 : 0.6;
+      const k = Math.min(1, t / duration);
+      const amount = Math.sin(k * Math.PI);
+      roots.forEach((root) => {
+        if (this.dancerReaction!.kind === "cheer") {
+          root.scale.set(1 - amount * 0.12, 1 + amount * 0.25, 1 - amount * 0.12);
+        } else {
+          root.scale.set(1 + Math.sin(t * 60) * 0.05 * amount, 1 - amount * 0.1, 1 + Math.sin(t * 60) * 0.05 * amount);
+        }
+      });
+      if (k >= 1) {
+        roots.forEach((root) => root.scale.set(1, 1, 1));
+        this.dancerReaction = null;
+      }
+    }
+    if (this.yetiReaction) {
+      this.yetiReaction.elapsed += dt;
+      const t = this.yetiReaction.elapsed;
+      const cheer = this.yetiReaction.kind === "cheer";
+      const duration = cheer ? 0.55 : 0.7;
+      const k = Math.min(1, t / duration);
+      const amount = Math.sin(k * Math.PI);
+      // Scale lives on the model inside the positioned root, so grounding stays untouched (feet are the pivot).
+      const model = this.gorillaModel;
+      if (model) {
+        if (cheer) model.scale.set(1 - amount * 0.1, 1 + amount * 0.22, 1 - amount * 0.1);
+        else model.scale.set(1 + Math.sin(t * 55) * 0.06 * amount, 1 - amount * 0.12, 1 + Math.cos(t * 55) * 0.06 * amount);
+      }
+      if (k >= 1) {
+        model?.scale.set(1, 1, 1);
+        this.yetiReaction = null;
+      }
+    }
+  }
+
 
   private beginCollapseSequence(
     trigger: CollapseTrigger,
@@ -3040,6 +3342,19 @@ export class Game {
       piece.mesh.rotation.y += piece.angularVelocity.y * deltaSeconds;
       piece.mesh.rotation.z += piece.angularVelocity.z * deltaSeconds;
 
+      if (piece.shatterBelowY !== undefined && piece.mesh.position.y < piece.shatterBelowY) {
+        const material = piece.mesh.material as MeshStandardMaterial;
+        this.juice.emit("shard", piece.mesh.position.clone(), {
+          count: 18,
+          color: material.color,
+          spread: piece.mesh.scale.clone().multiplyScalar(0.5),
+          speed: 4,
+          up: 3.5,
+        });
+        this.feedbackManager.juice("shatter", (sound) => sound.shatter());
+        this.recycleDebrisMesh(piece.mesh);
+        return false;
+      }
       const stillVisible = piece.remainingLifetime > 0 && piece.mesh.position.y > -12;
       if (!stillVisible) {
         this.recycleDebrisMesh(piece.mesh);
@@ -3645,7 +3960,8 @@ export class Game {
     const targetY = focusY + this.debugConfig.cameraHeight;
     const targetZ =
       resolveResponsiveCameraDistance(this.debugConfig.cameraDistance, this.camera.aspect) +
-      (collapseFrame?.cameraPullback ?? 0);
+      (collapseFrame?.cameraPullback ?? 0) +
+      this.milestoneZoom;
 
     const safeDeltaSeconds = Math.max(0, Math.min(0.1, deltaSeconds));
     const fpsAdjustedLerp =
@@ -3684,6 +4000,12 @@ export class Game {
       this.camera.position.x += placementShake.x;
       this.camera.position.y += placementShake.y;
       this.camera.position.z += placementShake.z;
+    }
+
+    if (this.cameraKick > 0) {
+      // Downward punch on impact, sharper than the placement shake.
+      this.camera.position.y -= this.cameraKick * 0.35;
+      this.camera.position.z -= this.cameraKick * 0.2;
     }
 
     if (this.integrityTelemetry.tier === "precarious") {
@@ -3964,7 +4286,7 @@ export class Game {
           return `<span class="arcade-initial ${state}">${letter}<i style="transform:scaleX(${fill.toFixed(3)})"></i></span>`;
         })
         .join("");
-      html = `<p class="arcade-panel__score">${this.score}</p>`
+      html = `<p class="arcade-panel__score">${Math.max(0, this.tallyShown)}</p>`
         + `<div class="arcade-initials" data-testid="initials" aria-label="Initials ${entry.text}">${letters}</div>`
         + `<p class="arcade-panel__hint">Tap: next letter · Hold ${LOCK_SECONDS} s: lock<br>Saves as shown after ${INITIALS_IDLE_SECONDS} s</p>`;
     } else if (this.attract.page === "scores") {
@@ -3975,7 +4297,8 @@ export class Game {
       html = `<p class="arcade-panel__prompt">Tap to play</p>`;
     } else {
       const latest = this.highScoreTable.find((entry) => entry.score === this.score) ?? null;
-      html = (this.highScoreTable.length > 0 ? `<ol class="arcade-scores arcade-scores--compact" data-testid="high-scores">${scoreRows(latest)}</ol>` : "")
+      html = `<p class="arcade-panel__score" data-testid="final-score">${Math.max(0, this.tallyShown)}</p>`
+        + (this.highScoreTable.length > 0 ? `<ol class="arcade-scores arcade-scores--compact" data-testid="high-scores">${scoreRows(latest)}</ol>` : "")
         + `<p class="arcade-panel__prompt">Tap to play again</p>`;
     }
     if (this.arcadePanelHtml !== html) {
@@ -3986,8 +4309,10 @@ export class Game {
 
   private renderHud(): void {
     const overlay = this.hud.querySelector<HTMLElement>(".overlay");
-    this.scoreValue.textContent = String(this.score);
-    this.hiScoreValue.textContent = String(hiScore(this.highScoreTable, this.score));
+    // During the game over the score counts up to its final value.
+    const shownScore = this.gameOverElapsed !== null ? Math.max(0, this.tallyShown) : this.score;
+    this.scoreValue.textContent = String(shownScore);
+    this.hiScoreValue.textContent = String(hiScore(this.highScoreTable, shownScore));
     this.heightValue.textContent = `${Math.max(0, this.landedSlabs.length - this.startingStackLevels)} floors`;
     this.comboValue.textContent = `${this.combo.current}/${this.combo.target}`;
     this.messageValue.textContent = this.statusMessage;
@@ -4195,6 +4520,7 @@ export class Game {
       },
       applyPlacementDebugMaterials: () => this.applyPlacementDebugMaterials(),
       loadCharacterPair: async (primaryCharacterId, secondaryCharacterId = null) => {
+        this.settleJuiceTransforms();
         await this.loadRemyCharactersForTest(primaryCharacterId, secondaryCharacterId);
       },
       autoPlayUntilCharacter: async (options = {}) => {
@@ -4209,6 +4535,8 @@ export class Game {
         for (let placementIndex = 0; placementIndex < maxPlacements; placementIndex += 1) {
           const currentSnapshot = this.getCharacterSpatialSnapshot("primary");
           if (currentSnapshot?.anchor?.relationToLedge) {
+            // Measure the placement at rest, not mid-squash or mid-hop.
+            this.settleJuiceTransforms();
             this.simulationPaused = true;
             this.renderHud();
             this.renderer?.render(this.scene, this.camera);
@@ -4295,6 +4623,16 @@ export class Game {
         speedMultiplier: getRecoverySpeedMultiplier(this.recovery, this.debugConfig.recoverySlowdownFactor),
       },
       feedback,
+      juice: {
+        particles: this.juice.activeParticles,
+        stamps: this.juice.counts.stamps,
+        rings: this.juice.counts.rings,
+        lastStamp: this.juice.lastStamp,
+        hitStop: this.hitStopRemaining,
+        slamming: this.slam !== null,
+        gameOverElapsed: this.gameOverElapsed,
+        tallyShown: this.tallyShown,
+      },
       distractions: {
         enabled: distractionSnapshot.enabled,
         level: distractionSnapshot.level,
@@ -4611,6 +4949,8 @@ export class Game {
       opacity: 0.94,
       depthWrite: false,
     });
+    // The perfect-placement window wave lights these up floor by floor.
+    this.windowGlassMaterials.set(slab.level, glassMaterial);
 
     const sillDarkColor = darkTrimColor.clone().offsetHSL(0, 0, 0.04);
     const sillDarkEmissive = sillDarkColor.clone().offsetHSL(0, 0, -0.2);
@@ -5434,12 +5774,14 @@ export class Game {
     this.debrisPieces.push({
       mesh,
       velocity: { x: xVelocity, y: 1.8, z: zVelocity },
+      // Tumbles away from the tower: rolls over the cut edge, with a little yaw.
       angularVelocity: {
-        x: 0,
-        y: 0,
-        z: 0,
+        x: axis === "z" ? pushSign * 5.5 : 0,
+        y: pushSign * 1.4,
+        z: axis === "x" ? -pushSign * 5.5 : 0,
       },
       remainingLifetime: this.debugConfig.debrisLifetime,
+      shatterBelowY: fullMiss ? undefined : slab.position.y - slab.dimensions.height * 1.8,
     });
 
     const scalars = getQualityScalars(this.activeQualityPreset);

@@ -1,3 +1,4 @@
+import { JuiceSound, type JuiceSoundName } from "./juiceSound";
 import { clampToneGain, type FeedbackEvent, type FeedbackPlan } from "./logic/feedback";
 
 interface AudioContextConstructor {
@@ -19,6 +20,8 @@ export interface FeedbackSnapshot {
   audioEventsPlayed: number;
   hapticEventsPlayed: number;
   lastEvent: FeedbackEvent | null;
+  /** Juice sounds requested (counted even when audio is locked or off, so tests can see the cue fired). */
+  juiceCues: Partial<Record<JuiceSoundName, number>>;
 }
 
 export class FeedbackManager {
@@ -26,6 +29,7 @@ export class FeedbackManager {
   private readonly hapticSupported: boolean;
 
   private audioContext: AudioContext | null = null;
+  private juiceSound: JuiceSound | null = null;
   private audioUnlocked = false;
   private config: FeedbackConfig;
   private snapshot: FeedbackSnapshot;
@@ -44,6 +48,7 @@ export class FeedbackManager {
       audioEventsPlayed: 0,
       hapticEventsPlayed: 0,
       lastEvent: null,
+      juiceCues: {},
     };
   }
 
@@ -82,7 +87,21 @@ export class FeedbackManager {
   }
 
   public getSnapshot(): FeedbackSnapshot {
-    return { ...this.snapshot };
+    return { ...this.snapshot, juiceCues: { ...this.snapshot.juiceCues } };
+  }
+
+  /** Run a juice sound when audio is on and unlocked; always record that the cue fired. */
+  public juice(name: JuiceSoundName, play: (sound: JuiceSound) => void): void {
+    this.snapshot.juiceCues[name] = (this.snapshot.juiceCues[name] ?? 0) + 1;
+    if (!this.config.audioEnabled || !this.audioContext || this.audioContext.state !== "running") {
+      return;
+    }
+    this.juiceSound ??= new JuiceSound(this.audioContext);
+    play(this.juiceSound);
+  }
+
+  public stopFinale(): void {
+    this.juiceSound?.stopFinale();
   }
 
   private playAudio(plan: FeedbackPlan): void {

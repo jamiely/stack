@@ -160,6 +160,18 @@ export interface PublicGameState {
     audioEventsPlayed: number;
     hapticEventsPlayed: number;
     lastEvent: "placement_perfect" | "placement_landed" | "placement_miss" | "collapse_failure" | null;
+    juiceCues: Partial<Record<"drop" | "perfect" | "crunch" | "shatter" | "nearMiss" | "milestone" | "tally" | "collapse" | "finale", number>>;
+  };
+  juice: {
+    particles: number;
+    stamps: number;
+    rings: number;
+    lastStamp: string;
+    hitStop: number;
+    slamming: boolean;
+    /** Seconds since the game over began; null while playing. */
+    gameOverElapsed: number | null;
+    tallyShown: number;
   };
   distractions: {
     enabled: boolean;
