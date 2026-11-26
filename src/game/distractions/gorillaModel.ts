@@ -1,6 +1,6 @@
 import {
   AnimationAction,
-  AnimationClip,
+  type AnimationClip,
   AnimationMixer,
   Box3,
   type Camera,
@@ -13,13 +13,12 @@ import {
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export const GORILLA_MODEL_URL = new URL("../../../assets/quaternius_yeti_model_b.glb", import.meta.url).href;
-export const GORILLA_CLIMB_CLIP_NAME = "Walk";
+export const GORILLA_CLIP_NAMES = ["Idle", "Jump", "Jump_Idle", "Jump_Land"] as const;
+export type GorillaClipName = (typeof GORILLA_CLIP_NAMES)[number];
 
 const GORILLA_WORLD_HEIGHT_TO_SLAB_HEIGHT_RATIO = 0.78;
 const GORILLA_MIN_WORLD_HEIGHT = 1.8;
 const GORILLA_MAX_WORLD_HEIGHT = 2.7;
-export const GORILLA_FACADE_HANDHOLD_CLEARANCE = 0.2;
-export const GORILLA_FACADE_MODEL_CLEARANCE = 0.08;
 export const GORILLA_MODEL_RENDER_ORDER = 12;
 
 interface GorillaGltf {
@@ -39,8 +38,7 @@ export interface GorillaModelPrecompilerLike {
 export interface LoadedGorillaModel {
   model: Group;
   mixer: AnimationMixer;
-  clip: AnimationClip;
-  action: AnimationAction;
+  actions: Record<GorillaClipName, AnimationAction>;
 }
 
 type OpacityMaterial = Material & {
@@ -63,34 +61,6 @@ export function resolveGorillaModelHeight(slabHeight: number, viewportAspect = 1
   return Math.max(GORILLA_MIN_WORLD_HEIGHT, desktopHeight * responsiveScale);
 }
 
-export interface GorillaModelRootPositionInput {
-  climbPoint: Vector3;
-  topPoint: Vector3;
-  modelHalfDepth: number;
-  handholdClearance?: number;
-  facadeClearance?: number;
-}
-
-export function resolveGorillaModelRootPosition(input: GorillaModelRootPositionInput): Vector3 {
-  const handholdClearance = Number.isFinite(input.handholdClearance)
-    ? Math.max(0, input.handholdClearance ?? GORILLA_FACADE_HANDHOLD_CLEARANCE)
-    : GORILLA_FACADE_HANDHOLD_CLEARANCE;
-  const facadeClearance = Number.isFinite(input.facadeClearance)
-    ? Math.max(0, input.facadeClearance ?? GORILLA_FACADE_MODEL_CLEARANCE)
-    : GORILLA_FACADE_MODEL_CLEARANCE;
-  const halfDepth = Number.isFinite(input.modelHalfDepth) ? Math.max(0, input.modelHalfDepth) : 0;
-  const outward = input.climbPoint.clone().sub(input.topPoint);
-  outward.y = 0;
-  if (outward.lengthSq() === 0) {
-    outward.set(0, 0, 1);
-  } else {
-    outward.normalize();
-  }
-
-  const extraOutwardOffset = Math.max(0, halfDepth + facadeClearance - handholdClearance);
-  return input.climbPoint.clone().add(outward.multiplyScalar(extraOutwardOffset));
-}
-
 export function normalizeGorillaModel(source: Group, targetHeight: number): Group {
   const sourceBounds = new Box3().setFromObject(source);
   const sourceSize = sourceBounds.getSize(new Vector3());
@@ -108,7 +78,6 @@ export function normalizeGorillaModel(source: Group, targetHeight: number): Grou
   groundedSource.scale.setScalar(targetHeight / sourceSize.y);
   wrapper.add(groundedSource);
   wrapper.userData.targetHeight = targetHeight;
-  wrapper.userData.halfDepth = (sourceSize.z / sourceSize.y) * targetHeight * 0.5;
   return wrapper;
 }
 
@@ -117,10 +86,13 @@ export async function loadGorillaModel(
   loader: GorillaGltfLoaderLike = new GLTFLoader(),
 ): Promise<LoadedGorillaModel> {
   const gltf = await loader.loadAsync(GORILLA_MODEL_URL);
-  const clip = gltf.animations.find((candidate) => candidate.name === GORILLA_CLIMB_CLIP_NAME);
-  if (!clip) {
-    throw new Error(`Gorilla model is missing the ${GORILLA_CLIMB_CLIP_NAME} animation.`);
-  }
+  const clips = GORILLA_CLIP_NAMES.map((name) => {
+    const clip = gltf.animations.find((candidate) => candidate.name === name);
+    if (!clip) {
+      throw new Error(`Gorilla model is missing the ${name} animation.`);
+    }
+    return clip;
+  });
 
   const model = normalizeGorillaModel(gltf.scene, targetHeight);
   const materialCache = new Map<Material, Material>();
@@ -148,9 +120,15 @@ export async function loadGorillaModel(
   });
 
   const mixer = new AnimationMixer(model);
-  const action = mixer.clipAction(clip);
-  action.play();
-  return { model, mixer, clip, action };
+  const actions = {} as Record<GorillaClipName, AnimationAction>;
+  clips.forEach((clip, index) => {
+    const action = mixer.clipAction(clip);
+    action.play();
+    action.paused = true;
+    action.setEffectiveWeight(0);
+    actions[GORILLA_CLIP_NAMES[index]!] = action;
+  });
+  return { model, mixer, actions };
 }
 
 export async function precompileGorillaModel(
@@ -189,10 +167,11 @@ export function setGorillaModelOpacity(root: Object3D, opacity: number): void {
         ? opacityMaterial.userData.gorillaOriginalOpacity
         : opacityMaterial.opacity;
       opacityMaterial.userData.gorillaOriginalOpacity = originalOpacity;
-      const renderStateChanged = !opacityMaterial.transparent || opacityMaterial.depthWrite;
-      opacityMaterial.transparent = true;
+      const opaque = clampedOpacity >= 1 && originalOpacity >= 1;
+      const renderStateChanged = opacityMaterial.transparent === opaque || opacityMaterial.depthWrite !== opaque;
+      opacityMaterial.transparent = !opaque;
       opacityMaterial.opacity = originalOpacity * clampedOpacity;
-      opacityMaterial.depthWrite = false;
+      opacityMaterial.depthWrite = opaque;
       if (renderStateChanged) {
         opacityMaterial.needsUpdate = true;
       }

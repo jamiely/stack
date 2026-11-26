@@ -124,6 +124,13 @@ export interface TestModeOptions {
 export interface PublicGameState {
   gameState: GameState;
   score: number;
+  arcade: {
+    hiScore: number;
+    highScores: Array<{ initials: string; score: number }>;
+    /** Letters being entered, or null when initials entry is closed. */
+    initials: { text: string; index: number } | null;
+    attractPage: "title" | "scores" | "how" | null;
+  };
   height: number;
   level: number;
   activeAxis: Axis | null;
@@ -176,6 +183,16 @@ export interface PublicGameState {
       contrastWash: number;
       clouds: number;
       fireworks: number;
+    };
+    yeti: {
+      phase: "hidden" | "perched" | "takeoff" | "air" | "landing" | "leaving";
+      height: number;
+      /** Rendered mesh bottom minus the ledge top while perched; null otherwise or before the model loads. */
+      footGap: number | null;
+      overlapsObstacle: boolean;
+      x: number;
+      y: number;
+      z: number;
     };
     visuals: {
       gorillaOpacity: number;

@@ -339,7 +339,8 @@ body {
   bottom: 1.5rem;
   display: grid;
   gap: 0.9rem;
-  max-width: 30rem;
+  max-width: 34rem;
+  margin-inline: auto;
   padding: 1.35rem;
   border-radius: 24px;
   background: rgba(7, 11, 18, 0.7);
@@ -356,11 +357,15 @@ body {
 
 .intro-title {
   position: absolute;
-  top: 1.2rem;
+  top: 38%;
   left: 1.5rem;
+  right: 1.5rem;
   z-index: 3;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  /* Fits one line on a 9:21 portrait screen and stays big on landscape. */
+  font-size: clamp(1.6rem, min(7.2vw, 9vh), 5rem);
+  line-height: 1.05;
+  text-align: center;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -393,6 +398,124 @@ body {
 .overlay h2 {
   font-family: Georgia, "Times New Roman", serif;
   letter-spacing: 0.03em;
+  /* Scales with the narrower side so long titles fit a portrait cabinet. */
+  font-size: clamp(1.6rem, min(8vw, 5vh), 3.2rem);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.arcade-panel {
+  display: grid;
+  gap: 0.8rem;
+  justify-items: start;
+}
+
+.arcade-panel:empty {
+  display: none;
+}
+
+.overlay .arcade-panel__score {
+  font-size: clamp(2rem, min(12vw, 7vh), 4.5rem);
+  font-weight: 700;
+  line-height: 1;
+  color: #f0c970;
+}
+
+.overlay .arcade-panel__prompt {
+  font-size: clamp(1rem, 4vw, 1.4rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f7efe0;
+}
+
+.overlay .arcade-panel__hint {
+  font-size: clamp(0.85rem, 3.4vw, 1.05rem);
+}
+
+.arcade-initials {
+  display: flex;
+  gap: clamp(0.5rem, 3vw, 1rem);
+}
+
+.arcade-initial {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(3rem, 16vw, 5rem);
+  aspect-ratio: 4 / 5;
+  border-radius: 14px;
+  border: 2px solid rgba(247, 239, 224, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: clamp(2rem, 11vw, 3.6rem);
+  font-weight: 700;
+  overflow: hidden;
+}
+
+.arcade-initial.current {
+  border-color: #f0c970;
+  box-shadow: 0 0 1.2rem rgba(240, 201, 112, 0.35);
+  animation: arcade-initial-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.arcade-initial.locked {
+  border-color: rgba(240, 201, 112, 0.6);
+  color: #f0c970;
+}
+
+.arcade-initial i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0.3rem;
+  background: #f0c970;
+  transform-origin: left center;
+}
+
+@keyframes arcade-initial-pulse {
+  to {
+    background: rgba(240, 201, 112, 0.16);
+  }
+}
+
+.arcade-scores {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: clamp(1rem, 4.2vw, 1.35rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.arcade-scores li {
+  display: grid;
+  grid-template-columns: 2.2em 3.5em 1fr;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.arcade-scores li span:first-child {
+  color: rgba(247, 239, 224, 0.5);
+}
+
+.arcade-scores li strong {
+  justify-self: end;
+}
+
+.arcade-scores .arcade-scores__new {
+  color: #f0c970;
+}
+
+.arcade-scores .arcade-scores__empty {
+  display: block;
+  color: rgba(247, 239, 224, 0.6);
+}
+
+.arcade-scores--compact li:nth-child(n + 6) {
+  display: none;
 }
 
 .overlay p {

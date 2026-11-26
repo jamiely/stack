@@ -4,6 +4,12 @@ import type { Page } from "@playwright/test";
 interface E2EState {
   gameState: "idle" | "playing" | "game_over";
   score: number;
+  arcade: {
+    hiScore: number;
+    highScores: Array<{ initials: string; score: number }>;
+    initials: { text: string; index: number } | null;
+    attractPage: "title" | "scores" | "how" | null;
+  };
   height: number;
   level: number;
   activeAxis: "x" | "z" | null;
@@ -54,6 +60,7 @@ interface E2EState {
       clouds: number;
       fireworks: number;
     };
+    yeti: { phase: string; overlapsObstacle: boolean; footGap: number | null };
     visuals: {
       gorillaOpacity: number;
       ufoOpacity: number;
@@ -726,6 +733,12 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(true);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.clouds).toBe(true);
+  // The yeti waits for a settled balcony ledge (its grow-in animation takes 0.3 s), then drops onto it.
+  await page.evaluate(() => {
+    (window as Window & { __towerStackerTestApi?: { stepSimulation: (steps?: number) => void } }).__towerStackerTestApi?.stepSimulation(70);
+  });
+  await expect.poll(async () => (await getTestState(page))?.distractions.yeti.phase).toBe("perched");
+  await expect.poll(async () => (await getTestState(page))?.distractions.yeti.overlapsObstacle).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0.2);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.cloudOpacity ?? 0).toBeGreaterThan(0.1);
@@ -743,11 +756,14 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
     return element.style.transform;
   });
 
+  // New floors raise the camera and offer higher ledges, so the yeti leaps up.
   await page.evaluate(() => {
     const api = (window as Window & {
-      __towerStackerTestApi?: { stepSimulation: (steps?: number) => void };
+      __towerStackerTestApi?: { stepSimulation: (steps?: number) => void; placeAtOffset: (offset: number) => unknown };
     }).__towerStackerTestApi;
 
+    api?.placeAtOffset(0);
+    api?.placeAtOffset(0);
     api?.stepSimulation(80);
   });
 
@@ -775,7 +791,7 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
     api?.stepSimulation(1);
   });
 
-  await expect.poll(async () => (await getTestState(page))?.score).toBe(9);
+  await expect.poll(async () => (await getTestState(page))?.score).toBe(11);
   await expect.poll(async () => (await getTestState(page))?.lastPlacementOutcome).toBe("perfect");
 
   await page.locator('input[data-debug-key="distractionsEnabled"]').evaluate((node) => {
@@ -795,8 +811,12 @@ test("gorilla/ufo/cloud actors are level-gated and core placement still works wh
   await expect.poll(async () => (await getTestState(page))?.debugConfig.distractionsEnabled).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.gorilla).toBe(false);
   await expect.poll(async () => (await getTestState(page))?.distractions.active.ufo).toBe(false);
-  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 1).toBe(0);
   await expect.poll(async () => (await getTestState(page))?.distractions.visuals.ufoOpacity ?? 0).toBeGreaterThan(0);
+  // The yeti fades out over 0.3 s rather than popping.
+  await page.evaluate(() => {
+    (window as Window & { __towerStackerTestApi?: { stepSimulation: (steps?: number) => void } }).__towerStackerTestApi?.stepSimulation(20);
+  });
+  await expect.poll(async () => (await getTestState(page))?.distractions.visuals.gorillaOpacity ?? 1).toBe(0);
 
   await page.evaluate(() => {
     const api = (window as Window & {
@@ -1171,4 +1191,60 @@ test.describe("mobile touch pass", () => {
 
     await expect.poll(async () => (await getTestState(page))?.score).toBe(1);
   });
+});
+
+test("a qualifying run enters initials with one button, saves the top-ten table, and restart starts fresh", async ({ page }) => {
+  await page.goto("/?test&seed=3");
+  await page.evaluate(() => localStorage.setItem("tower-stacker-scores", JSON.stringify([{ initials: "JLY", score: 40 }])));
+  await page.reload();
+  type Api = { startGame: () => void; placeAtOffset: (offset: number) => unknown; setActiveOffset: (offset: number) => boolean; stopActiveSlab: () => void; stepSimulation: (steps?: number) => void };
+  await page.evaluate(() => {
+    const api = (window as Window & { __towerStackerTestApi?: Api }).__towerStackerTestApi!;
+    api.startGame();
+    for (let index = 0; index < 4; index += 1) api.placeAtOffset(0);
+  });
+  await expect(page.getByTestId("hi-score-value")).toHaveText("40");
+
+  await page.evaluate(() => {
+    const api = (window as Window & { __towerStackerTestApi?: Api }).__towerStackerTestApi!;
+    api.setActiveOffset(10);
+    api.stopActiveSlab();
+    api.stepSimulation(30);
+  });
+  await expect(page.getByTestId("overlay-title")).toHaveText("New High Score");
+  await expect.poll(async () => (await getTestState(page))?.arcade.initials).toEqual({ text: "AAA", index: 0 });
+
+  // Tap = next letter; a held key's repeats neither advance nor reset the 0.35 s hold that locks it.
+  await page.keyboard.down("Space");
+  await page.keyboard.up("Space");
+  await expect.poll(async () => (await getTestState(page))?.arcade.initials?.text).toBe("BAA");
+  await page.keyboard.down("Space");
+  await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", repeat: true })));
+  await expect.poll(async () => (await getTestState(page))?.arcade.initials?.index).toBe(1);
+  await page.keyboard.up("Space");
+  for (const locked of [1, 2]) {
+    await page.keyboard.down("Space");
+    await expect.poll(async () => (await getTestState(page))?.arcade.initials?.index ?? 3).toBeGreaterThan(locked);
+    await page.keyboard.up("Space");
+  }
+  await expect.poll(async () => (await getTestState(page))?.arcade.initials).toBeNull();
+  await expect.poll(async () => (await getTestState(page))?.arcade.highScores).toEqual([
+    { initials: "JLY", score: 40 },
+    { initials: "BAA", score: 4 },
+  ]);
+  await expect(page.getByTestId("high-scores")).toContainText("BAA");
+  expect(await page.evaluate(() => localStorage.getItem("tower-stacker-scores"))).toContain('"BAA"');
+
+  // Restart: a fresh tower, score and combo, with the table kept.
+  await expect.poll(async () => {
+    await page.keyboard.press("Space");
+    return (await getTestState(page))?.gameState;
+  }).toBe("playing");
+  const fresh = await getTestState(page);
+  expect(fresh?.score).toBe(0);
+  expect(fresh?.height).toBe(0);
+  expect(fresh?.combo.current).toBe(0);
+  expect(fresh?.arcade.initials).toBeNull();
+  expect(fresh?.arcade.hiScore).toBe(40);
+  await expect(page.getByTestId("menu-overlay")).toHaveClass(/overlay--hidden/);
 });

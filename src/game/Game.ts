@@ -1,6 +1,8 @@
 import {
   AmbientLight,
+  type AnimationAction,
   AnimationMixer,
+  Box3,
   BoxGeometry,
   BufferGeometry,
   CanvasTexture,
@@ -20,6 +22,7 @@ import {
   PointsMaterial,
   RepeatWrapping,
   Scene,
+  SkinnedMesh,
   Vector3,
   WebGLRenderer,
 } from "three";
@@ -85,7 +88,27 @@ import {
   tickDistractionTimerRecord,
 } from "./logic/runtime";
 import { resolveFacadeStyle } from "./logic/facade";
-import { sampleGorillaClimbPosition } from "./logic/gorilla";
+import {
+  AttractCycle,
+  ButtonLatch,
+  INITIALS_IDLE_SECONDS,
+  InitialsEntry,
+  LOCK_SECONDS,
+  addHighScore,
+  hiScore,
+  highScores,
+  qualifies,
+  type HighScore,
+} from "./logic/arcade";
+import {
+  YetiMotion,
+  bodyHits,
+  fitYetiHeight,
+  resolvePerchOffset,
+  type Box as YetiObstacle,
+  type Perch as YetiPerch,
+  type YetiPose,
+} from "./logic/yeti";
 import { initializeCloudState, stepCloudState } from "./logic/clouds";
 import { initializeFireworksState, stepFireworksState, type FireworksConfig, type FireworksState } from "./logic/fireworks";
 import {
@@ -96,12 +119,12 @@ import {
   setBatModelOpacity,
 } from "./distractions/batModel";
 import {
-  GORILLA_FACADE_HANDHOLD_CLEARANCE,
+  GORILLA_CLIP_NAMES,
   loadGorillaModel,
   precompileGorillaModel,
   resolveGorillaModelHeight,
-  resolveGorillaModelRootPosition,
   setGorillaModelOpacity,
+  type GorillaClipName,
 } from "./distractions/gorillaModel";
 import {
   loadUfoModel,
@@ -350,8 +373,14 @@ const DEBUG_DISTRACTION_CHANNELS: DistractionChannel[] = [
 const DEBUG_DISTRACTION_LAUNCH_DURATION_SECONDS = 6;
 const UFO_EXIT_DURATION_SECONDS = 1.15;
 const UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND = 6.8;
-const GORILLA_CLIMB_SPEED = 0.7;
-const GORILLA_SLAM_CYCLE_SPEED = 0.62;
+/** Only the top few floors offer the yeti a perch, and only ledges this far inside the frame. */
+const YETI_PERCH_LEVEL_WINDOW = 6;
+const HIGH_SCORES_STORAGE_KEY = "tower-stacker-scores";
+/** After the initials lock, the button is ignored this long so the locking hold does not restart the run. */
+const GAME_OVER_INPUT_GRACE_SECONDS = 0.6;
+const YETI_PERCH_SCREEN_MARGIN = 0.92;
+/** Windows, sills and eaves protrude this far from a slab face. */
+const YETI_FACADE_DECOR_DEPTH = 0.15;
 const GORILLA_SLAM_DURATION_SECONDS = 0.2;
 const STACK_LOOK_AHEAD_Y = 1.05;
 const STARTUP_CAMERA_LIFT = 2.2;
@@ -404,6 +433,8 @@ export class Game {
   private readonly canvas: HTMLCanvasElement;
   private readonly hud: HTMLDivElement;
   private readonly scoreValue: HTMLSpanElement;
+  private readonly hiScoreValue: HTMLSpanElement;
+  private readonly arcadePanel: HTMLDivElement;
   private readonly heightValue: HTMLSpanElement;
   private readonly comboValue: HTMLSpanElement;
   private readonly messageValue: HTMLSpanElement;
@@ -478,10 +509,14 @@ export class Game {
   private readonly gorillaModelRoot = new Group();
   private gorillaModel: Group | null = null;
   private gorillaMixer: AnimationMixer | null = null;
+  private gorillaActions: Record<GorillaClipName, AnimationAction> | null = null;
+  private readonly yetiMotion = new YetiMotion();
+  private yetiPose: YetiPose | null = null;
+  private yetiHeight = 0;
+  private yetiObstacles: YetiObstacle[] = [];
   private readonly batModelRoot = new Group();
   private batModel: Group | null = null;
   private batMixer: AnimationMixer | null = null;
-  private gorillaLastSlamCycle = -1;
   private gorillaSlamRemaining = 0;
   private integrityTelemetry: IntegrityTelemetry = resolveIntegrityTelemetry(
     [],
@@ -549,6 +584,12 @@ export class Game {
     tremor: "high",
   };
   private statusMessage = "Line up the moving slab and keep the tower alive.";
+  private highScoreTable: HighScore[] = this.loadHighScores();
+  private initials: InitialsEntry | null = null;
+  private readonly attract = new AttractCycle(this.arcadeNow());
+  private readonly mainButton = new ButtonLatch();
+  private restartBlockedUntil = 0;
+  private arcadePanelHtml = "";
   private introExitTimeoutId: number | null = null;
   private introHideTimeoutId: number | null = null;
   private readonly windowTexture = this.createWindowTexture();
@@ -602,6 +643,8 @@ export class Game {
     this.shell.dataset.testMode = this.testMode.enabled ? "on" : "off";
     this.shell.addEventListener("pointerdown", this.handlePointerStop);
     this.shell.addEventListener("touchstart", this.handleTouchStart, { passive: false });
+    this.shell.addEventListener("touchend", this.handleButtonRelease);
+    this.shell.addEventListener("touchcancel", this.handleButtonRelease);
 
     this.canvas = document.createElement("canvas");
     this.canvas.className = "game-canvas";
@@ -612,6 +655,14 @@ export class Game {
     this.scoreValue = document.createElement("span");
     this.scoreValue.className = "hud__value";
     this.scoreValue.dataset.testid = "score-value";
+
+    this.hiScoreValue = document.createElement("span");
+    this.hiScoreValue.className = "hud__value";
+    this.hiScoreValue.dataset.testid = "hi-score-value";
+
+    this.arcadePanel = document.createElement("div");
+    this.arcadePanel.className = "arcade-panel";
+    this.arcadePanel.dataset.testid = "arcade-panel";
 
     this.heightValue = document.createElement("span");
     this.heightValue.className = "hud__value";
@@ -668,6 +719,10 @@ export class Game {
     window.requestAnimationFrame(this.tick);
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("keyup", this.handleKeyUp);
+    window.addEventListener("keydown", this.handleKeyDown);
+    window.addEventListener("pointerup", this.handleButtonRelease);
+    window.addEventListener("pointercancel", this.handleButtonRelease);
+    window.addEventListener("blur", this.handleButtonRelease);
 
     if (this.testMode.enabled) {
       window.__towerStackerTestApi = this.createTestApi();
@@ -715,6 +770,9 @@ export class Game {
         <span class="hud__label">Score</span>
       </div>
       <div class="hud__card">
+        <span class="hud__label">Hi Score</span>
+      </div>
+      <div class="hud__card">
         <span class="hud__label">Height</span>
       </div>
       <div class="hud__card">
@@ -732,6 +790,9 @@ export class Game {
         <span class="hud__label">Score</span>
       </div>
       <div class="hud__card">
+        <span class="hud__label">Hi Score</span>
+      </div>
+      <div class="hud__card">
         <span class="hud__label">Height</span>
       </div>
       <div class="hud__card">
@@ -741,11 +802,12 @@ export class Game {
 
     const cards = topbar.querySelectorAll(".hud__card");
     cards[0]?.append(this.scoreValue);
-    cards[1]?.append(this.heightValue);
-    cards[2]?.append(this.comboValue);
+    cards[1]?.append(this.hiScoreValue);
+    cards[2]?.append(this.heightValue);
+    cards[3]?.append(this.comboValue);
     if (this.debugEnabled) {
-      cards[3]?.append(this.messageValue);
-      cards[4]?.append(this.perfValue);
+      cards[4]?.append(this.messageValue);
+      cards[5]?.append(this.perfValue);
     }
 
     const overlay = document.createElement("section");
@@ -762,7 +824,7 @@ export class Game {
 
     this.rendererStatus.className = "overlay__status";
 
-    overlay.append(this.overlayTitle);
+    overlay.append(this.overlayTitle, this.arcadePanel);
     if (this.debugEnabled) {
       overlay.append(this.overlayBody, this.rendererStatus);
     }
@@ -834,13 +896,14 @@ export class Game {
 
     const targetHeight = resolveGorillaModelHeight(this.debugConfig.slabHeight, this.camera.aspect);
     void loadGorillaModel(targetHeight)
-      .then(async ({ model, mixer }) => {
+      .then(async ({ model, mixer, actions }) => {
         this.gorillaModelRoot.clear();
         this.gorillaModelRoot.add(model);
         this.gorillaActor.dataset.modelState = "warming";
         await precompileGorillaModel(this.renderer!, this.scene, this.camera, this.gorillaModelRoot);
         this.gorillaModel = model;
         this.gorillaMixer = mixer;
+        this.gorillaActions = actions;
         this.gorillaActor.dataset.modelState = "ready";
         this.gorillaActor.classList.add("distraction-actor--gorilla-model-ready");
       })
@@ -848,6 +911,7 @@ export class Game {
         this.gorillaModelRoot.clear();
         this.gorillaModel = null;
         this.gorillaMixer = null;
+        this.gorillaActions = null;
         this.gorillaActor.dataset.modelState = "fallback";
         this.gorillaActor.classList.remove("distraction-actor--gorilla-model-ready");
         console.warn("Failed to load and precompile the gorilla model; keeping the CSS fallback.", error);
@@ -1318,6 +1382,13 @@ export class Game {
 
     event.preventDefault();
     this.feedbackManager.primeFromGesture();
+    this.mainButton.up();
+
+    if (this.initials) {
+      this.initials.up(this.arcadeNow());
+      this.renderHud();
+      return;
+    }
 
     if (this.gameState === "playing") {
       this.stopActiveSlab();
@@ -1325,9 +1396,98 @@ export class Game {
     }
 
     if (this.gameState === "idle" || this.gameState === "game_over") {
-      this.startGame();
+      this.restartFromInput();
     }
   };
+
+  /** Press of the one button. Initials entry needs the press itself (tap vs hold); joystick key repeats are ignored. */
+  private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (event.code !== "Space" && event.code !== "Enter") {
+      return;
+    }
+    if (event.target instanceof HTMLElement && (event.target.tagName === "INPUT" || event.target.tagName === "BUTTON")) {
+      return;
+    }
+    event.preventDefault();
+    this.buttonDown(event.repeat);
+  };
+
+  private readonly handleButtonRelease = (): void => {
+    if (!this.mainButton.held) {
+      return;
+    }
+    this.mainButton.up();
+    if (this.initials) {
+      this.initials.up(this.arcadeNow());
+      this.renderHud();
+    }
+  };
+
+  private buttonDown(repeat: boolean): boolean {
+    if (!this.mainButton.down(repeat)) {
+      return false;
+    }
+    const now = this.arcadeNow();
+    const wasAttract = this.attract.page !== null;
+    this.attract.input(now);
+    if (wasAttract) {
+      this.renderHud();
+    }
+    if (this.initials) {
+      this.initials.down(now);
+      this.renderHud();
+    }
+    return true;
+  }
+
+  private arcadeNow(): number {
+    return (typeof performance === "undefined" ? Date.now() : performance.now()) / 1000;
+  }
+
+  private loadHighScores(): HighScore[] {
+    try {
+      return highScores(JSON.parse(window.localStorage.getItem(HIGH_SCORES_STORAGE_KEY) ?? "[]"));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Initials entry locks on a hold or after idling; the idle game-over screen rotates the attract pages. */
+  private tickArcade(): void {
+    const now = this.arcadeNow();
+    const entry = this.initials;
+    if (entry) {
+      const index = entry.index;
+      entry.tick(now);
+      if (entry.done) {
+        this.highScoreTable = addHighScore(this.highScoreTable, { initials: entry.text, score: this.score });
+        try {
+          window.localStorage.setItem(HIGH_SCORES_STORAGE_KEY, JSON.stringify(this.highScoreTable));
+        } catch {
+          // Storage may be unavailable (private mode); the table still shows for this session.
+        }
+        this.initials = null;
+        this.restartBlockedUntil = now + GAME_OVER_INPUT_GRACE_SECONDS;
+        this.attract.input(now);
+        this.renderHud();
+      } else if (entry.index !== index || this.mainButton.held) {
+        this.renderHud();
+      }
+    }
+    const page = this.attract.page;
+    this.attract.tick(now, this.gameState === "game_over" && this.initials === null);
+    if (this.attract.page !== page) {
+      this.renderHud();
+    }
+  }
+
+  /** Game over: restart on the button, except while initials are open or right after they lock. */
+  private restartFromInput(): void {
+    if (this.initials || this.arcadeNow() < this.restartBlockedUntil) {
+      return;
+    }
+    this.startGame();
+  }
 
   private readonly handlePointerStop = (event: PointerEvent): void => {
     if (event.pointerType === "touch") {
@@ -1340,6 +1500,10 @@ export class Game {
     }
 
     this.feedbackManager.primeFromGesture();
+    this.buttonDown(false);
+    if (this.initials) {
+      return;
+    }
 
     if (this.gameState === "playing") {
       this.stopActiveSlab();
@@ -1347,7 +1511,7 @@ export class Game {
     }
 
     if (this.gameState === "game_over") {
-      this.startGame();
+      this.restartFromInput();
     }
   };
 
@@ -1363,6 +1527,10 @@ export class Game {
     event.preventDefault();
 
     this.feedbackManager.primeFromGesture();
+    this.buttonDown(false);
+    if (this.initials) {
+      return;
+    }
 
     if (this.gameState === "playing") {
       this.stopActiveSlab();
@@ -1370,7 +1538,7 @@ export class Game {
     }
 
     if (this.gameState === "game_over") {
-      this.startGame();
+      this.restartFromInput();
     }
   };
 
@@ -1388,6 +1556,7 @@ export class Game {
       this.refreshSpatialDebugSurface();
     }
 
+    this.tickArcade();
     this.renderer?.render(this.scene, this.camera);
     window.requestAnimationFrame(this.tick);
   };
@@ -1445,6 +1614,9 @@ export class Game {
   }
 
   private startGame(): void {
+    this.initials = null;
+    this.mainButton.up();
+    this.attract.input(this.arcadeNow());
     this.resetWorld();
     this.gameState = "playing";
     this.spawnNextActive();
@@ -1533,8 +1705,9 @@ export class Game {
     this.ufoExitSecondsRemaining = 0;
     this.ufoOrbitWorldPosition.set(0, 0, 0);
     this.ufoWorldVelocity.set(UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND, 0.15, 0.8);
-    this.gorillaLastSlamCycle = -1;
     this.gorillaSlamRemaining = 0;
+    this.yetiMotion.reset();
+    this.yetiPose = null;
     this.shell.style.setProperty("--impact-alpha", "0");
     this.shell.style.setProperty("--contrast-alpha", "0");
     this.shell.style.setProperty("--collapse-alpha", "0");
@@ -1669,6 +1842,9 @@ export class Game {
       this.beginCollapseSequence("miss", missOffset, supplementalBurstSlabs);
       this.gameState = "game_over";
       this.statusMessage = "Hard miss! Tower collapse sequence triggered.";
+      if (qualifies(this.highScoreTable, this.score)) {
+        this.initials = new InitialsEntry(this.arcadeNow());
+      }
       this.renderHud();
       return;
     }
@@ -1777,6 +1953,191 @@ export class Game {
 
   private tickForcedDistractionTimers(deltaSeconds: number): void {
     tickDistractionTimerRecord(this.forcedDistractionTimers, DEBUG_DISTRACTION_CHANNELS, deltaSeconds);
+  }
+
+  /** The yeti stands on real balcony ledges near the top of the tower and leaps up as the tower grows. */
+  private updateYeti(active: boolean, deltaSeconds: number): void {
+    const topSlabHeight = this.landedSlabs[this.landedSlabs.length - 1]?.dimensions.height ?? this.debugConfig.slabHeight;
+    const ledge = resolveLedgeDimensions(this.debugConfig.baseWidth, topSlabHeight, 0);
+    this.yetiHeight = fitYetiHeight(
+      resolveGorillaModelHeight(topSlabHeight, this.camera.aspect),
+      ledge.ledgeDepth - ledge.lipDepth - 0.01,
+      ledge.lipHeight,
+    );
+    const perches = active ? this.collectYetiPerches(this.yetiHeight) : [];
+    this.yetiObstacles = active ? this.collectYetiObstacles() : [];
+    const pose = this.yetiMotion.update(deltaSeconds, active, perches, this.yetiObstacles, this.yetiHeight);
+    this.yetiPose = pose;
+
+    if (!pose) {
+      this.gorillaModelRoot.visible = false;
+      this.gorillaActor.dataset.modelVisible = "false";
+      this.gorillaActor.dataset.visualOpacity = "0";
+      this.gorillaActor.dataset.yetiPhase = "hidden";
+      this.gorillaActor.style.opacity = "0";
+      return;
+    }
+
+    if (pose.landed) {
+      this.gorillaSlamRemaining = GORILLA_SLAM_DURATION_SECONDS;
+      this.triggerImpactPulse(0.1);
+    }
+
+    const opacity = Math.max(0, Math.min(1, pose.presence));
+    if (this.gorillaModel && this.gorillaMixer && this.gorillaActions) {
+      const actions = this.gorillaActions;
+      const loadedHeight = Number(this.gorillaModel.userData.targetHeight) || this.yetiHeight;
+      this.gorillaModelRoot.scale.setScalar(this.yetiHeight / loadedHeight);
+      this.gorillaModelRoot.position.set(pose.x, pose.y, pose.z);
+      this.gorillaModelRoot.rotation.set(0, pose.yaw, 0);
+      GORILLA_CLIP_NAMES.forEach((name) => {
+        const action = actions[name];
+        const sample = pose.clips.find((clip) => clip.clip === name);
+        action.setEffectiveWeight(sample?.weight ?? 0);
+        if (sample) {
+          action.time = sample.time * action.getClip().duration;
+        }
+      });
+      this.gorillaMixer.update(0);
+      this.gorillaModelRoot.visible = true;
+      setGorillaModelOpacity(this.gorillaModel, opacity);
+      this.gorillaActor.dataset.modelVisible = "true";
+    } else {
+      this.gorillaActor.dataset.modelVisible = "false";
+    }
+
+    const width = this.container.clientWidth || window.innerWidth;
+    const height = this.container.clientHeight || window.innerHeight;
+    const projected = new Vector3(pose.x, pose.y + this.yetiHeight / 2, pose.z).project(this.camera);
+    const screenX = Math.min(width + 120, Math.max(-120, (projected.x * 0.5 + 0.5) * width));
+    const screenY = Math.min(height + 120, Math.max(-120, (-projected.y * 0.5 + 0.5) * height));
+    this.gorillaActor.dataset.visualOpacity = opacity.toFixed(3);
+    this.gorillaActor.dataset.yetiPhase = pose.phase;
+    this.gorillaActor.style.opacity = this.gorillaModel ? "0" : (opacity * 0.9).toFixed(3);
+    this.gorillaActor.style.transform = `translate(${screenX.toFixed(2)}px, ${screenY.toFixed(2)}px) translate(-50%, -50%)`;
+  }
+
+  /** Standing spots: settled, unoccupied balcony ledges in the top floors whose whole yeti is in frame. */
+  private collectYetiPerches(height: number): YetiPerch[] {
+    const topLevel = this.landedSlabs[this.landedSlabs.length - 1]?.level ?? 0;
+    const animating = new Set(this.ledgeAnimations.map((animation) => animation.mesh));
+    const perches: YetiPerch[] = [];
+    const framed = new Set<string>();
+    const world = new Vector3();
+    const normal = new Vector3();
+    // Rendering refreshes this too, but the WebGL fallback never renders.
+    this.camera.updateMatrixWorld();
+    this.landedSlabs.forEach((slab) => {
+      if (slab.level < topLevel - YETI_PERCH_LEVEL_WINDOW) {
+        return;
+      }
+      const slabMesh = this.slabMeshes.get(slab.level);
+      if (!slabMesh || slabMesh.parent !== this.stackGroup) {
+        return;
+      }
+      slabMesh.children.forEach((child) => {
+        if (!(child instanceof Mesh) || child.userData.isLedge !== true || animating.has(child)) {
+          return;
+        }
+        const ledgeHeight = Number(child.userData.ledgeHeight);
+        const ledgeDepth = Number(child.userData.ledgeDepth);
+        if (!(Number(child.userData.usableWidth) >= height * 1.3)) {
+          return;
+        }
+        const faceKey = `${slab.level}:${child.userData.faceNoiseSalt}`;
+        const dancerHere = this.remyView !== null && this.remyAnchor !== null &&
+          this.remyAnchor.level === slab.level && this.remyAnchor.faceNoiseSalt === child.userData.faceNoiseSalt;
+        if (dancerHere || this.tentacleBurstKeys.includes(faceKey)) {
+          return;
+        }
+        child.updateWorldMatrix(true, false);
+        world.set(0, ledgeHeight / 2, resolvePerchOffset(-(ledgeDepth / 2 - 0.01), height));
+        child.localToWorld(world);
+        normal.set(0, 0, 1).transformDirection(child.matrixWorld);
+        normal.y = 0;
+        normal.normalize();
+        const foot = world.clone().project(this.camera);
+        const head = new Vector3(world.x, world.y + height, world.z).project(this.camera);
+        const inFrame = [foot, head].every((point) =>
+          Math.abs(point.x) <= YETI_PERCH_SCREEN_MARGIN && Math.abs(point.y) <= YETI_PERCH_SCREEN_MARGIN && point.z < 1);
+        perches.push({ key: faceKey, x: world.x, y: world.y, z: world.z, normalX: normal.x, normalZ: normal.z });
+        if (inFrame) {
+          framed.add(faceKey);
+        }
+      });
+    });
+    // Prefer ledges whose whole yeti is on screen; while the camera is still catching up, any top ledge will do.
+    return framed.size > 0 ? perches.filter((perch) => framed.has(perch.key)) : perches;
+  }
+
+  /** Slab bodies (padded for windows and eaves), ledge floors and lips: the yeti never passes through these. */
+  private collectYetiObstacles(): YetiObstacle[] {
+    const topLevel = this.landedSlabs[this.landedSlabs.length - 1]?.level ?? 0;
+    const obstacles: YetiObstacle[] = [];
+    const box = new Box3();
+    this.landedSlabs.forEach((slab) => {
+      if (slab.level < topLevel - YETI_PERCH_LEVEL_WINDOW - 2) {
+        return;
+      }
+      const pad = YETI_FACADE_DECOR_DEPTH;
+      obstacles.push({
+        minX: slab.position.x - slab.dimensions.width / 2 - pad,
+        maxX: slab.position.x + slab.dimensions.width / 2 + pad,
+        minY: slab.position.y - slab.dimensions.height / 2,
+        maxY: slab.position.y + slab.dimensions.height / 2,
+        minZ: slab.position.z - slab.dimensions.depth / 2 - pad,
+        maxZ: slab.position.z + slab.dimensions.depth / 2 + pad,
+      });
+      const slabMesh = this.slabMeshes.get(slab.level);
+      if (!slabMesh || slabMesh.parent !== this.stackGroup) {
+        return;
+      }
+      slabMesh.children.forEach((child) => {
+        if (!(child instanceof Mesh) || child.userData.isLedge !== true) {
+          return;
+        }
+        child.updateWorldMatrix(true, true);
+        [child, ...child.children].forEach((part) => {
+          if (!(part instanceof Mesh)) {
+            return;
+          }
+          part.geometry.computeBoundingBox();
+          box.copy(part.geometry.boundingBox!).applyMatrix4(part.matrixWorld);
+          obstacles.push({ minX: box.min.x, maxX: box.max.x, minY: box.min.y, maxY: box.max.y, minZ: box.min.z, maxZ: box.max.z });
+        });
+      });
+    });
+    return obstacles;
+  }
+
+  /** Test telemetry: the rendered mesh's lowest point versus the perch, and whether the body meets an obstacle. */
+  private getYetiTelemetry(): PublicGameState["distractions"]["yeti"] {
+    const pose = this.yetiPose;
+    const body = this.yetiMotion.body(this.yetiHeight);
+    if (!pose || !body) {
+      return { phase: "hidden", height: this.yetiHeight, footGap: null, overlapsObstacle: false, x: 0, y: 0, z: 0 };
+    }
+    let footGap: number | null = null;
+    if (this.gorillaModel && pose.phase === "perched") {
+      let meshMinY = Infinity;
+      this.gorillaModelRoot.updateMatrixWorld(true);
+      this.gorillaModel.traverse((node) => {
+        if (node instanceof SkinnedMesh) {
+          node.computeBoundingBox();
+          meshMinY = Math.min(meshMinY, new Box3().copy(node.boundingBox!).applyMatrix4(node.matrixWorld).min.y);
+        }
+      });
+      footGap = meshMinY - pose.y;
+    }
+    return {
+      phase: pose.phase,
+      height: this.yetiHeight,
+      footGap,
+      overlapsObstacle: bodyHits(body, this.yetiObstacles),
+      x: pose.x,
+      y: pose.y,
+      z: pose.z,
+    };
   }
 
   private tickGorillaSlam(deltaSeconds: number): void {
@@ -1926,78 +2287,7 @@ export class Game {
       tremor: selectDistractionLodTier(snapshot.level, lodNear, lodFar),
     };
 
-    if (!snapshot.active.gorilla) {
-      this.gorillaModelRoot.visible = false;
-      this.gorillaActor.dataset.modelVisible = "false";
-      this.gorillaActor.dataset.visualOpacity = "0";
-      this.gorillaActor.style.opacity = "0";
-      this.gorillaLastSlamCycle = -1;
-    } else {
-      this.gorillaMixer?.update(Math.min(1 / 15, Math.max(0, deltaSeconds)));
-      if (shouldUpdateForLod(this.distractionLod.gorilla, this.frameCounter, scalars.distractionUpdateStride)) {
-      const width = this.container.clientWidth || window.innerWidth;
-      const height = this.container.clientHeight || window.innerHeight;
-      const topSlab = this.landedSlabs[this.landedSlabs.length - 1];
-      const topPosition = topSlab?.position ?? { x: 0, y: 0, z: 0 };
-      const topSlabHeight = topSlab?.dimensions.height ?? this.debugConfig.slabHeight;
-      const desiredHeight = resolveGorillaModelHeight(topSlabHeight, this.camera.aspect);
-      const facadeDepthOffset = (topSlab?.dimensions.depth ?? this.debugConfig.baseDepth) * 0.5 + GORILLA_FACADE_HANDHOLD_CLEARANCE;
-      const climbPoint = sampleGorillaClimbPosition({
-        topX: topPosition.x,
-        topY: topPosition.y,
-        topZ: topPosition.z,
-        topHeight: topSlabHeight,
-        towerLevels: Math.max(1, this.landedSlabs.length - this.startingStackLevels),
-        elapsedSeconds: this.distractionState.elapsedSeconds * GORILLA_CLIMB_SPEED,
-        motionSpeed: this.debugConfig.distractionMotionSpeed,
-        baseRadius: facadeDepthOffset,
-        actorHeight: desiredHeight,
-      });
-
-      const worldPoint = new Vector3(climbPoint.x, climbPoint.y, climbPoint.z);
-      const projected = worldPoint.clone().project(this.camera);
-      const screenX = (projected.x * 0.5 + 0.5) * width;
-      const screenY = (-projected.y * 0.5 + 0.5) * height;
-      const clampedX = Math.min(width + 120, Math.max(-120, screenX));
-      const clampedY = Math.min(height + 120, Math.max(-120, screenY));
-      const inFrontOfCamera = projected.z > -1 && projected.z < 1;
-      const depthScale = 0.88 + (1 - Math.max(0, Math.min(1, (projected.z + 1) * 0.5))) * 0.32;
-      const gorillaOpacity = inFrontOfCamera ? 0.78 + snapshot.signals.gorilla * 0.18 : 0.12 + snapshot.signals.gorilla * 0.18;
-
-      const shouldRenderGorillaModel = Boolean(this.gorillaModel && inFrontOfCamera);
-      if (this.gorillaModel) {
-        const loadedHeight = Number(this.gorillaModel.userData.targetHeight) || desiredHeight;
-        const loadedHalfDepth = Number(this.gorillaModel.userData.halfDepth) || 0;
-        const effectiveHalfDepth = loadedHalfDepth * (desiredHeight / loadedHeight);
-        const inwardYaw = Math.atan2(topPosition.x - climbPoint.x, topPosition.z - climbPoint.z);
-        this.gorillaModelRoot.scale.setScalar(desiredHeight / loadedHeight);
-        this.gorillaModelRoot.position.copy(resolveGorillaModelRootPosition({
-          climbPoint: worldPoint,
-          topPoint: new Vector3(topPosition.x, topPosition.y, topPosition.z),
-          modelHalfDepth: effectiveHalfDepth,
-        }));
-        this.gorillaModelRoot.rotation.y = inwardYaw;
-        this.gorillaModelRoot.visible = shouldRenderGorillaModel;
-        setGorillaModelOpacity(this.gorillaModel, gorillaOpacity);
-        this.gorillaActor.dataset.modelVisible = String(shouldRenderGorillaModel);
-      } else {
-        this.gorillaActor.dataset.modelVisible = "false";
-      }
-
-      this.gorillaActor.dataset.visualOpacity = gorillaOpacity.toFixed(3);
-      this.gorillaActor.style.opacity = shouldRenderGorillaModel ? "0" : gorillaOpacity.toFixed(3);
-      this.gorillaActor.style.transform = `translate(${clampedX.toFixed(2)}px, ${clampedY.toFixed(2)}px) translate(-50%, -50%) scale(${depthScale.toFixed(3)})`;
-
-      const slamCycle = this.distractionState.elapsedSeconds * GORILLA_SLAM_CYCLE_SPEED * this.debugConfig.distractionMotionSpeed;
-      const slamCycleIndex = Math.floor(slamCycle);
-      const slamCycleProgress = slamCycle - slamCycleIndex;
-      if (slamCycleIndex !== this.gorillaLastSlamCycle && slamCycleProgress < 0.08) {
-        this.gorillaLastSlamCycle = slamCycleIndex;
-        this.gorillaSlamRemaining = GORILLA_SLAM_DURATION_SECONDS;
-        this.triggerImpactPulse(0.1);
-      }
-      }
-    }
+    this.updateYeti(snapshot.active.gorilla && this.collapseSequence === null, deltaSeconds);
 
     const shouldUpdateUfo =
       shouldUpdateForLod(this.distractionLod.ufo, this.frameCounter, scalars.distractionUpdateStride) ||
@@ -3635,9 +3925,52 @@ export class Game {
     }
   }
 
+  /** Game-over card body: initials entry, the score table, or the one-line prompt. Rebuilt only when it changes. */
+  private renderArcadePanel(): void {
+    let html = "";
+    const now = this.arcadeNow();
+    const scoreRows = (highlight: HighScore | null) =>
+      this.highScoreTable.length === 0
+        ? `<li class="arcade-scores__empty">No scores yet</li>`
+        : this.highScoreTable
+            .map((entry, index) =>
+              `<li${entry === highlight ? ' class="arcade-scores__new"' : ""}><span>${index + 1}</span><span>${entry.initials}</span><strong>${entry.score}</strong></li>`)
+            .join("");
+    if (this.gameState !== "game_over") {
+      // Nothing to show while playing or on the debug title card.
+    } else if (this.initials) {
+      const entry = this.initials;
+      const letters = [...entry.text]
+        .map((letter, index) => {
+          const state = index < entry.index ? "locked" : index === entry.index ? "current" : "";
+          const fill = index < entry.index ? 1 : index === entry.index ? entry.progress(now) : 0;
+          return `<span class="arcade-initial ${state}">${letter}<i style="transform:scaleX(${fill.toFixed(3)})"></i></span>`;
+        })
+        .join("");
+      html = `<p class="arcade-panel__score">${this.score}</p>`
+        + `<div class="arcade-initials" data-testid="initials" aria-label="Initials ${entry.text}">${letters}</div>`
+        + `<p class="arcade-panel__hint">Tap: next letter · Hold ${LOCK_SECONDS} s: lock<br>Saves as shown after ${INITIALS_IDLE_SECONDS} s</p>`;
+    } else if (this.attract.page === "scores") {
+      html = `<ol class="arcade-scores" data-testid="high-scores">${scoreRows(null)}</ol>`;
+    } else if (this.attract.page === "how") {
+      html = `<p class="arcade-panel__hint">Tap to drop the slab.<br>Overhangs are sliced off.<br>Line up perfectly to grow back.</p>`;
+    } else if (this.attract.page === "title") {
+      html = `<p class="arcade-panel__prompt">Tap to play</p>`;
+    } else {
+      const latest = this.highScoreTable.find((entry) => entry.score === this.score) ?? null;
+      html = (this.highScoreTable.length > 0 ? `<ol class="arcade-scores arcade-scores--compact" data-testid="high-scores">${scoreRows(latest)}</ol>` : "")
+        + `<p class="arcade-panel__prompt">Tap to play again</p>`;
+    }
+    if (this.arcadePanelHtml !== html) {
+      this.arcadePanelHtml = html;
+      this.arcadePanel.innerHTML = html;
+    }
+  }
+
   private renderHud(): void {
     const overlay = this.hud.querySelector<HTMLElement>(".overlay");
     this.scoreValue.textContent = String(this.score);
+    this.hiScoreValue.textContent = String(hiScore(this.highScoreTable, this.score));
     this.heightValue.textContent = `${Math.max(0, this.landedSlabs.length - this.startingStackLevels)} floors`;
     this.comboValue.textContent = `${this.combo.current}/${this.combo.target}`;
     this.messageValue.textContent = this.statusMessage;
@@ -3652,11 +3985,19 @@ export class Game {
       this.primaryButton.style.display = "none";
       overlay?.classList.add("overlay--hidden");
     } else if (this.gameState === "game_over") {
-      this.overlayTitle.textContent = "Tower Fell";
+      const page = this.initials ? "initials" : this.attract.page ?? "over";
+      this.overlayTitle.textContent = {
+        initials: "New High Score",
+        over: "Tower Fell",
+        title: "Tower Stacker",
+        scores: "High Scores",
+        how: "How To Play",
+      }[page];
       this.overlayBody.textContent =
         "A hard miss triggers the collapse sequence. Press space/enter, click, or tap to immediately start a fresh run.";
       this.primaryButton.style.display = "none";
       overlay?.classList.remove("overlay--hidden");
+      overlay?.setAttribute("data-page", page);
     } else {
       this.overlayTitle.textContent = "Tower Stacker";
       this.overlayBody.textContent =
@@ -3665,6 +4006,8 @@ export class Game {
       this.primaryButton.style.display = "none";
       overlay?.classList.remove("overlay--hidden");
     }
+
+    this.renderArcadePanel();
 
     this.rendererStatus.textContent = this.renderer
       ? "Renderer: WebGL active."
@@ -3904,6 +4247,12 @@ export class Game {
     return {
       gameState: this.gameState,
       score: this.score,
+      arcade: {
+        hiScore: hiScore(this.highScoreTable, this.score),
+        highScores: this.highScoreTable.map((entry) => ({ ...entry })),
+        initials: this.initials ? { text: this.initials.text, index: this.initials.index } : null,
+        attractPage: this.attract.page,
+      },
       height: Math.max(0, this.landedSlabs.length - this.startingStackLevels),
       level: this.landedSlabs.length - 1,
       activeAxis: this.activeSlab?.axis ?? null,
@@ -3934,6 +4283,7 @@ export class Game {
         level: distractionSnapshot.level,
         active: { ...distractionSnapshot.active },
         signals: { ...distractionSnapshot.signals },
+        yeti: this.getYetiTelemetry(),
         visuals: {
           gorillaOpacity: Number(this.gorillaActor.dataset.visualOpacity ?? this.gorillaActor.style.opacity ?? 0),
           ufoOpacity: Number(this.ufoActor.style.opacity || 0),

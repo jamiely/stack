@@ -59,7 +59,9 @@ test("tall viewport keeps the moving slab, HUD and game-over card in frame", asy
     api.stopActiveSlab();
     api.stepSimulation(90);
   });
-  await expect(page.getByTestId("overlay-title")).toHaveText("Tower Fell");
+  // Two floors on an empty table qualify, so the card opens on initials entry.
+  await expect(page.getByTestId("overlay-title")).toHaveText("New High Score");
+  await expect(page.getByTestId("initials")).toBeInViewport({ ratio: 1 });
   await expect(page.getByTestId("menu-overlay")).toBeInViewport({ ratio: 1 });
 });
 

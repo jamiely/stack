@@ -3,13 +3,12 @@ import { AnimationClip, Box3, BoxGeometry, Group, Mesh, MeshStandardMaterial, Ve
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { describe, expect, it } from "vitest";
 import {
-  GORILLA_CLIMB_CLIP_NAME,
+  GORILLA_CLIP_NAMES,
   GORILLA_MODEL_RENDER_ORDER,
   loadGorillaModel,
   normalizeGorillaModel,
   precompileGorillaModel,
   resolveGorillaModelHeight,
-  resolveGorillaModelRootPosition,
   setGorillaModelOpacity,
 } from "../../src/game/distractions/gorillaModel";
 
@@ -45,7 +44,9 @@ describe("gorilla model presentation", () => {
     expect(glb.byteLength).toBeLessThanOrEqual(700 * 1024);
     expect(manifest.images).toHaveLength(1);
     expect(triangles).toBeLessThanOrEqual(6_200);
-    expect(manifest.animations.some((clip: { name: string }) => clip.name === GORILLA_CLIMB_CLIP_NAME)).toBe(true);
+    GORILLA_CLIP_NAMES.forEach((name) => {
+      expect(manifest.animations.some((clip: { name: string }) => clip.name === name)).toBe(true);
+    });
   });
 
   it("sizes the gorilla as a ledge-scale climber instead of a facade-sized overlay", () => {
@@ -70,37 +71,18 @@ describe("gorilla model presentation", () => {
     expect(bounds.min.y).toBeCloseTo(0, 5);
     expect(center.x).toBeCloseTo(0, 5);
     expect(center.z).toBeCloseTo(0, 5);
-    expect(normalized.userData.halfDepth).toBeCloseTo(0.325, 5);
-  });
-
-  it("offsets the model root so the full Yeti depth clears the building facade", () => {
-    const source = new Group();
-    const mesh = new Mesh(new BoxGeometry(2, 8, 4), new MeshStandardMaterial());
-    source.add(mesh);
-    const normalized = normalizeGorillaModel(source, 2.4);
-
-    const rootPosition = resolveGorillaModelRootPosition({
-      climbPoint: new Vector3(0, 12, 1.7),
-      topPoint: new Vector3(0, 12, 0),
-      modelHalfDepth: Number(normalized.userData.halfDepth),
-    });
-
-    const buildingFrontZ = 1.5;
-    const modelBackZ = rootPosition.z - Number(normalized.userData.halfDepth);
-    expect(modelBackZ).toBeGreaterThanOrEqual(buildingFrontZ + 0.08 - 1e-6);
-    expect(rootPosition.y).toBe(12);
   });
 
   it("loads through the game loader seam and starts the named climbing clip", async () => {
     const source = new Group();
     const sourceMaterial = new MeshStandardMaterial({ opacity: 0.8 });
     source.add(new Mesh(new BoxGeometry(4, 8, 2), sourceMaterial));
-    const clip = new AnimationClip(GORILLA_CLIMB_CLIP_NAME, 1, []);
+    const clips = GORILLA_CLIP_NAMES.map((name) => new AnimationClip(name, 1, []));
     const requestedUrls: string[] = [];
     const loader = {
       loadAsync: async (url: string) => {
         requestedUrls.push(url);
-        return { scene: source, animations: [clip] };
+        return { scene: source, animations: clips };
       },
     };
 
@@ -110,8 +92,8 @@ describe("gorilla model presentation", () => {
 
     expect(requestedUrls).toHaveLength(1);
     expect(requestedUrls[0]).toContain("quaternius_yeti_model_b.glb");
-    expect(loaded.clip.name).toBe(GORILLA_CLIMB_CLIP_NAME);
-    expect(loaded.action.isRunning()).toBe(true);
+    expect(Object.keys(loaded.actions)).toEqual([...GORILLA_CLIP_NAMES]);
+    expect(loaded.actions.Idle.getEffectiveWeight()).toBe(0);
     expect(loadedMaterial).not.toBe(sourceMaterial);
     expect(loadedMesh.renderOrder).toBe(GORILLA_MODEL_RENDER_ORDER);
     expect(loadedMesh.castShadow).toBe(true);
@@ -120,7 +102,7 @@ describe("gorilla model presentation", () => {
 
   it("load-tests the real GLB through Three.js GLTFLoader", async () => {
     const parsed = await parseGorillaGlb();
-    expect(parsed.animations.map((clip) => clip.name)).toContain(GORILLA_CLIMB_CLIP_NAME);
+    expect(parsed.animations.map((clip) => clip.name)).toEqual(expect.arrayContaining([...GORILLA_CLIP_NAMES]));
     let meshes = 0;
     parsed.scene.traverse((child) => {
       if (child instanceof Mesh) {
@@ -176,5 +158,18 @@ describe("gorilla model presentation", () => {
     expect(material.opacity).toBeCloseTo(0.4, 5);
     expect(material.depthTest).toBe(true);
     expect(material.depthWrite).toBe(false);
+  });
+
+  it("renders fully present as opaque with depth writes, so the facade never shows through", () => {
+    const source = new Group();
+    const material = new MeshStandardMaterial();
+    source.add(new Mesh(new BoxGeometry(1, 1, 1), material));
+
+    setGorillaModelOpacity(source, 0.5);
+    setGorillaModelOpacity(source, 1);
+
+    expect(material.transparent).toBe(false);
+    expect(material.opacity).toBe(1);
+    expect(material.depthWrite).toBe(true);
   });
 });
