@@ -1222,18 +1222,25 @@ test("a qualifying run enters initials with one button, saves the top-ten table,
   await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", repeat: true })));
   await expect.poll(async () => (await getTestState(page))?.arcade.initials?.index).toBe(1);
   await page.keyboard.up("Space");
-  for (const locked of [1, 2]) {
-    await page.keyboard.down("Space");
-    await expect.poll(async () => (await getTestState(page))?.arcade.initials?.index ?? 3).toBeGreaterThan(locked);
-    await page.keyboard.up("Space");
-  }
+  // Tapping the initials card itself advances the letter too.
+  await page.getByTestId("initials").click();
+  await expect.poll(async () => (await getTestState(page))?.arcade.initials?.text).toBe("BBA");
+  await page.keyboard.down("Space");
+  await expect.poll(async () => (await getTestState(page))?.arcade.initials?.index).toBe(2);
+  await page.keyboard.up("Space");
+  // Holding the final lock long past the restart grace, then releasing, must not start a new run.
+  await page.keyboard.down("Space");
   await expect.poll(async () => (await getTestState(page))?.arcade.initials).toBeNull();
+  await page.waitForTimeout(1200);
+  await page.keyboard.up("Space");
+  await page.waitForTimeout(100);
+  expect((await getTestState(page))?.gameState).toBe("game_over");
   await expect.poll(async () => (await getTestState(page))?.arcade.highScores).toEqual([
     { initials: "JLY", score: 40 },
-    { initials: "BAA", score: 4 },
+    { initials: "BBA", score: 4 },
   ]);
-  await expect(page.getByTestId("high-scores")).toContainText("BAA");
-  expect(await page.evaluate(() => localStorage.getItem("tower-stacker-scores"))).toContain('"BAA"');
+  await expect(page.getByTestId("high-scores")).toContainText("BBA");
+  expect(await page.evaluate(() => localStorage.getItem("tower-stacker-scores"))).toContain('"BBA"');
 
   // Restart: a fresh tower, score and combo, with the table kept.
   await expect.poll(async () => {

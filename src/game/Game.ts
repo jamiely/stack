@@ -588,6 +588,8 @@ export class Game {
   private initials: InitialsEntry | null = null;
   private readonly attract = new AttractCycle(this.arcadeNow());
   private readonly mainButton = new ButtonLatch();
+  /** The current press began during initials entry: its release (and nothing else) belongs to that entry. */
+  private pressOwnedByInitials = false;
   private restartBlockedUntil = 0;
   private arcadePanelHtml = "";
   private introExitTimeoutId: number | null = null;
@@ -1383,10 +1385,15 @@ export class Game {
     event.preventDefault();
     this.feedbackManager.primeFromGesture();
     this.mainButton.up();
+    const ownedByInitials = this.pressOwnedByInitials;
+    this.pressOwnedByInitials = false;
 
     if (this.initials) {
       this.initials.up(this.arcadeNow());
       this.renderHud();
+      return;
+    }
+    if (ownedByInitials) {
       return;
     }
 
@@ -1417,6 +1424,7 @@ export class Game {
       return;
     }
     this.mainButton.up();
+    this.pressOwnedByInitials = false;
     if (this.initials) {
       this.initials.up(this.arcadeNow());
       this.renderHud();
@@ -1433,11 +1441,20 @@ export class Game {
     if (wasAttract) {
       this.renderHud();
     }
+    this.pressOwnedByInitials = this.initials !== null;
     if (this.initials) {
       this.initials.down(now);
       this.renderHud();
     }
     return true;
+  }
+
+  /** The debug panel, and the game-over card except during initials entry, take their own clicks. */
+  private isOutsidePlayInput(target: Element): boolean {
+    if (target.closest(".debug-panel, button, input")) {
+      return true;
+    }
+    return this.initials === null && target.closest(".overlay") !== null;
   }
 
   private arcadeNow(): number {
@@ -1495,7 +1512,7 @@ export class Game {
     }
 
     const target = event.target;
-    if (target instanceof Element && target.closest(".overlay, .debug-panel")) {
+    if (target instanceof Element && this.isOutsidePlayInput(target)) {
       return;
     }
 
@@ -1520,7 +1537,7 @@ export class Game {
       return;
     }
 
-    if (event.target instanceof Element && event.target.closest(".overlay, .debug-panel")) {
+    if (event.target instanceof Element && this.isOutsidePlayInput(event.target)) {
       return;
     }
 
