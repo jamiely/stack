@@ -1318,3 +1318,35 @@ test("juice: drops slam with dust and cues, perfects stamp and escalate, the gam
   expect(fresh).toMatchObject({ particles: 0, stamps: 0, lastStamp: "", hitStop: 0, slamming: false, gameOverElapsed: null, tallyShown: -1 });
   await expect(page.getByTestId("score-value")).toHaveText("0");
 });
+
+test("juice: a second drop inside the squash restores the first slab exactly, and restart mid-reaction leaves no distortion", async ({ page }) => {
+  await page.goto("/?test&seed=7");
+  type Api = { startGame: () => void; placeAtOffset: (offset: number) => unknown; stepSimulation: (steps?: number) => void };
+  await page.evaluate(() => {
+    const api = (window as Window & { __towerStackerTestApi?: Api }).__towerStackerTestApi!;
+    api.startGame();
+    api.placeAtOffset(0);
+    api.stepSimulation(3);
+    api.placeAtOffset(0);
+  });
+  const slabs = await page.evaluate(() => {
+    const api = (window as Window & { __towerStackerTestApi?: Api & { getSlabTransforms: () => Array<{ level: number; scaleY: number; y: number; expectedY: number }> } }).__towerStackerTestApi!;
+    return api.getSlabTransforms();
+  });
+  const previous = slabs[slabs.length - 2]!;
+  expect(previous.scaleY).toBe(1);
+  expect(previous.y).toBeCloseTo(previous.expectedY, 6);
+
+  // Restart while the yeti and dancers react: nothing keeps a squashed scale.
+  const scales = await page.evaluate(() => {
+    const api = (window as Window & { __towerStackerTestApi?: Api & { getReactionScales: () => number[]; forceReactions: () => void } }).__towerStackerTestApi!;
+    api.forceReactions();
+    api.stepSimulation(10);
+    const during = api.getReactionScales();
+    api.startGame();
+    return { during, after: api.getReactionScales() };
+  });
+  // Headless runs without WebGL load no models; where they load, the reaction must have been visible.
+  if (scales.during.length > 0) expect(scales.during.some((value) => value !== 1)).toBe(true);
+  expect(scales.after.every((value) => value === 1)).toBe(true);
+});

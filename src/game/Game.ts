@@ -395,6 +395,8 @@ const UFO_MIN_EXIT_SPEED_WORLD_UNITS_PER_SECOND = 6.8;
 /** Only the top few floors offer the yeti a perch, and only ledges this far inside the frame. */
 const YETI_PERCH_LEVEL_WINDOW = 6;
 const HIGH_SCORES_STORAGE_KEY = "tower-stacker-scores";
+/** The perfect-placement window wave runs down this many floors below the new top. */
+const WINDOW_WAVE_FLOORS = 12;
 /** After the initials lock, the button is ignored this long so the locking hold does not restart the run. */
 const GAME_OVER_INPUT_GRACE_SECONDS = 0.6;
 const YETI_PERCH_SCREEN_MARGIN = 0.92;
@@ -1781,6 +1783,7 @@ export class Game {
     this.gameOverFinaleQueued = false;
     this.dancerReaction = null;
     this.yetiReaction = null;
+    this.gorillaModel?.scale.set(1, 1, 1);
     this.feedbackManager.stopFinale();
     this.yetiMotion.reset();
     this.yetiPose = null;
@@ -2002,6 +2005,7 @@ export class Game {
     const footprint = Math.max(landed.dimensions.width, landed.dimensions.depth);
 
     // Squash on impact, stretch back up, settle; a freeze-frame and a downward camera punch.
+    this.finishSlam();
     this.slam = {
       mesh: landedMesh,
       elapsed: 0,
@@ -2068,7 +2072,16 @@ export class Game {
       const tier = comboTier(combo);
       this.juice.flashRing(new Vector3(landed.position.x, topY + 0.02, landed.position.z), footprint * 0.75);
       this.juice.showStamp(tier >= 3 ? "UNSTOPPABLE!" : tier >= 2 ? "AMAZING!" : "PERFECT!", tier >= 2 ? "big" : "perfect");
+      if (this.windowWave) {
+        // Let a running wave's floors go dark before the new wave starts.
+        this.windowWave.elapsed = Number.POSITIVE_INFINITY;
+        this.updateWindowWave(0);
+      }
       this.windowWave = { elapsed: 0, topLevel: landed.level };
+    // Only floors a wave can reach keep their glass material on hand.
+    this.windowGlassMaterials.forEach((_material, level) => {
+      if (level < landed.level - WINDOW_WAVE_FLOORS) this.windowGlassMaterials.delete(level);
+    });
       this.dancerReaction = { kind: "cheer", elapsed: 0 };
       this.yetiReaction = { kind: "cheer", elapsed: 0 };
       if (tier >= 2) {
@@ -2119,26 +2132,11 @@ export class Game {
       this.slam.mesh.scale.set(scaleXZ, scaleY, scaleXZ);
       this.slam.mesh.position.y = this.slam.baseY - (1 - scaleY) * this.slam.height / 2;
       if (this.slam.elapsed >= SLAM_SECONDS) {
-        this.slam.mesh.scale.set(1, 1, 1);
-        this.slam.mesh.position.y = this.slam.baseY;
-        this.slam = null;
+        this.finishSlam();
       }
     }
 
-    if (this.windowWave) {
-      this.windowWave.elapsed += dt;
-      let anyLit = false;
-      this.windowGlassMaterials.forEach((material, level) => {
-        const glow = windowGlow(this.windowWave!.elapsed, this.windowWave!.topLevel - level);
-        material.emissive.setRGB(0.24 + glow * 0.76, 0.34 + glow * 0.5, 0.45 - glow * 0.2);
-        material.emissiveIntensity = 0.2 + glow * 1.4;
-        anyLit ||= glow > 0;
-      });
-      const span = WINDOW_GLOW_SECONDS + (this.windowWave.topLevel + 1) * WINDOW_WAVE_STEP_SECONDS;
-      if (!anyLit && this.windowWave.elapsed > Math.min(span, 1.6)) {
-        this.windowWave = null;
-      }
-    }
+    this.updateWindowWave(dt);
 
     this.updateCharacterReactions(dt);
 
@@ -2168,13 +2166,38 @@ export class Game {
     }
   }
 
-  /** Snap squash, hops and shivers back to rest (for exact placement measurements). */
-  private settleJuiceTransforms(): void {
+  private updateWindowWave(dt: number): void {
+    if (!this.windowWave) {
+      return;
+    }
+    const wave = this.windowWave;
+    wave.elapsed += dt;
+    // Only the top WINDOW_WAVE_FLOORS floors light up, so the work is bounded however tall the tower is.
+    const done = wave.elapsed >= WINDOW_GLOW_SECONDS + WINDOW_WAVE_FLOORS * WINDOW_WAVE_STEP_SECONDS;
+    for (let below = 0; below <= WINDOW_WAVE_FLOORS; below += 1) {
+      const material = this.windowGlassMaterials.get(wave.topLevel - below);
+      if (!material) continue;
+      const glow = done ? 0 : windowGlow(wave.elapsed, below);
+      material.emissive.setRGB(0.24 + glow * 0.76, 0.34 + glow * 0.5, 0.45 - glow * 0.2);
+      material.emissiveIntensity = 0.2 + glow * 1.4;
+    }
+    if (done) {
+      this.windowWave = null;
+    }
+  }
+
+  /** Put a squashing slab back to its exact placed transform. */
+  private finishSlam(): void {
     if (this.slam) {
       this.slam.mesh.scale.set(1, 1, 1);
       this.slam.mesh.position.y = this.slam.baseY;
       this.slam = null;
     }
+  }
+
+  /** Snap squash, hops and shivers back to rest (for exact placement measurements). */
+  private settleJuiceTransforms(): void {
+    this.finishSlam();
     [this.remyView, this.remySecondaryView].forEach((view) => view?.sceneNodes.characterRoot.scale.set(1, 1, 1));
     this.gorillaModel?.scale.set(1, 1, 1);
     this.dancerReaction = null;
@@ -4559,6 +4582,18 @@ export class Game {
         return this.getPublicState();
       },
       getState: () => this.getPublicState(),
+      getSlabTransforms: () => this.landedSlabs.map((slab) => {
+        const mesh = this.slabMeshes.get(slab.level);
+        return { level: slab.level, scaleY: mesh?.scale.y ?? 1, y: mesh?.position.y ?? slab.position.y, expectedY: slab.position.y };
+      }),
+      forceReactions: () => {
+        this.dancerReaction = { kind: "cheer", elapsed: 0 };
+        this.yetiReaction = { kind: "cheer", elapsed: 0 };
+      },
+      getReactionScales: () => [
+        this.gorillaModel?.scale.y,
+        ...[this.remyView, this.remySecondaryView].map((view) => view?.sceneNodes.characterRoot.scale.y),
+      ].filter((value): value is number => value !== undefined),
     };
   }
 

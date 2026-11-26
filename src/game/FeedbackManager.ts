@@ -54,6 +54,9 @@ export class FeedbackManager {
 
   public updateConfig(nextConfig: FeedbackConfig): void {
     this.config = { ...nextConfig };
+    if (!this.config.audioEnabled) {
+      this.juiceSound?.stopFinale();
+    }
     this.snapshot.audioEnabled = this.config.audioEnabled;
     this.snapshot.hapticsEnabled = this.config.hapticsEnabled;
   }

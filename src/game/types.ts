@@ -323,4 +323,10 @@ export interface TestApi {
     placementOffset?: number;
   }): Promise<PublicGameState>;
   getState(): PublicGameState;
+  /** Landed slabs' rendered scale.y and y next to their placed y (squash and stretch must settle back exactly). */
+  getSlabTransforms(): Array<{ level: number; scaleY: number; y: number; expectedY: number }>;
+  /** Start a cheer on the yeti and the dancers, as a perfect does. */
+  forceReactions(): void;
+  /** Y scales of the loaded yeti model and dancer roots (empty when none are loaded). */
+  getReactionScales(): number[];
 }
